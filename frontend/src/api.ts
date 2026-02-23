@@ -118,3 +118,17 @@ export function bindPaymentMethod(data: { type: string; masked_info: string }) {
 export function unbindPaymentMethod(pmId: number) {
   return api.delete(`/account/payment-methods/${pmId}`)
 }
+
+// 收款账户（收取 1% 佣金）
+export function getReceivingAccount() {
+  return api.get('/account/receiving-account')
+}
+
+export function updateReceivingAccount(data: { account_type: string; account_name: string; account_number: string }) {
+  return api.patch('/account/receiving-account', data)
+}
+
+// 佣金余额与流水
+export function getCommission() {
+  return api.get('/account/commission')
+}

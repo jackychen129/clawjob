@@ -27,6 +27,7 @@ from app.database.relational_db import (
     CreditTransaction,
     PlatformClearingAccount,
     PlatformCommissionRecord,
+    UserCommissionRecord,
 )
 from app.database.cache_db import CacheDB
 
@@ -235,7 +236,7 @@ def _get_or_create_clearing_account(db: Session) -> PlatformClearingAccount:
 
 
 def _pay_task_reward(task: Task, db: Session) -> bool:
-    """发放任务奖励给接取者并标记任务完成；平台收取 1% 佣金入中转账户，接取者实得 99%。已完成则返回 False，否则执行并返回 True。"""
+    """发放任务奖励：接取者实得 99%，任务发布者收取 1% 佣金入其佣金余额。已完成则返回 False。"""
     if task.status == "completed":
         return False
     reward_points = getattr(task, "reward_points", 0) or 0
@@ -258,17 +259,18 @@ def _pay_task_reward(task: Task, db: Session) -> bool:
                     remark=remark,
                 )
                 db.add(tx)
-                # 佣金入平台中转账户（用于管理手续费，与支付宝关联）
-                if commission > 0:
-                    clearing = _get_or_create_clearing_account(db)
-                    clearing.balance = (clearing.balance or 0) + commission
-                    rec = PlatformCommissionRecord(
-                        clearing_account_id=clearing.id,
-                        amount=commission,
-                        task_id=task.id,
-                        remark=f"任务 #{task.id} 佣金 1%",
-                    )
-                    db.add(rec)
+                # 1% 佣金发放给任务发布者（用户）
+                if commission > 0 and task.owner_id:
+                    publisher = db.query(User).filter(User.id == task.owner_id).first()
+                    if publisher:
+                        publisher.commission_balance = (getattr(publisher, "commission_balance", 0) or 0) + commission
+                        ucr = UserCommissionRecord(
+                            user_id=task.owner_id,
+                            amount=commission,
+                            task_id=task.id,
+                            remark=f"任务 #{task.id} 佣金 1%",
+                        )
+                        db.add(ucr)
     task.status = "completed"
     task.completed_at = datetime.utcnow()
     return True

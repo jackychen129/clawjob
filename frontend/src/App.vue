@@ -297,6 +297,25 @@
         <h3>{{ t('account.title') }}</h3>
         <p class="balance-line">{{ t('account.balance') }}<strong>{{ accountCredits }}</strong> {{ t('account.points') }}</p>
         <div class="account-section">
+          <h4>{{ t('account.commissionTitle') }}</h4>
+          <p class="commission-balance-line">{{ t('account.commissionBalance') }}<strong>{{ commissionBalance }}</strong> {{ t('account.points') }}</p>
+          <p class="hint">{{ t('account.commissionHint') }}</p>
+        </div>
+        <div class="account-section">
+          <h4>{{ t('account.receivingAccountTitle') }}</h4>
+          <p class="hint">{{ t('account.receivingAccountHint') }}</p>
+          <div class="form receiving-account-form">
+            <select v-model="receivingAccountForm.account_type" class="input">
+              <option value="alipay">{{ t('account.alipay') }}</option>
+              <option value="bank_card">{{ t('account.bank_card') }}</option>
+            </select>
+            <input v-model="receivingAccountForm.account_name" class="input" :placeholder="t('account.receivingAccountName')" />
+            <input v-model="receivingAccountForm.account_number" class="input" :placeholder="t('account.receivingAccountNumber')" />
+            <button class="btn btn-primary" :disabled="receivingAccountLoading" @click="doSaveReceivingAccount">{{ t('account.saveReceivingAccount') }}</button>
+            <p v-if="receivingAccountError" class="error-msg">{{ receivingAccountError }}</p>
+          </div>
+        </div>
+        <div class="account-section">
           <h4>{{ t('account.recharge') }}</h4>
           <div class="form-inline">
             <input v-model.number="rechargeForm.amount" type="number" min="1" class="input input-num" :placeholder="t('account.amount')" />
@@ -524,6 +543,10 @@ function onEscapeKey(e: KeyboardEvent) {
   if (showHelpModal.value) { showHelpModal.value = false }
 }
 const accountCredits = ref(0)
+const commissionBalance = ref(0)
+const receivingAccountForm = reactive({ account_type: 'alipay', account_name: '', account_number: '' })
+const receivingAccountLoading = ref(false)
+const receivingAccountError = ref('')
 const rechargeForm = reactive({ amount: 100 })
 const rechargeLoading = ref(false)
 const rechargeError = ref('')
@@ -704,6 +727,14 @@ function loadAccountMe() {
 function loadAccountData() {
   if (!auth.isLoggedIn) return
   loadAccountMe()
+  api.getCommission().then((res) => {
+    commissionBalance.value = res.data.commission_balance ?? 0
+  }).catch(() => {})
+  api.getReceivingAccount().then((res) => {
+    receivingAccountForm.account_type = res.data.account_type || 'alipay'
+    receivingAccountForm.account_name = res.data.account_name || ''
+    receivingAccountForm.account_number = res.data.account_number || ''
+  }).catch(() => {})
   paymentMethodsLoading.value = true
   api.getPaymentMethods().then((res) => {
     paymentMethods.value = res.data.payment_methods || []
@@ -712,6 +743,20 @@ function loadAccountData() {
   api.getTransactions({ limit: 20 }).then((res) => {
     transactions.value = res.data.transactions || []
   }).catch(() => {}).finally(() => { transactionsLoading.value = false })
+}
+
+function doSaveReceivingAccount() {
+  receivingAccountLoading.value = true
+  api.updateReceivingAccount({
+    account_type: receivingAccountForm.account_type,
+    account_name: receivingAccountForm.account_name,
+    account_number: receivingAccountForm.account_number,
+  }).then(() => {
+    receivingAccountError.value = ''
+    showSuccess(t('account.receivingAccountSaved'))
+  }).catch((e) => {
+    receivingAccountError.value = e.response?.data?.detail || t('account.receivingAccountSaveFailed')
+  }).finally(() => { receivingAccountLoading.value = false })
 }
 
 function doRecharge() {
@@ -821,7 +866,10 @@ onUnmounted(() => {
 })
 
 watch(showAccountModal, (open) => {
-  if (open) loadAccountData()
+  if (open) {
+    receivingAccountError.value = ''
+    loadAccountData()
+  }
 })
 </script>
 
@@ -960,10 +1008,18 @@ watch(showAccountModal, (open) => {
   max-height: 90vh;
   overflow-y: auto;
 }
-.balance-line {
+.balance-line,
+.commission-balance-line {
   font-size: 1.1rem;
   margin-bottom: 1rem;
 }
+.receiving-account-form .input,
+.receiving-account-form select {
+  display: block;
+  width: 100%;
+  margin-bottom: 0.5rem;
+}
+.receiving-account-form .btn { margin-top: 0.25rem; }
 .recharge-channel-title {
   font-size: 0.9rem;
   margin: 1rem 0 0.5rem;

@@ -14,6 +14,7 @@ from app.database.relational_db import (
     RechargeOrder,
     Task,
     Agent,
+    UserCommissionRecord,
 )
 from app.security import get_current_user
 
@@ -39,6 +40,91 @@ class ConfirmRechargeBody(BaseModel):
     order_id: int
 
 
+class ReceivingAccountBody(BaseModel):
+    """收款账户（用于收取 1% 佣金）"""
+    account_type: str  # alipay, bank_card
+    account_name: str  # 户名/实名
+    account_number: str  # 账号/卡号（可脱敏，如 ***1234）
+
+
+# ---------- 收款账户（用户收取 1% 佣金）----------
+@router.get("/receiving-account")
+def get_receiving_account(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """获取当前用户的收款账户配置"""
+    uid = int(current_user["user_id"])
+    user = db.query(User).filter(User.id == uid).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    return {
+        "account_type": getattr(user, "receiving_account_type", None) or "",
+        "account_name": getattr(user, "receiving_account_name", None) or "",
+        "account_number": getattr(user, "receiving_account_number", None) or "",
+    }
+
+
+@router.patch("/receiving-account")
+def update_receiving_account(
+    body: ReceivingAccountBody,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """更新当前用户的收款账户（用于收取发布任务产生的 1% 佣金）"""
+    t = (body.account_type or "").strip().lower()
+    if t not in ("alipay", "bank_card"):
+        raise HTTPException(status_code=400, detail="account_type 须为 alipay 或 bank_card")
+    uid = int(current_user["user_id"])
+    user = db.query(User).filter(User.id == uid).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    user.receiving_account_type = t
+    user.receiving_account_name = (body.account_name or "").strip()[:64]
+    user.receiving_account_number = (body.account_number or "").strip()[:128]
+    db.commit()
+    db.refresh(user)
+    return {
+        "account_type": user.receiving_account_type,
+        "account_name": user.receiving_account_name or "",
+        "account_number": user.receiving_account_number or "",
+    }
+
+
+# ---------- 佣金（发布任务获得的 1%）----------
+@router.get("/commission")
+def get_commission(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """当前用户佣金余额与流水"""
+    uid = int(current_user["user_id"])
+    user = db.query(User).filter(User.id == uid).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    balance = getattr(user, "commission_balance", 0) or 0
+    rows = (
+        db.query(UserCommissionRecord)
+        .filter(UserCommissionRecord.user_id == uid)
+        .order_by(UserCommissionRecord.created_at.desc())
+        .limit(50)
+        .all()
+    )
+    return {
+        "commission_balance": balance,
+        "records": [
+            {
+                "id": r.id,
+                "amount": r.amount,
+                "task_id": r.task_id,
+                "remark": r.remark,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in rows
+        ],
+    }
+
+
 # ---------- 当前用户信息（含余额）----------
 @router.get("/me")
 def get_me(
@@ -54,6 +140,7 @@ def get_me(
         "user_id": user.id,
         "username": user.username,
         "credits": getattr(user, "credits", 0) or 0,
+        "commission_balance": getattr(user, "commission_balance", 0) or 0,
     }
 
 

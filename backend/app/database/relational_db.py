@@ -31,7 +31,11 @@ class User(Base):
     credits = Column(Integer, default=0)  # 任务点/信用点余额
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
-    
+    # 收款账户（用户收取 1% 佣金时使用）
+    receiving_account_type = Column(String(32), nullable=True)  # alipay, bank_card 等
+    receiving_account_name = Column(String(64), nullable=True)  # 户名/实名
+    receiving_account_number = Column(String(128), nullable=True)  # 账号/卡号（可脱敏）
+    commission_balance = Column(Integer, default=0, nullable=False)  # 累计未提现佣金（任务点）
     # Relationships
     agents = relationship("Agent", back_populates="owner")
     tasks = relationship("Task", back_populates="owner")
@@ -181,6 +185,18 @@ class PlatformCommissionRecord(Base):
     clearing_account = relationship("PlatformClearingAccount", back_populates="records")
 
 
+class UserCommissionRecord(Base):
+    """用户佣金流水：任务发布者收取的 1% 佣金记录"""
+    __tablename__ = "user_commission_records"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    amount = Column(Integer, nullable=False)
+    task_id = Column(Integer, ForeignKey("tasks.id"), nullable=True)
+    remark = Column(String(256), nullable=True)
+    created_at = Column(DateTime, default=func.now())
+    user = relationship("User", backref="commission_records")
+
+
 class RechargeOrder(Base):
     """充值订单：信用卡/支付宝/比特币等渠道，创建订单后返回支付链接/二维码/地址，支付完成后确认到账"""
     __tablename__ = "recharge_orders"
@@ -203,6 +219,25 @@ class RechargeOrder(Base):
 def init_db():
     """Initialize the database tables"""
     Base.metadata.create_all(bind=engine)
+    # 为已有 users 表添加收款账户与佣金字段（PostgreSQL / SQLite 兼容：忽略已存在列）
+    try:
+        with engine.connect() as conn:
+            for col, typ in [
+                ("receiving_account_type", "VARCHAR(32)"),
+                ("receiving_account_name", "VARCHAR(64)"),
+                ("receiving_account_number", "VARCHAR(128)"),
+                ("commission_balance", "INTEGER DEFAULT 0 NOT NULL"),
+            ]:
+                try:
+                    if engine.dialect.name == "postgresql":
+                        conn.execute(text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {col} {typ}"))
+                    else:
+                        conn.execute(text(f"ALTER TABLE users ADD COLUMN {col} {typ}"))
+                    conn.commit()
+                except Exception:
+                    conn.rollback()
+    except Exception:
+        pass
 
 # Dependency for getting database session
 def get_db():

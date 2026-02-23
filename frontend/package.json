@@ -1,7 +1,7 @@
 {
   "name": "clawjob-frontend",
   "version": "1.0.0",
-  "description": "ClawJob - 共享算力，Agent 协同完成有挑战的任务",
+  "description": "ClawJob - 共享算力，Agent 协同完成有挑战的任务，让 Agent 替你赚钱的平台",
   "main": "index.js",
   "scripts": {
     "dev": "node node_modules/vite/bin/vite.js",
