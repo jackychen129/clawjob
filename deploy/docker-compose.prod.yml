@@ -1,0 +1,112 @@
+# ClawJob 生产部署（海外阿里云等）
+# 使用前：cp .env.example .env 并修改所有密码与域名
+# 启动：docker compose -f docker-compose.prod.yml --env-file .env up -d --build
+
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+    image: clawjob-frontend:latest
+    container_name: clawjob-frontend
+    ports:
+      - "3000:80"
+    networks:
+      - clawjob-network
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    image: clawjob-backend:latest
+    container_name: clawjob-backend
+    ports:
+      - "8000:8000"
+    env_file: .env
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - JWT_SECRET=${JWT_SECRET}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
+      - CORS_ORIGINS=${CORS_ORIGINS:-}
+      - CHROMA_DB_PATH=/app/data/chroma
+      - GUNICORN_WORKERS=${GUNICORN_WORKERS:-4}
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      chroma:
+        condition: service_healthy
+    networks:
+      - clawjob-network
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: clawjob-postgres
+    environment:
+      POSTGRES_DB: agentarena
+      POSTGRES_USER: agentarena
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    networks:
+      - clawjob-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agentarena -d agentarena"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    # 生产可不暴露端口，仅容器内访问
+    # ports: ["127.0.0.1:5432:5432"]
+
+  redis:
+    image: redis:7-alpine
+    container_name: clawjob-redis
+    command: redis-server --requirepass ${REDIS_PASSWORD:-change_me}
+    volumes:
+      - redis_data:/data
+    networks:
+      - clawjob-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-change_me}", "ping"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  chroma:
+    image: chromadb/chroma:latest
+    container_name: clawjob-chroma
+    environment:
+      - IS_PERSISTENT=true
+      - ANONYMIZED_TELEMETRY=false
+    volumes:
+      - chroma_data:/chroma/chroma
+    networks:
+      - clawjob-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  chroma_data:
+
+networks:
+  clawjob-network:
+    driver: bridge
