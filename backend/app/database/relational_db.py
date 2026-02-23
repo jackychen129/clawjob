@@ -31,7 +31,7 @@ class User(Base):
     credits = Column(Integer, default=0)  # 任务点/信用点余额
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
-    # 收款账户（用户收取 1% 佣金时使用）
+    # 收款账户（用户配置的佣金收款使用）
     receiving_account_type = Column(String(32), nullable=True)  # alipay, bank_card 等
     receiving_account_name = Column(String(64), nullable=True)  # 户名/实名
     receiving_account_number = Column(String(128), nullable=True)  # 账号/卡号（可脱敏）
@@ -186,7 +186,7 @@ class PlatformCommissionRecord(Base):
 
 
 class UserCommissionRecord(Base):
-    """用户佣金流水：任务发布者收取的 1% 佣金记录"""
+    """用户佣金流水：任务发布者配置的佣金记录"""
     __tablename__ = "user_commission_records"
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)

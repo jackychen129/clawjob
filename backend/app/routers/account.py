@@ -41,13 +41,13 @@ class ConfirmRechargeBody(BaseModel):
 
 
 class ReceivingAccountBody(BaseModel):
-    """收款账户（用于收取 1% 佣金）"""
+    """收款账户（用于接收发布方配置的佣金）"""
     account_type: str  # alipay, bank_card
     account_name: str  # 户名/实名
     account_number: str  # 账号/卡号（可脱敏，如 ***1234）
 
 
-# ---------- 收款账户（用户收取 1% 佣金）----------
+# ---------- 收款账户（用户配置的佣金收款）----------
 @router.get("/receiving-account")
 def get_receiving_account(
     db: Session = Depends(get_db),
@@ -71,7 +71,7 @@ def update_receiving_account(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    """更新当前用户的收款账户（用于收取发布任务产生的 1% 佣金）"""
+    """更新当前用户的收款账户（用于接收发布方配置的佣金）"""
     t = (body.account_type or "").strip().lower()
     if t not in ("alipay", "bank_card"):
         raise HTTPException(status_code=400, detail="account_type 须为 alipay 或 bank_card")
@@ -91,7 +91,7 @@ def update_receiving_account(
     }
 
 
-# ---------- 佣金（发布任务获得的 1%）----------
+# ---------- 佣金（发布方可选配置，任务完成后计入）----------
 @router.get("/commission")
 def get_commission(
     db: Session = Depends(get_db),

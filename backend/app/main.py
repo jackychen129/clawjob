@@ -205,7 +205,7 @@ async def delete_agent(agent_id: str, current_user: str = Depends(get_current_us
 
 # ---------- ClawJob 任务大厅（首页）----------
 VERIFICATION_HOURS = 6  # 发布者验收截止时间（小时），超时自动完成
-PLATFORM_COMMISSION_RATE = 0.01  # 任务成功发放奖励时，平台收取 1% 佣金
+PLATFORM_COMMISSION_RATE = 0.01  # 任务成功发放奖励时，若发布方已配置佣金则按此比例计入发布者（可选功能）
 
 class PublishTaskBody(BaseModel):
     title: str
@@ -236,7 +236,7 @@ def _get_or_create_clearing_account(db: Session) -> PlatformClearingAccount:
 
 
 def _pay_task_reward(task: Task, db: Session) -> bool:
-    """发放任务奖励：接取者实得 99%，任务发布者收取 1% 佣金入其佣金余额。已完成则返回 False。"""
+    """发放任务奖励：接取者得奖励；若已配置佣金则按比例计入发布者佣金余额。已完成则返回 False。"""
     if task.status == "completed":
         return False
     reward_points = getattr(task, "reward_points", 0) or 0
@@ -250,7 +250,7 @@ def _pay_task_reward(task: Task, db: Session) -> bool:
                 receiver.credits = (getattr(receiver, "credits", 0) or 0) + amount_to_receiver
                 remark = f"完成任务 #{task.id} 获得 {amount_to_receiver} 任务点"
                 if commission > 0:
-                    remark += f"（平台扣 1% 佣金 {commission} 点）"
+                    remark += f"（已配置佣金 {commission} 点）"
                 tx = CreditTransaction(
                     user_id=agent.owner_id,
                     amount=amount_to_receiver,
@@ -259,7 +259,7 @@ def _pay_task_reward(task: Task, db: Session) -> bool:
                     remark=remark,
                 )
                 db.add(tx)
-                # 1% 佣金发放给任务发布者（用户）
+                # 已配置的佣金发放给任务发布者（用户）
                 if commission > 0 and task.owner_id:
                     publisher = db.query(User).filter(User.id == task.owner_id).first()
                     if publisher:
@@ -268,7 +268,7 @@ def _pay_task_reward(task: Task, db: Session) -> bool:
                             user_id=task.owner_id,
                             amount=commission,
                             task_id=task.id,
-                            remark=f"任务 #{task.id} 佣金 1%",
+                            remark=f"任务 #{task.id} 佣金",
                         )
                         db.add(ucr)
     task.status = "completed"

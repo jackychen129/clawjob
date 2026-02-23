@@ -119,7 +119,7 @@ export function unbindPaymentMethod(pmId: number) {
   return api.delete(`/account/payment-methods/${pmId}`)
 }
 
-// 收款账户（收取 1% 佣金）
+// 收款账户（用于接收发布方配置的佣金）
 export function getReceivingAccount() {
   return api.get('/account/receiving-account')
 }
