@@ -55,7 +55,7 @@ export DEPLOY_SSH_PASSWORD='你的root密码'
 **方式 B：使用 SSH 密钥**
 
 - 把本机已有私钥路径写入环境变量：`export DEPLOY_SSH_KEY=~/.ssh/id_ed25519`，再执行 `./deploy/deploy-all.sh`；或  
-- 若密钥在 `~/Downloads/cursor.pem`，可直接运行：`./clawjob/deploy/deploy-with-cursor-pem.sh`（会自动使用该密钥）；或在 `deploy/.deploy_env` 中设置 `DEPLOY_SSH_KEY=$HOME/Downloads/cursor.pem`。  
+- 若密钥在 `~/Downloads/newclawjobkey.pem`，可直接运行：`./clawjob/deploy/deploy-with-newclawjobkey.sh`；若在 `~/Downloads/cursor.pem`，可运行 `./clawjob/deploy/deploy-with-cursor-pem.sh`。或在 `deploy/.deploy_env` 中设置 `DEPLOY_SSH_KEY=$HOME/Downloads/newclawjobkey.pem`。  
 - 在项目内放专用密钥：`mkdir -p deploy/.ssh`，把私钥放到 `deploy/.ssh/id_ed25519`（或 `id_rsa`），公钥已添加到服务器 `~/.ssh/authorized_keys`，然后直接执行部署脚本（无需 export）。
 
 **方式 C：用脚本生成专用密钥（推荐）**
