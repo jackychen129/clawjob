@@ -21,6 +21,10 @@ export SSH_USER
 
 SERVER_IP="${SERVER_IP:-43.99.97.240}"
 SSH_USER="${SSH_USER:-root}"
+# 默认使用 newclawjobkey.pem
+if [ -z "$DEPLOY_SSH_KEY" ] && [ -f "$HOME/Downloads/newclawjobkey.pem" ]; then
+  export DEPLOY_SSH_KEY="$HOME/Downloads/newclawjobkey.pem"
+fi
 BASE_URL="http://${SERVER_IP}:8000"
 MAX_ATTEMPTS=5
 

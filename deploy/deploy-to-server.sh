@@ -31,6 +31,11 @@ if [ -z "$SERVER_IP" ]; then
   exit 1
 fi
 
+# 默认使用 newclawjobkey.pem（未设置 DEPLOY_SSH_KEY 且该文件存在时）
+if [ -z "$DEPLOY_SSH_KEY" ] && [ -f "$HOME/Downloads/newclawjobkey.pem" ]; then
+  export DEPLOY_SSH_KEY="$HOME/Downloads/newclawjobkey.pem"
+fi
+
 # 解决 Permission denied (publickey)：支持指定密钥或密码，否则用本机默认 SSH
 SSH_OPTS=""
 RSYNC_RSH=""

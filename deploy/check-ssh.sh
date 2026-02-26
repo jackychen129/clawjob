@@ -13,6 +13,11 @@ fi
 SERVER_IP="${SERVER_IP:-43.99.97.240}"
 SSH_USER="${SSH_USER:-root}"
 
+# 默认使用 newclawjobkey.pem（未设置 DEPLOY_SSH_KEY 且该文件存在时）
+if [ -z "$DEPLOY_SSH_KEY" ] && [ -f "$HOME/Downloads/newclawjobkey.pem" ]; then
+  export DEPLOY_SSH_KEY="$HOME/Downloads/newclawjobkey.pem"
+fi
+
 echo "========== SSH 诊断 =========="
 echo "目标: ${SSH_USER}@${SERVER_IP}"
 echo ""
