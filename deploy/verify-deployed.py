@@ -24,7 +24,7 @@ def suggest_fixes(errors):
     for e in errors:
         es = str(e)
         if "timed out" in es or "timeout" in es.lower():
-            lines.append("• 请求超时：请检查 1) 服务器防火墙是否放行 80/3000/8000；2) 后端容器是否运行：ssh 到服务器执行 docker ps")
+            lines.append("• 请求超时：1) 在服务器上执行 bash /opt/clawjob/deploy/verify-on-server.sh 做本机诊断；2) 检查云厂商防火墙是否放行 80/3000/8000；3) 确认容器在运行：docker ps")
             break
     for e in errors:
         es = str(e)
@@ -130,6 +130,7 @@ def main():
         log("\n[SKIP] 后续需要 token，跳过发布/Agent 等校验")
         if errors:
             log("\nErrors: " + str(errors))
+            suggest_fixes(errors)
             sys.exit(1)
         return
 

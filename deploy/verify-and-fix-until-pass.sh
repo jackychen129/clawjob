@@ -86,6 +86,8 @@ while [ $attempt -le $MAX_ATTEMPTS ]; do
   fi
 
   if has_error_type "timed out\|timeout"; then
+    echo ">>> 先执行服务器端诊断..."
+    $SSH_CMD "${SSH_USER}@${SERVER_IP}" "bash -s" < "$SCRIPT_DIR/verify-on-server.sh" 2>/dev/null || true
     apply_fix_timeout
   elif has_error_type "500"; then
     apply_fix_500

@@ -135,6 +135,7 @@ python3 deploy/verify-deployed.py http://43.99.97.240:8000
 ```bash
 ./deploy/verify-and-fix-until-pass.sh
 ```
+**若全部请求超时（线上环境完全不工作）**：先按 `deploy/VERIFY_AND_FIX.md` 第一节「线上环境完全不工作时的排查顺序」在服务器上执行 `verify-on-server.sh` 做本机诊断，并检查云厂商防火墙是否放行 80、3000、8000。
 或按 `deploy/VERIFY_AND_FIX.md` 中的对照表手动排查并修复后再次验证。
 
 ### 2. 手动检查
