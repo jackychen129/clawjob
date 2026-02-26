@@ -74,9 +74,17 @@ fi
 echo ">>> 检查 SSH 连接 ${SSH_USER}@${SERVER_IP} ..."
 if ! $SSH_CMD -o BatchMode=yes -o ConnectTimeout=10 "${SSH_USER}@${SERVER_IP}" "echo ok" &>/dev/null; then
   echo ""
-  echo "错误：无法通过 SSH 登录服务器，上传会失败。请任选一种方式配置认证后重试："
+  echo "错误：无法通过 SSH 登录服务器。正在运行诊断脚本查看具体原因..."
+  echo ""
+  if [ -x "$SCRIPT_DIR/check-ssh.sh" ]; then
+    "$SCRIPT_DIR/check-ssh.sh" || true
+  else
+    $SSH_CMD -o BatchMode=yes -o ConnectTimeout=10 "${SSH_USER}@${SERVER_IP}" "echo ok" 2>&1 || true
+  fi
+  echo ""
+  echo "请任选一种方式配置认证后重试："
   echo "  1) 密码：export DEPLOY_SSH_PASSWORD='你的root密码'（需安装 sshpass）"
-  echo "  2) 密钥：在 deploy/.deploy_env 或本终端执行 export DEPLOY_SSH_KEY=~/.ssh/id_ed25519"
+  echo "  2) 密钥：在 deploy/.deploy_env 中设置 DEPLOY_SSH_KEY=你的私钥路径，或执行 export DEPLOY_SSH_KEY=~/.ssh/id_ed25519"
   echo "  3) 项目内密钥：运行 ./deploy/setup-ssh-once.sh，按提示把公钥加到服务器后再部署"
   echo "  4) 本机默认密钥：确保 ~/.ssh 下私钥对应的公钥已加入服务器 authorized_keys"
   echo "详见 deploy/README_DEPLOY_ALL.md 第二节「解决 Permission denied」"

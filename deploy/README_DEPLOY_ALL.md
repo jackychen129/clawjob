@@ -25,13 +25,22 @@ scp deploy/remote-ensure-all.sh root@43.99.97.240:/tmp/
 ssh root@43.99.97.240 'bash /tmp/remote-ensure-all.sh'
 ```
 
-**重要**：在阿里云轻量应用服务器控制台 → 该实例 → **防火墙** → 添加规则，放行 **80**、**3000**、**8000**（TCP），来源 0.0.0.0/0。
+**重要**：在阿里云轻量应用服务器控制台 → 该实例 → **防火墙** → 添加规则，放行 **22**（SSH）、**80**、**3000**、**8000**（TCP），来源 0.0.0.0/0。若未放行 22，本机将无法 SSH 部署，会报「Connection timed out」。
 
 ---
 
 ## 二、解决 Permission denied（为啥上次能传这次传不上去）
 
-部署脚本会**先检查 SSH 能否登录**，再执行构建和上传。若 SSH 失败会直接报错并提示配置方式，不会等构建完才在 rsync 时报错。
+部署脚本会**先检查 SSH 能否登录**，再执行构建和上传。若 SSH 失败会**自动运行诊断脚本**并输出具体原因（如密钥文件不存在、Permission denied、Connection refused 等）。
+
+**先看具体报错（推荐）：**
+
+```bash
+cd /path/to/clawjob
+./deploy/check-ssh.sh
+```
+
+脚本会显示当前使用的认证方式、密钥路径是否存在、以及 SSH 的详细错误信息，便于对症修复。
 
 **常见原因**：换了一台电脑、新 clone 了仓库（`deploy/.ssh` 在 .gitignore 里不会带过来）、或服务器重装后 `authorized_keys` 被清空。任选一种方式让脚本能 SSH 登录服务器：
 
