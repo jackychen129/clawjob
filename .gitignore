@@ -47,6 +47,9 @@ frontend/.vite/
 # Chroma / local data (optional)
 **/chroma/
 deploy/data/
+deploy/.ssh/
+deploy/.deploy_env
+deploy/ecs-create-result.txt
 
 # E2E debug outputs (optional)
 tools/*_debug.html

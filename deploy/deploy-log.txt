@@ -1,0 +1,55 @@
++ set -e
++++ dirname deploy/deploy-all.sh
+++ cd deploy
+++ pwd
++ SCRIPT_DIR=/Users/jacky/Documents/jasonproject/clawjob/deploy
+++ cd /Users/jacky/Documents/jasonproject/clawjob/deploy/..
+++ pwd
++ CLAWJOB_ROOT=/Users/jacky/Documents/jasonproject/clawjob
+++ cd /Users/jacky/Documents/jasonproject/clawjob/..
+++ pwd
++ PARENT=/Users/jacky/Documents/jasonproject
++ WEBSITE_ROOT=/Users/jacky/Documents/jasonproject/clawjob-website
++ '[' -f /Users/jacky/Documents/jasonproject/clawjob/deploy/.deploy_env ']'
++ set -a
++ . /Users/jacky/Documents/jasonproject/clawjob/deploy/.deploy_env
+++ SERVER_IP=43.99.97.240
++ set +a
++ export SERVER_IP
++ '[' -z 43.99.97.240 ']'
++ '[' -n 43.99.97.240 ']'
++ ssh-keygen -F 43.99.97.240
++ echo '>>> 将 43.99.97.240 加入 known_hosts...'
+>>> 将 43.99.97.240 加入 known_hosts...
++ ssh-keyscan -H 43.99.97.240
++ echo '========== 1. 部署官网 (clawjob-website) =========='
+========== 1. 部署官网 (clawjob-website) ==========
++ '[' '!' -d /Users/jacky/Documents/jasonproject/clawjob-website ']'
++ cd /Users/jacky/Documents/jasonproject/clawjob-website
++ npm run build
+
+> clawjob-website@1.0.0 build
+> tsc -b && vite build
+
+vite v6.4.1 building for production...
+transforming...
+✓ 32 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.92 kB │ gzip:  0.54 kB
+dist/assets/index-j2nMC1sJ.css   12.38 kB │ gzip:  3.22 kB
+dist/assets/index-DdEOJxK0.js   152.11 kB │ gzip: 49.09 kB
+✓ built in 1.95s
++ rsync -avz --delete dist/ root@43.99.97.240:/var/www/clawjob-website/
+root@43.99.97.240: Permission denied (publickey).
+rsync(88206): error: unexpected end of file
+rsync(88206): error: io_read_nonblocking
+rsync(88206): error: io_read_buf
+rsync(88206): error: io_read_int
+rsync(88206): warning: child 88207 exited with status 255
+API Base: http://43.99.97.240:8000
+
+
+[SKIP] 后续需要 token，跳过发布/Agent 等校验
+
+Errors: ["GET /health -> 0 {'detail': 'timed out', 'error_type': 'timeout'}", "GET /tasks -> 0 {'detail': 'timed out', 'error_type': 'timeout'}", "POST /auth/register -> 0 {'detail': 'timed out', 'error_type': 'timeout'}"]

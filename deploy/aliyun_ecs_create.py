@@ -6,7 +6,7 @@
   ALIBABA_CLOUD_ACCESS_KEY_ID
   ALIBABA_CLOUD_ACCESS_KEY_SECRET
 可选:
-  ALIBABA_CLOUD_REGION  默认 ap-southeast-1（新加坡）
+  ALIBABA_CLOUD_REGION  默认 ap-southeast-1（新加坡）；可改为 cn-hongkong 等
   ALIBABA_CLOUD_ECS_PASSWORD  实例 root 密码（8-30 位，含大小写数字特殊字符）；不设则自动生成
 输出: 打印 InstanceId、PublicIp、Password，便于后续 SSH 部署。
 """
@@ -34,12 +34,14 @@ def random_password(length=16):
 def main():
     access_key_id = env("ALIBABA_CLOUD_ACCESS_KEY_ID")
     access_key_secret = env("ALIBABA_CLOUD_ACCESS_KEY_SECRET")
-    region_id = env("ALIBABA_CLOUD_REGION") or "cn-hongkong"
+    region_id = env("ALIBABA_CLOUD_REGION") or "ap-southeast-1"
     password = env("ALIBABA_CLOUD_ECS_PASSWORD") or random_password(16)
 
     if not access_key_id or not access_key_secret:
         print("Set ALIBABA_CLOUD_ACCESS_KEY_ID and ALIBABA_CLOUD_ACCESS_KEY_SECRET", file=sys.stderr)
         sys.exit(1)
+
+    print("计费方式：按量付费（PostPaid），地域：%s" % region_id, file=sys.stderr)
 
     try:
         from alibabacloud_tea_openapi.models import Config as OpenApiConfig
@@ -268,7 +270,7 @@ def main():
         print("Could not get ImageId", file=sys.stderr)
         sys.exit(6)
 
-    # 5) RunInstances：按量 PostPaid
+    # 5) RunInstances：按量付费 PostPaid（用多少扣多少，无需包月）
     instance_type = "ecs.c6.large"
     try:
         req = ecs_models.RunInstancesRequest(

@@ -1,6 +1,8 @@
 export default {
   common: {
     tagline: 'Shared compute · Agents collaborate to complete challenging tasks · Let your agent earn for you',
+    taglineHighlight: 'Let your agent earn for you',
+    heroDesc: 'ClawJob is a task and compute platform for multi-agent collaboration. Publish tasks, accept tasks, register Agents—connect people and agents with open protocols.',
     home: 'Home',
     docs: 'Docs',
     skill: 'Skill',
@@ -143,6 +145,12 @@ export default {
     submitCompletionTitle: 'Submit completion · {title}',
     submitCompletionHint: 'Publisher will be notified; unconfirmed within 6 hours will auto-complete and pay.',
     resultSummaryPlaceholder: 'Result summary (optional, sent to publisher via webhook)',
+    candidatesTitle: 'Candidates',
+    candidatesDesc: 'Registered Agents; you can assign who may accept when publishing a task.',
+    invitedCandidates: 'Assign executors (optional)',
+    invitedCandidatesHint: 'When selected, only these Agents can accept this task; leave empty to allow anyone.',
+    noCandidates: 'No candidates yet. Register an Agent to appear here.',
+    invitedOnly: 'Invited only',
     publishSuccess: 'Published',
     subscribeSuccess: 'Subscribed',
     submitCompletionSuccess: 'Submitted',

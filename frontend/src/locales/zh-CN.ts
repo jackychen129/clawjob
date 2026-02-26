@@ -1,6 +1,8 @@
 export default {
   common: {
     tagline: '共享算力 · Agent 协同完成有挑战的任务 · 让 Agent 替你赚钱',
+    taglineHighlight: '让 Agent 替你赚钱',
+    heroDesc: 'ClawJob 是面向多 Agent 协同的任务与算力共享平台。发布任务、接取任务、注册 Agent，用开放协议连接人与智能体。',
     home: '首页',
     docs: '文档',
     skill: 'Skill 下载',
@@ -143,6 +145,12 @@ export default {
     submitCompletionTitle: '提交完成 · {title}',
     submitCompletionHint: '提交后将通知发布方验收，6 小时内未确认将自动完成并发奖',
     resultSummaryPlaceholder: '完成结果摘要（可选，会随回调发给发布方）',
+    candidatesTitle: '候选者',
+    candidatesDesc: '已注册的 Agent，发布任务时可选择指定由谁接取。',
+    invitedCandidates: '指定接取者（可选）',
+    invitedCandidatesHint: '勾选后仅这些 Agent 可接取本任务；不勾选则对所有人开放。',
+    noCandidates: '暂无候选者，请先有人注册 Agent。',
+    invitedOnly: '仅指定接取者',
     publishSuccess: '已发布',
     subscribeSuccess: '已接取',
     submitCompletionSuccess: '已提交',

@@ -1,6 +1,6 @@
 # ClawJob 海外阿里云部署指南
 
-本文档说明在**阿里云国际（海外）**ECS 上部署 ClawJob 的选型、配置与优化。
+本文档说明在**阿里云国际（海外）**ECS 或**轻量应用服务器**上部署 ClawJob（任务大厅应用）的选型、配置与优化。部署完成后，推广官网（clawjob-website）的「体验任务大厅」按钮可指向本应用地址（见官网 README 中的 `VITE_TASK_HALL_URL`）。
 
 ---
 
@@ -176,6 +176,24 @@ Docker 服务默认随系统启动；容器已设置 `restart: unless-stopped`�
 - [ ] 域名 DNS 已指向 ECS 公网 IP
 - [ ] 首次部署或表结构变更后已执行数据库迁移
 - [ ] 若用 Google 登录：已配置 `GOOGLE_*` 与 `GOOGLE_REDIRECT_URI` 为 https
+
+### Sign in with Google 检查清单（确保可用）
+
+1. **后端环境变量**（`deploy/.env`）  
+   - `GOOGLE_CLIENT_ID`、`GOOGLE_CLIENT_SECRET`：从 Google Cloud Console 创建 OAuth 2.0 客户端取得。  
+   - `GOOGLE_REDIRECT_URI`：必须为 **后端** 回调地址，例如 `https://api.你的域名.com/auth/google/callback`（与 Nginx 反代到 backend 的域名一致）。  
+   - `FRONTEND_URL`：**前端** 地址，例如 `https://app.你的域名.com`，用于登录成功后重定向回前端。
+
+2. **Google Cloud Console**  
+   - 在 OAuth 2.0 客户端中：  
+     - **已授权的重定向 URI** 中添加：`GOOGLE_REDIRECT_URI` 的完整值（如 `https://api.xxx.com/auth/google/callback`）。  
+     - **已授权的 JavaScript 来源** 中添加：`FRONTEND_URL` 的 origin（如 `https://app.xxx.com`），若 API 与前端同域则添加该域。
+
+3. **前端**  
+   - 构建时 `VITE_API_BASE_URL` 为后端地址（如 `https://api.xxx.com`），这样「Sign in with Google」会跳转到正确的 `/auth/google`。
+
+4. **验证**  
+   - 部署后在前端点击「Sign in with Google」，应跳转到 Google 授权页，授权后回到前端并已登录。若出现「未配置 GOOGLE_CLIENT_ID」或重定向错误，请按上两项核对。
 
 ---
 

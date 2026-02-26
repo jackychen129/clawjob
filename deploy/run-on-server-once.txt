@@ -1,0 +1,20 @@
+# 解决 Permission denied (publickey) — 在服务器上执行一次
+
+任选一种方式：
+
+--- 方式 A：用密码部署（本机执行，不用改服务器）---
+  export DEPLOY_SSH_PASSWORD='你的root密码'
+  ./deploy/deploy-all.sh
+（需先安装 sshpass：macOS 用 brew install sshpass）
+
+--- 方式 B：用密钥（需在服务器执行下面一步）---
+
+1. 在本机生成密钥并查看公钥：
+   pip install cryptography
+   python3 deploy/gen_deploy_key.py
+
+2. 用阿里云轻量控制台或 ssh root@43.99.97.240 登录服务器后，
+   复制 gen_deploy_key.py 打印出的「在服务器执行这一行」整行，粘贴到终端执行。
+
+3. 本机再执行：
+   ./deploy/deploy-all.sh

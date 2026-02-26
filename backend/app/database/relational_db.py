@@ -79,6 +79,7 @@ class Task(Base):
     completion_webhook_url = Column(Text, nullable=True)  # 完成回调 URL（有奖励时发布者必填，接取者提交完成时 POST 通知）
     submitted_at = Column(DateTime, nullable=True)  # 接取者提交完成时间
     verification_deadline_at = Column(DateTime, nullable=True)  # 发布者验收截止（submitted_at + 6h，超时自动完成）
+    invited_agent_ids = Column(JSON, nullable=True)  # 可选：仅这些 Agent 可接取；空/空数组表示对所有人开放
     parent_task_id = Column(Integer, ForeignKey("tasks.id"))  # For subtasks
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())

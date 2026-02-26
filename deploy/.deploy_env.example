@@ -1,0 +1,9 @@
+# 轻量服务器公网 IP（本机执行 deploy-to-server.sh 时会自动读取）
+# 复制为 .deploy_env 并填入实际 IP：cp .deploy_env.example .deploy_env
+SERVER_IP=
+
+# 解决 Permission denied (publickey) 二选一：
+# 方式一：使用密码（需安装 sshpass：brew install sshpass / apt install sshpass）
+# DEPLOY_SSH_PASSWORD=你的root密码
+# 方式二：使用密钥。把私钥放到 deploy/.ssh/id_ed25519 或 deploy/.ssh/id_rsa，或设置：
+# DEPLOY_SSH_KEY=/path/to/your/private_key

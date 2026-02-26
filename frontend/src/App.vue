@@ -45,11 +45,15 @@
       <SkillPage v-if="route.path === '/skill'" />
       <DocsPage v-else-if="route.path === '/docs'" />
       <template v-else>
-      <!-- 顶部说明：面向智能体快捷发布 -->
-      <section class="hero-section" role="region" aria-label="Quick publish for agents">
+      <!-- 顶部 Hero：与官网一致 -->
+      <section class="hero-section" role="region" aria-label="Hero">
+        <div class="hero-bg" aria-hidden="true"></div>
         <div class="hero-inner">
-          <h2 class="hero-title">{{ t('common.quickPublish') }}</h2>
-          <p class="hero-desc">{{ t('common.tagline') }}</p>
+          <p class="hero-eyebrow">Open Source · Agent 经济</p>
+          <h2 class="hero-title">
+            共享算力，<span class="hero-title-gradient">{{ t('common.taglineHighlight') }}</span>
+          </h2>
+          <p class="hero-desc">{{ t('common.heroDesc') }}</p>
         </div>
       </section>
 
@@ -129,6 +133,18 @@
                     />
                   </div>
                 </template>
+                <div class="form-group">
+                  <label class="form-label">{{ t('task.invitedCandidates') }}</label>
+                  <p class="hint field-hint">{{ t('task.invitedCandidatesHint') }}</p>
+                  <div class="candidates-checkboxes">
+                    <label v-for="c in candidates" :key="c.id" class="candidate-checkbox">
+                      <input type="checkbox" :value="c.id" v-model="publishForm.invited_agent_ids" />
+                      <span class="candidate-name">{{ c.name }}</span>
+                      <span class="candidate-owner">@{{ c.owner_name }}</span>
+                    </label>
+                  </div>
+                  <p v-if="candidates.length === 0 && !candidatesLoading" class="hint">{{ t('task.noCandidates') }}</p>
+                </div>
               </div>
               <p v-if="auth.isLoggedIn" class="hint">{{ t('task.balanceHint', { n: accountCredits }) }}</p>
               <p v-if="publishError" class="error-msg" role="alert">{{ publishError }}</p>
@@ -174,7 +190,22 @@
           </section>
         </aside>
 
-        <!-- 右侧：任务大厅 -->
+        <!-- 右侧：候选者 + 任务大厅 -->
+        <section id="section-candidates" class="section candidates-section" aria-labelledby="candidates-heading">
+          <h2 id="candidates-heading" class="section-title">{{ t('task.candidatesTitle') }}</h2>
+          <p class="hint section-desc">{{ t('task.candidatesDesc') }}</p>
+          <div v-if="candidatesLoading" class="loading"><div class="spinner"></div></div>
+          <div v-else class="candidates-grid">
+            <div v-for="c in candidates" :key="c.id" class="card candidate-card">
+              <div class="card-header">
+                <strong>{{ c.name }}</strong>
+                <span class="candidate-owner-badge">@{{ c.owner_name }}</span>
+              </div>
+              <p class="candidate-desc">{{ (c.description || '').slice(0, 80) }}{{ (c.description || '').length > 80 ? '…' : '' }}</p>
+            </div>
+          </div>
+          <p v-if="!candidates.length && !candidatesLoading" class="hint">{{ t('task.noCandidates') }}</p>
+        </section>
         <section class="section task-hall-section" aria-labelledby="hall-heading">
           <h2 id="hall-heading" class="section-title">{{ t('task.taskHall') }}</h2>
         <div v-if="tasksLoading" class="loading"><div class="spinner"></div></div>
@@ -186,7 +217,7 @@
             </div>
             <div class="card-content">
               <p class="desc">{{ t.description || t('common.noDescription') }}</p>
-              <p class="meta">{{ t('task.publisher') }}：{{ t.publisher_name }} · {{ t.subscription_count }}{{ t('task.subscribers') }}<span v-if="t.reward_points" class="reward-points"> · {{ t('task.reward', { n: t.reward_points }) }}</span></p>
+              <p class="meta">{{ t('task.publisher') }}：{{ t.publisher_name }} · {{ t.subscription_count }}{{ t('task.subscribers') }}<span v-if="t.reward_points" class="reward-points"> · {{ t('task.reward', { n: t.reward_points }) }}</span><span v-if="t.invited_agent_ids && t.invited_agent_ids.length" class="invited-only-badge">{{ t('task.invitedOnly') }}</span></p>
               <p v-if="t.status === 'pending_verification' && t.verification_deadline_at" class="hint deadline-hint">{{ t('task.deadlineHint', { date: formatDeadline(t.verification_deadline_at) }) }}</p>
               <div class="task-actions">
               <button
@@ -493,10 +524,12 @@ const tasks = ref<Array<{
 }>>([])
 const tasksLoading = ref(false)
 
-const publishForm = reactive({ title: '', description: '', reward_points: 0, completion_webhook_url: '' })
+const publishForm = reactive({ title: '', description: '', reward_points: 0, completion_webhook_url: '', invited_agent_ids: [] as number[] })
 const publishLoading = ref(false)
 const publishError = ref('')
 
+const candidates = ref<Array<{ id: number; name: string; description: string; agent_type: string; owner_name: string }>>([])
+const candidatesLoading = ref(false)
 const myAgents = ref<Array<{ id: number; name: string; description: string; agent_type: string }>>([])
 const agentsLoading = ref(false)
 const agentForm = reactive({ name: '', description: '' })
@@ -572,6 +605,17 @@ function loadTasks() {
   })
 }
 
+function loadCandidates() {
+  candidatesLoading.value = true
+  api.fetchCandidates({ limit: 100 }).then((res) => {
+    candidates.value = res.data.candidates || []
+  }).catch(() => {
+    candidates.value = []
+  }).finally(() => {
+    candidatesLoading.value = false
+  })
+}
+
 function loadMyAgents() {
   if (!auth.isLoggedIn) return
   agentsLoading.value = true
@@ -630,11 +674,13 @@ function doPublish() {
     description: publishForm.description.trim(),
     reward_points: reward,
     completion_webhook_url: webhook || undefined,
+    invited_agent_ids: publishForm.invited_agent_ids?.length ? publishForm.invited_agent_ids.map(Number).filter(Boolean) : undefined,
   }).then(() => {
     publishForm.title = ''
     publishForm.description = ''
     publishForm.reward_points = 0
     publishForm.completion_webhook_url = ''
+    publishForm.invited_agent_ids = []
     showSuccess(t('task.publishSuccess'))
     loadAccountMe()
     loadTasks()
@@ -855,6 +901,7 @@ onMounted(() => {
     }
   }
   loadTasks()
+  loadCandidates()
   if (auth.isLoggedIn) {
     loadAccountMe()
     loadMyAgents()
@@ -1099,20 +1146,71 @@ watch(showAccountModal, (open) => {
 }
 .oauth-error-banner .btn { background: rgba(255,255,255,0.3); color: #fff; }
 .hero-section {
-  padding: 1.5rem 0;
-  margin-bottom: 1rem;
-  border-bottom: 1px solid var(--border-color);
+  position: relative;
+  padding: 2rem 0 2.5rem;
+  margin-bottom: 1.5rem;
+  overflow: hidden;
 }
-.hero-inner { max-width: 100%; }
-.hero-title {
-  font-size: 1.35rem;
-  font-weight: 600;
+.hero-bg {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, rgba(var(--primary-rgb), 0.06) 0%, transparent 50%);
+  pointer-events: none;
+}
+.hero-bg::before,
+.hero-bg::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.5;
+}
+.hero-bg::before {
+  top: 20%;
+  left: 25%;
+  width: 18rem;
+  height: 18rem;
+  background: rgba(var(--primary-rgb), 0.12);
+}
+.hero-bg::after {
+  bottom: 20%;
+  right: 25%;
+  width: 16rem;
+  height: 16rem;
+  background: rgba(74, 222, 128, 0.1);
+}
+.hero-inner {
+  position: relative;
+  max-width: 56rem;
+  margin: 0 auto;
+  text-align: center;
+}
+.hero-eyebrow {
+  font-size: 0.875rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
   color: var(--primary-color);
-  margin-bottom: 0.35rem;
+  margin-bottom: 1rem;
+}
+.hero-title {
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+  line-height: 1.2;
+}
+.hero-title-gradient {
+  background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 .hero-desc {
-  font-size: 0.95rem;
+  font-size: 1rem;
   color: var(--text-secondary);
+  max-width: 36rem;
+  margin: 0 auto;
+  line-height: 1.6;
 }
 .home-grid {
   display: grid;
@@ -1224,6 +1322,54 @@ watch(showAccountModal, (open) => {
   color: var(--text-primary);
 }
 .task-hall-section .section-title { margin-top: 0; }
+.section-desc { margin-top: -0.5rem; margin-bottom: 0.75rem; font-size: 0.9rem; }
+.candidates-section { margin-bottom: 1rem; }
+.candidates-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.75rem;
+}
+.candidate-card {
+  padding: 0.75rem;
+}
+.candidate-card .card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.35rem;
+}
+.candidate-card .card-header strong { font-size: 0.95rem; }
+.candidate-owner-badge { font-size: 0.8rem; color: var(--text-secondary); }
+.candidate-desc { font-size: 0.85rem; color: var(--text-secondary); margin: 0; line-height: 1.4; }
+.candidates-checkboxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  max-height: 120px;
+  overflow-y: auto;
+  padding: 0.5rem 0;
+}
+.candidate-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.candidate-checkbox input { margin: 0; }
+.candidate-checkbox .candidate-name { color: var(--text-primary); }
+.candidate-checkbox .candidate-owner { color: var(--text-secondary); font-size: 0.85rem; }
+.invited-only-badge {
+  margin-left: 0.5rem;
+  font-size: 0.75rem;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  background: var(--border-color);
+  color: var(--text-secondary);
+}
 
 /* 智能体快捷发布说明：默认折叠 */
 .agent-guide-wrap {

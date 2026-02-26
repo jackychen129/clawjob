@@ -1,18 +1,19 @@
-/* ClawJob 主题 */
+/* ClawJob 主题（与官网 clawjob-website 一致：深色 + brand 绿） */
 :root {
-  --primary-color: #00a8ff;
-  --secondary-color: #6c5ce7;
-  --success-color: #00b894;
-  --warning-color: #fdcb6e;
-  --danger-color: #ff7675;
-  --background-dark: #1a1a1a;
-  --background-darker: #121212;
-  --card-background: #252525;
-  --card-hover: #2d2d2d;
-  --text-primary: #ffffff;
-  --text-secondary: #b0b0b0;
-  --border-color: #333333;
-  --shadow-color: rgba(0, 0, 0, 0.3);
+  --primary-color: #22c55e;
+  --primary-rgb: 34, 197, 94;
+  --secondary-color: #4ade80;
+  --success-color: #22c55e;
+  --warning-color: #eab308;
+  --danger-color: #ef4444;
+  --background-dark: #18181b;
+  --background-darker: #0a0a0b;
+  --card-background: #27272a;
+  --card-hover: #3f3f46;
+  --text-primary: #fafafa;
+  --text-secondary: #a1a1aa;
+  --border-color: #3f3f46;
+  --shadow-color: rgba(0, 0, 0, 0.4);
 }
 
 * {
@@ -24,8 +25,10 @@
 body {
   background-color: var(--background-darker);
   color: var(--text-primary);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif;
   line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .app-container {
@@ -57,6 +60,7 @@ body {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+  color: var(--primary-color);
 }
 
 .btn {
@@ -76,7 +80,7 @@ body {
 
 .btn-primary:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 20px rgba(0, 168, 255, 0.3);
+  box-shadow: 0 4px 20px rgba(var(--primary-rgb), 0.35);
 }
 
 .btn-secondary {
@@ -116,14 +120,14 @@ body {
 }
 
 .card:hover {
-  transform: translateY(-4px);
+  transform: translateY(-2px);
   box-shadow: 0 8px 30px var(--shadow-color);
-  border-color: var(--primary-color);
+  border-color: rgba(var(--primary-rgb), 0.4);
 }
 
 .card-header {
   padding: 1.2rem 1.5rem;
-  background: linear-gradient(90deg, var(--background-dark), #1e1e1e);
+  background: var(--card-background);
   border-bottom: 1px solid var(--border-color);
 }
 

@@ -165,6 +165,49 @@ def test_full_flow_register_login_publish_agent_subscribe():
     assert "已订阅" in r.json().get("message", "")
 
 
+def test_candidates_public():
+    """GET /candidates 无需登录"""
+    r = client.get("/candidates")
+    assert r.status_code == 200
+    data = r.json()
+    assert "candidates" in data
+    assert isinstance(data["candidates"], list)
+
+
+def test_publish_with_invited_agents_and_subscribe():
+    """发布任务时指定接取者，仅该 Agent 可订阅"""
+    u = f"invuser_{_unique()}"
+    r = client.post("/auth/register", json={"username": u, "email": f"{u}@example.com", "password": "invpass"})
+    assert r.status_code == 200
+    token = r.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    # 发布者注册一个 Agent（用于 invited）
+    r = client.post("/agents/register", json={"name": "PubAgent", "description": "pub"}, headers=headers)
+    assert r.status_code == 200
+    pub_agent_id = r.json()["id"]
+    # 发布任务并指定仅 pub_agent_id 可接取
+    r = client.post(
+        "/tasks",
+        json={"title": "仅指定接取", "description": "测试", "invited_agent_ids": [pub_agent_id]},
+        headers=headers,
+    )
+    assert r.status_code == 200
+    task_id = r.json()["id"]
+    # 另一用户注册并尝试用其 Agent 订阅应 403
+    u2 = f"invuser2_{_unique()}"
+    r = client.post("/auth/register", json={"username": u2, "email": f"{u2}@example.com", "password": "invpass"})
+    assert r.status_code == 200
+    token2 = r.json()["access_token"]
+    r = client.post("/agents/register", json={"name": "OtherAgent", "description": "other"}, headers={"Authorization": f"Bearer {token2}"})
+    assert r.status_code == 200
+    other_agent_id = r.json()["id"]
+    r = client.post(f"/tasks/{task_id}/subscribe", json={"agent_id": other_agent_id}, headers={"Authorization": f"Bearer {token2}"})
+    assert r.status_code == 403
+    # 发布者用自己的 Agent 订阅应成功
+    r = client.post(f"/tasks/{task_id}/subscribe", json={"agent_id": pub_agent_id}, headers=headers)
+    assert r.status_code == 200
+
+
 def test_subscribe_requires_auth():
     """订阅任务需要登录"""
     # 先创建一个任务（需要另一个已登录用户，这里只测未登录）

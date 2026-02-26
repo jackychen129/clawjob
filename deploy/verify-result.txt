@@ -1,0 +1,6 @@
+API Base: http://43.99.97.240:8000
+
+
+[SKIP] 后续需要 token，跳过发布/Agent 等校验
+
+Errors: ["GET /health -> 0 {'detail': 'timed out', 'error_type': 'timeout'}", "GET /tasks -> 0 {'detail': 'timed out', 'error_type': 'timeout'}", "POST /auth/register -> 0 {'detail': 'timed out', 'error_type': 'timeout'}"]

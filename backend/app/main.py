@@ -182,6 +182,37 @@ def list_my_agents(
     }
 
 
+@app.get("/candidates")
+def list_candidates(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+):
+    """候选者列表（公开）：已注册的 Agent 及所属用户，供发布任务时选择指定接取者"""
+    agents = (
+        db.query(Agent)
+        .join(User, Agent.owner_id == User.id)
+        .filter(Agent.is_active == True, User.is_active == True)
+        .order_by(Agent.id.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+    out = []
+    for a in agents:
+        owner = db.query(User).filter(User.id == a.owner_id).first()
+        out.append({
+            "id": a.id,
+            "type": "agent",
+            "name": a.name,
+            "description": (a.description or "")[:300],
+            "agent_type": a.agent_type or "general",
+            "owner_id": a.owner_id,
+            "owner_name": owner.username if owner else "",
+        })
+    return {"candidates": out, "total": len(out)}
+
+
 # Agent Management Endpoints (legacy)
 @app.post("/agents")
 async def create_agent(agent_config: dict, current_user: str = Depends(get_current_user)):
@@ -214,6 +245,7 @@ class PublishTaskBody(BaseModel):
     priority: str = "medium"
     reward_points: int = 0  # 任务奖励点（发布时从账户扣减，验收通过或超时后发给接取者）
     completion_webhook_url: str = ""  # 有奖励点时必填：接取者提交完成时 POST 回调此 URL，供发布方验收
+    invited_agent_ids: list = []  # 可选：仅这些 Agent 可接取；空表示对所有人开放
 
 
 class SubscribeTaskBody(BaseModel):
@@ -304,6 +336,7 @@ def list_tasks_public(
         db.refresh(t)
         owner = db.query(User).filter(User.id == t.owner_id).first()
         sub_count = db.query(TaskSubscription).filter(TaskSubscription.task_id == t.id).count()
+        invited = getattr(t, "invited_agent_ids", None)
         out.append({
             "id": t.id,
             "title": t.title,
@@ -316,6 +349,7 @@ def list_tasks_public(
             "agent_id": t.agent_id,
             "reward_points": getattr(t, "reward_points", 0) or 0,
             "subscription_count": sub_count,
+            "invited_agent_ids": invited if invited else [],
             "submitted_at": t.submitted_at.isoformat() if getattr(t, "submitted_at", None) else None,
             "verification_deadline_at": t.verification_deadline_at.isoformat() if getattr(t, "verification_deadline_at", None) else None,
             "created_at": t.created_at.isoformat() if t.created_at else None,
@@ -348,6 +382,8 @@ def publish_task(
                 status_code=400,
                 detail=f"信用点不足：当前 {credits}，需要 {reward_points}",
             )
+    invited_ids = getattr(body, "invited_agent_ids", None) or []
+    invited_ids = [int(x) for x in invited_ids if x is not None] if invited_ids else None
     task = Task(
         title=body.title,
         description=body.description,
@@ -358,6 +394,7 @@ def publish_task(
         agent_id=None,
         reward_points=reward_points,
         completion_webhook_url=webhook_url if webhook_url else None,
+        invited_agent_ids=invited_ids if invited_ids else None,
     )
     db.add(task)
     db.commit()
@@ -388,6 +425,13 @@ def subscribe_task(
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
+    invited = getattr(task, "invited_agent_ids", None)
+    if invited and isinstance(invited, list) and len(invited) > 0:
+        if body.agent_id not in [int(x) for x in invited]:
+            raise HTTPException(
+                status_code=403,
+                detail="该任务仅对指定接取者开放，当前 Agent 不在接取列表中",
+            )
     agent = db.query(Agent).filter(Agent.id == body.agent_id, Agent.owner_id == uid).first()
     if not agent:
         raise HTTPException(status_code=400, detail="Agent 不存在或不属于当前用户")

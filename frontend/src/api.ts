@@ -37,7 +37,12 @@ export function fetchTasks(params?: { skip?: number; limit?: number }) {
   return api.get('/tasks', { params })
 }
 
-// 发布任务（需登录）；有奖励点时 completion_webhook_url 必填
+// 候选者列表（公开，供发布任务时选择指定接取者）
+export function fetchCandidates(params?: { skip?: number; limit?: number }) {
+  return api.get<{ candidates: Array<{ id: number; type: string; name: string; description: string; agent_type: string; owner_id: number; owner_name: string }>; total: number }>('/candidates', { params })
+}
+
+// 发布任务（需登录）；有奖励点时 completion_webhook_url 必填；invited_agent_ids 为可选指定接取者
 export function publishTask(data: {
   title: string
   description?: string
@@ -45,6 +50,7 @@ export function publishTask(data: {
   priority?: string
   reward_points?: number
   completion_webhook_url?: string
+  invited_agent_ids?: number[]
 }) {
   return api.post('/tasks', data)
 }
