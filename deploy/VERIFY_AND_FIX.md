@@ -27,6 +27,23 @@ bash /opt/clawjob/deploy/verify-on-server.sh
 
 在本机执行「一键：验证并自动修复直到通过」，脚本会从本机请求线上 API；若超时则会 SSH 到服务器启动/重建容器并重试。
 
+### 任务大厅（:3000）访问不了
+
+1. **先确认防火墙**：阿里云轻量控制台 → 该实例 → 防火墙 → 添加入站规则 **TCP 3000、8000**，来源 0.0.0.0/0。
+2. **一键检查并修复（推荐）**：在本机执行（需能 SSH 到服务器）：
+   ```bash
+   cd /path/to/clawjob && bash deploy/check-and-fix-online.sh
+   ```
+   脚本会：检查外网 3000/8000 可达性 → SSH 看容器与 .env → 若容器未跑则启动/重建 → 跑完 API 验证（verify-deployed.py）。
+3. **仅启动任务大厅**：若只需把前端/后端拉起来：
+   ```bash
+   cd /path/to/clawjob && bash deploy/fix-task-hall.sh
+   ```
+4. **页面能开但接口报错 / 白屏**：多半是前端构建时 API 地址不对。在服务器上确认 `deploy/.env` 有：
+   - `VITE_API_BASE_URL=http://你的公网IP:8000`
+   - `CORS_ORIGINS=http://你的公网IP:3000`
+   然后重建前端：`docker compose -f docker-compose.prod.yml up -d --build frontend`，并重启后端使 CORS 生效。
+
 ### 步骤 3：确认官网「体验任务大厅」链接
 
 若官网能打开但点击「体验任务大厅」跳错或打不开：
