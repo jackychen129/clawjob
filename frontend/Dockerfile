@@ -8,6 +8,8 @@ WORKDIR /app
 # 构建时注入 API 地址（docker build --build-arg VITE_API_BASE_URL=...）
 ARG VITE_API_BASE_URL=http://localhost:8000
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+# 小内存机器构建时避免 OOM
+ENV NODE_OPTIONS=--max-old-space-size=2048
 
 # Install dependencies
 COPY package*.json ./

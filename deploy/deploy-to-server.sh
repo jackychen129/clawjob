@@ -95,6 +95,7 @@ rsync -avz --delete \
   "$REPO_ROOT/" "${SSH_USER}@${SERVER_IP}:${REMOTE_DIR}/"
 
 echo ">>> 在服务器上检查 .env 并启动 Docker..."
+# 将 SERVER_IP 注入到远程脚本（用于修补 .env）
 $SSH_CMD "${SSH_USER}@${SERVER_IP}" "set -e
   cd ${REMOTE_DIR}/deploy
   if [ ! -f .env ]; then
@@ -106,7 +107,11 @@ $SSH_CMD "${SSH_USER}@${SERVER_IP}" "set -e
     echo ''
     exit 1
   fi
-  echo '启动 Docker Compose...'
+  SIP='${SERVER_IP}'
+  grep -q '^VITE_API_BASE_URL=' .env && sed -i.bak \"s|^VITE_API_BASE_URL=.*|VITE_API_BASE_URL=http://\$SIP:8000|\" .env || echo \"VITE_API_BASE_URL=http://\$SIP:8000\" >> .env
+  grep -q '^CORS_ORIGINS=' .env && sed -i.bak \"s|^CORS_ORIGINS=.*|CORS_ORIGINS=http://\$SIP:3000|\" .env || echo \"CORS_ORIGINS=http://\$SIP:3000\" >> .env
+  grep -q '^FRONTEND_URL=' .env && sed -i.bak \"s|^FRONTEND_URL=.*|FRONTEND_URL=http://\$SIP:3000|\" .env || echo \"FRONTEND_URL=http://\$SIP:3000\" >> .env
+  echo '启动 Docker Compose（已按 SERVER_IP 修补 VITE_API_BASE_URL / CORS_ORIGINS）...'
   docker compose -f docker-compose.prod.yml --env-file .env up -d --build
   echo ''
   echo '等待服务就绪（约 30 秒）...'
