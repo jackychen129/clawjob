@@ -8,6 +8,8 @@
         </router-link>
         <nav class="header-nav">
           <router-link to="/" class="nav-link" :class="{ active: route.path === '/' }">{{ t('common.home') }}</router-link>
+          <router-link to="/tasks" class="nav-link" :class="{ active: route.path === '/tasks' }">{{ t('nav.taskManage') || '任务管理' }}</router-link>
+          <router-link to="/agents" class="nav-link" :class="{ active: route.path === '/agents' }">{{ t('nav.agentManage') || 'Agent 管理' }}</router-link>
           <router-link to="/docs" class="nav-link" :class="{ active: route.path === '/docs' }">{{ t('common.docs') }}</router-link>
           <router-link to="/skill" class="nav-link" :class="{ active: route.path === '/skill' }">{{ t('common.skill') }}</router-link>
         </nav>
@@ -31,7 +33,7 @@
     </header>
 
     <div v-if="oauthError" class="oauth-error-banner" role="alert">
-      <span>{{ t('common.oauthErrorPrefix') }} {{ t('oauthError.' + oauthError, t('oauthError.unknown')) }}</span>
+      <span>{{ t('common.oauthErrorPrefix') }} {{ t('oauthError.' + oauthError.split(':')[0], t('oauthError.unknown')) }}{{ oauthError.includes(':') ? ' ' + oauthError.split(':').slice(1).join(':') : '' }}</span>
       <button type="button" class="btn btn-sm" @click="oauthError = ''">{{ t('common.dismiss') }}</button>
     </div>
     <div v-if="showSkillBanner" class="skill-banner">
@@ -44,6 +46,8 @@
     <main class="main-content">
       <SkillPage v-if="route.path === '/skill'" />
       <DocsPage v-else-if="route.path === '/docs'" />
+      <TaskManageView v-else-if="route.path === '/tasks'" @success="showSuccess" />
+      <AgentManageView v-else-if="route.path === '/agents'" />
       <template v-else>
       <!-- 顶部 Hero：与官网一致 -->
       <section class="hero-section" role="region" aria-label="Hero">
@@ -307,7 +311,8 @@
           <input v-model="loginForm.password" type="password" class="input" :placeholder="t('auth.password')" />
           <button class="btn btn-primary" :disabled="authLoading" @click="doLogin">{{ t('auth.login') }}</button>
           <div class="oauth-divider">{{ t('auth.or') }}</div>
-          <a :href="googleLoginUrl" class="btn btn-google">{{ t('auth.loginWithGoogle') }}</a>
+          <a v-if="googleOAuthConfigured" :href="googleLoginUrl" class="btn btn-google">{{ t('auth.loginWithGoogle') }}</a>
+          <span v-else class="btn btn-google btn-google-disabled" :title="t('oauthError.server_config')">{{ t('auth.loginWithGoogle') }}</span>
         </div>
         <div v-else class="form">
           <input v-model="registerForm.username" class="input" :placeholder="t('auth.username')" />
@@ -315,7 +320,8 @@
           <input v-model="registerForm.password" type="password" class="input" :placeholder="t('auth.password')" />
           <button class="btn btn-primary" :disabled="authLoading" @click="doRegister">{{ t('auth.register') }}</button>
           <div class="oauth-divider">{{ t('auth.or') }}</div>
-          <a :href="googleLoginUrl" class="btn btn-google">{{ t('auth.loginWithGoogle') }}</a>
+          <a v-if="googleOAuthConfigured" :href="googleLoginUrl" class="btn btn-google">{{ t('auth.loginWithGoogle') }}</a>
+          <span v-else class="btn btn-google btn-google-disabled" :title="t('oauthError.server_config')">{{ t('auth.loginWithGoogle') }}</span>
         </div>
         <p v-if="authError" class="error-msg">{{ authError }}</p>
         <button class="btn btn-secondary close-btn" @click="showAuthModal = false">{{ t('common.close') }}</button>
@@ -491,6 +497,8 @@ import { useAuthStore } from './stores/auth'
 import * as api from './api'
 import SkillPage from './views/SkillPage.vue'
 import DocsPage from './views/DocsPage.vue'
+import TaskManageView from './views/TaskManageView.vue'
+import AgentManageView from './views/AgentManageView.vue'
 
 const route = useRoute()
 const { t } = useI18n()
@@ -500,6 +508,7 @@ function onLocaleChange() {
   setLocale(locale.value)
 }
 const googleLoginUrl = computed(() => api.getGoogleLoginUrl())
+const googleOAuthConfigured = ref(true) // 在请求 /auth/google/status 前先显示按钮，避免闪烁
 const skillRepoUrl = (import.meta as any).env?.VITE_SKILL_REPO_URL || 'https://github.com/clawjob/clawjob/tree/main/skills/clawjob'
 
 const showAuthModal = ref(false)
@@ -871,29 +880,44 @@ function doUnbind(pmId: number) {
 
 const helpDownloadStepKeys = ['help.step1', 'help.step2', 'help.step3']
 
+// 拉取 Google OAuth 是否已配置（未配置时禁用「使用 Google 登录」按钮）
+api.getGoogleOAuthStatus().then((s) => { googleOAuthConfigured.value = s.configured }).catch(() => { googleOAuthConfigured.value = false })
+
 onMounted(() => {
   document.addEventListener('keydown', onEscapeKey)
   locale.value = i18n.global.locale.value as LocaleKey
   try { showSkillBanner.value = !localStorage.getItem(SKILL_BANNER_KEY) } catch (_) { showSkillBanner.value = true }
-  // OAuth 错误：后端重定向到 FRONTEND_URL?error=xxx
-  const search = window.location.search
-  if (search) {
-    const params = new URLSearchParams(search.slice(1))
-    const err = params.get('error')
-    if (err) {
-      oauthError.value = err
-      window.history.replaceState(null, '', window.location.pathname)
-    }
-  }
-  // Google OAuth 成功回调：hash 模式下为 #/auth/callback?token=xxx&username=yyy
+  // Google OAuth 错误：后端重定向到 FRONTEND_URL#/?error=xxx 或 FRONTEND_URL?error=xxx
   const hash = window.location.hash
-  if (hash.startsWith('#/auth/callback')) {
+  const search = window.location.search
+  const getError = () => {
+    if (hash) {
+      const q = hash.indexOf('?')
+      if (q >= 0) {
+        const e = new URLSearchParams(hash.slice(q + 1)).get('error')
+        if (e) return e
+      }
+    }
+    if (search) {
+      const e = new URLSearchParams(search.slice(1)).get('error')
+      if (e) return e
+    }
+    return ''
+  }
+  const oauthErr = getError()
+  if (oauthErr) {
+    oauthError.value = oauthErr
+    window.history.replaceState(null, '', window.location.pathname)
+    window.location.hash = ''
+  } else if (hash.startsWith('#/auth/callback')) {
     const q = hash.indexOf('?')
     const params = new URLSearchParams(q >= 0 ? hash.slice(q + 1) : '')
     const token = params.get('token')
     const username = params.get('username')
+    const userIdParam = params.get('user_id')
+    const userId = userIdParam ? parseInt(userIdParam, 10) : undefined
     if (token && username) {
-      auth.setUser(token, decodeURIComponent(username))
+      auth.setUser(token, decodeURIComponent(username), Number.isInteger(userId) ? userId : undefined)
       window.history.replaceState(null, '', window.location.pathname + window.location.search)
       window.location.hash = ''
       loadAccountMe()
@@ -1599,5 +1623,10 @@ watch(showAccountModal, (open) => {
 .btn-google:hover {
   background: #f5f5f5;
   border-color: #ccc;
+}
+.btn-google-disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 </style>

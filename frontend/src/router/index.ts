@@ -2,6 +2,8 @@ import { createRouter, createWebHashHistory } from 'vue-router'
 import { defineComponent, h } from 'vue'
 import SkillPage from '../views/SkillPage.vue'
 import DocsPage from '../views/DocsPage.vue'
+import TaskManageView from '../views/TaskManageView.vue'
+import AgentManageView from '../views/AgentManageView.vue'
 
 const Home = defineComponent({
   render: () => h('div', { class: 'home' }, 'Agent Arena'),
@@ -16,6 +18,8 @@ const router = createRouter({
   history: createWebHashHistory(),
   routes: [
     { path: '/', name: 'Home', component: Home },
+    { path: '/tasks', name: 'TaskManage', component: TaskManageView },
+    { path: '/agents', name: 'AgentManage', component: AgentManageView },
     { path: '/skill', name: 'Skill', component: SkillPage },
     { path: '/docs', name: 'Docs', component: DocsPage },
     { path: '/auth/callback', name: 'AuthCallback', component: AuthCallback },

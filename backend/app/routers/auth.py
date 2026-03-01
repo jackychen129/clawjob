@@ -18,10 +18,11 @@ from datetime import timedelta
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 # Google OAuth 配置（从环境变量读取）
+# GOOGLE_REDIRECT_URI 必须与 Google Cloud Console 中配置的「授权重定向 URI」完全一致（后端地址，如 http://localhost:8000/auth/google/callback）
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
 GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/auth/google/callback")
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+FRONTEND_URL = (os.getenv("FRONTEND_URL", "http://localhost:3000")).rstrip("/")
 
 
 class RegisterBody(BaseModel):
@@ -75,6 +76,17 @@ def login(body: LoginBody, db: Session = Depends(get_db)):
 
 
 # ---------- Google OAuth ----------
+@router.get("/google/status")
+def google_oauth_status():
+    """返回 Google OAuth 是否已配置及回调地址（用于排查 Sign in with Google 不工作）"""
+    return {
+        "configured": bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET),
+        "redirect_uri": GOOGLE_REDIRECT_URI,
+        "frontend_url": FRONTEND_URL,
+        "hint": "Google Cloud Console 中「授权重定向 URI」必须与 redirect_uri 完全一致",
+    }
+
+
 @router.get("/google")
 def google_login():
     """跳转到 Google 授权页"""
@@ -94,51 +106,71 @@ def google_login():
     return RedirectResponse(url=url)
 
 
+def _frontend_error_url(error: str, use_hash: bool = True) -> str:
+    """前端错误页 URL；use_hash 便于 SPA 从 hash 读取 error（避免被重定向丢掉 query）"""
+    if use_hash:
+        return f"{FRONTEND_URL}#/?error={quote(error)}"
+    return f"{FRONTEND_URL}?error={quote(error)}"
+
+
 @router.get("/google/callback")
 def google_callback(code: str = None, state: str = None, db: Session = Depends(get_db)):
     """Google 回调：用 code 换 token，取用户信息，创建/登录用户并重定向到前端带 token"""
     if not code:
-        return RedirectResponse(url=f"{FRONTEND_URL}?error=missing_code")
+        return RedirectResponse(url=_frontend_error_url("missing_code"))
     if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
-        return RedirectResponse(url=f"{FRONTEND_URL}?error=server_config")
+        return RedirectResponse(url=_frontend_error_url("server_config"))
 
-    with httpx.Client() as client:
-        # 用 code 换 access_token
-        r = client.post(
-            "https://oauth2.googleapis.com/token",
-            data={
-                "code": code,
-                "client_id": GOOGLE_CLIENT_ID,
-                "client_secret": GOOGLE_CLIENT_SECRET,
-                "redirect_uri": GOOGLE_REDIRECT_URI,
-                "grant_type": "authorization_code",
-            },
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-        )
+    try:
+        with httpx.Client(timeout=15.0) as client:
+            r = client.post(
+                "https://oauth2.googleapis.com/token",
+                data={
+                    "code": code,
+                    "client_id": GOOGLE_CLIENT_ID,
+                    "client_secret": GOOGLE_CLIENT_SECRET,
+                    "redirect_uri": GOOGLE_REDIRECT_URI,
+                    "grant_type": "authorization_code",
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+    except Exception as e:
+        return RedirectResponse(url=_frontend_error_url("token_exchange"))
+
     if r.status_code != 200:
-        return RedirectResponse(url=f"{FRONTEND_URL}?error=token_exchange")
+        try:
+            err_body = r.json()
+            detail = err_body.get("error_description") or err_body.get("error", "")
+            if detail and len(detail) < 80:
+                return RedirectResponse(url=_frontend_error_url(f"token_exchange:{detail}"))
+        except Exception:
+            pass
+        return RedirectResponse(url=_frontend_error_url("token_exchange"))
     data = r.json()
     access_token = data.get("access_token")
     if not access_token:
-        return RedirectResponse(url=f"{FRONTEND_URL}?error=no_access_token")
+        return RedirectResponse(url=_frontend_error_url("no_access_token"))
 
-    with httpx.Client() as client:
-        ui = client.get(
-            "https://www.googleapis.com/oauth2/v2/userinfo",
-            headers={"Authorization": f"Bearer {access_token}"},
-        )
+    try:
+        with httpx.Client(timeout=10.0) as client:
+            ui = client.get(
+                "https://www.googleapis.com/oauth2/v2/userinfo",
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+    except Exception:
+        return RedirectResponse(url=_frontend_error_url("userinfo"))
     if ui.status_code != 200:
-        return RedirectResponse(url=f"{FRONTEND_URL}?error=userinfo")
+        return RedirectResponse(url=_frontend_error_url("userinfo"))
     profile = ui.json()
     email = profile.get("email")
-    name = profile.get("name") or profile.get("email", "").split("@")[0]
+    name = profile.get("name") or (profile.get("email") or "").split("@")[0]
     if not email:
-        return RedirectResponse(url=f"{FRONTEND_URL}?error=no_email")
+        return RedirectResponse(url=_frontend_error_url("no_email"))
 
     # 按 email 查找或创建用户（username 用 email 前缀或 name，唯一即可）
     user = db.query(User).filter(User.email == email).first()
     if not user:
-        base_username = name.replace(" ", "_")[:30] or email.split("@")[0]
+        base_username = (name or email.split("@")[0]).replace(" ", "_")[:30]
         username = base_username
         n = 0
         while db.query(User).filter(User.username == username).first():
@@ -157,6 +189,8 @@ def google_callback(code: str = None, state: str = None, db: Session = Depends(g
         data={"sub": str(user.id), "type": "user"},
         expires_delta=timedelta(days=7),
     )
-    # 重定向到前端，token 放在 hash 中避免被服务器日志记录
+    # 重定向到前端，token 放在 hash 中避免被服务器日志记录；带 user_id 便于前端一次 setUser
     safe_username = quote(user.username, safe="")
-    return RedirectResponse(url=f"{FRONTEND_URL}#/auth/callback?token={token}&username={safe_username}")
+    return RedirectResponse(
+        url=f"{FRONTEND_URL}#/auth/callback?token={token}&username={safe_username}&user_id={user.id}"
+    )

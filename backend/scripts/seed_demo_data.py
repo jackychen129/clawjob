@@ -42,14 +42,14 @@ AGENTS = [
 ]
 
 TASKS = [
-    {"title": "周报数据汇总与图表", "description": "将本周各渠道的 CSV 数据汇总，生成一份带图表的 Markdown 周报。", "task_type": "数据分析", "reward_points": 50},
-    {"title": "项目 README 与贡献指南", "description": "为当前仓库生成 README.md 和 CONTRIBUTING.md，需包含安装、运行与提交流程。", "task_type": "文档", "reward_points": 80},
-    {"title": "PR 代码审查与注释", "description": "对指定 PR 的变更进行代码审查，输出审查意见与改进建议（Markdown）。", "task_type": "开发", "reward_points": 100},
-    {"title": "竞品功能对比调研", "description": "调研 3 个同类产品的核心功能与定价，输出一份对比表格与结论。", "task_type": "调研", "reward_points": 120},
-    {"title": "API 文档中英双语", "description": "将现有 API 文档翻译为英文，并统一术语表。", "task_type": "翻译", "reward_points": 60},
-    {"title": "单元测试覆盖率提升", "description": "为指定模块补充单元测试，覆盖率提升至 80% 以上。", "task_type": "测试", "reward_points": 90},
-    {"title": "用户行为漏斗分析", "description": "基于埋点数据生成漏斗分析报表，并给出 2–3 条优化建议。", "task_type": "数据分析", "reward_points": 150},
-    {"title": "技术博客草稿生成", "description": "根据给定主题与要点，生成一篇 1500 字左右的技术博客草稿。", "task_type": "文档", "reward_points": 70},
+    {"title": "周报数据汇总与图表", "description": "将本周各渠道的 CSV 数据汇总，生成一份带图表的 Markdown 周报。", "task_type": "数据分析", "reward_points": 50, "location": "远程", "duration_estimate": "~2h", "skills": ["数据分析", "Markdown", "图表"]},
+    {"title": "项目 README 与贡献指南", "description": "为当前仓库生成 README.md 和 CONTRIBUTING.md，需包含安装、运行与提交流程。", "task_type": "文档", "reward_points": 80, "location": "远程", "duration_estimate": "~1h", "skills": ["文档", "Git"]},
+    {"title": "PR 代码审查与注释", "description": "对指定 PR 的变更进行代码审查，输出审查意见与改进建议（Markdown）。", "task_type": "开发", "reward_points": 100, "location": "远程", "duration_estimate": "~3h", "skills": ["代码审查", "Git"]},
+    {"title": "竞品功能对比调研", "description": "调研 3 个同类产品的核心功能与定价，输出一份对比表格与结论。", "task_type": "调研", "reward_points": 120, "location": "远程", "duration_estimate": "~4h", "skills": ["调研", "竞品分析"]},
+    {"title": "API 文档中英双语", "description": "将现有 API 文档翻译为英文，并统一术语表。", "task_type": "翻译", "reward_points": 60, "location": "远程", "duration_estimate": "~2h", "skills": ["翻译", "技术写作"]},
+    {"title": "单元测试覆盖率提升", "description": "为指定模块补充单元测试，覆盖率提升至 80% 以上。", "task_type": "测试", "reward_points": 90, "location": "远程", "duration_estimate": "~3h", "skills": ["测试", "Python"]},
+    {"title": "用户行为漏斗分析", "description": "基于埋点数据生成漏斗分析报表，并给出 2–3 条优化建议。", "task_type": "数据分析", "reward_points": 150, "location": "远程", "duration_estimate": "~5h", "skills": ["数据分析", "SQL"]},
+    {"title": "技术博客草稿生成", "description": "根据给定主题与要点，生成一篇 1500 字左右的技术博客草稿。", "task_type": "文档", "reward_points": 70, "location": "远程", "duration_estimate": "~1.5h", "skills": ["写作", "技术"]},
 ]
 
 
@@ -112,15 +112,23 @@ def seed():
             invited_ids = None
             if i < 2 and len(agent_map) >= 2:
                 invited_ids = [agent_map[0].id, agent_map[1].id]
+            extra = {}
+            if t.get("location"):
+                extra["location"] = t["location"]
+            if t.get("duration_estimate"):
+                extra["duration_estimate"] = t["duration_estimate"]
+            if t.get("skills"):
+                extra["skills"] = t["skills"]
             task = Task(
                 title=t["title"],
                 description=t["description"],
-                status="pending",
+                status="open",
                 priority="medium",
                 task_type=t["task_type"],
                 owner_id=alice.id,
                 reward_points=t["reward_points"],
                 invited_agent_ids=invited_ids,
+                input_data=extra if extra else None,
             )
             db.add(task)
             print(f"  created task: {t['title']} (reward={t['reward_points']})")

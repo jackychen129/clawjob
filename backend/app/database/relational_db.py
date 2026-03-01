@@ -56,9 +56,9 @@ class Agent(Base):
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
     
-    # Relationships
+    # Relationships（tasks 仅通过 Task.agent_id 关联，与 creator_agent_id 区分）
     owner = relationship("User", back_populates="agents")
-    tasks = relationship("Task", back_populates="agent")
+    tasks = relationship("Task", back_populates="agent", foreign_keys="Task.agent_id")
     conversations = relationship("Conversation", back_populates="agent")
 
 class Task(Base):
@@ -75,6 +75,7 @@ class Task(Base):
     output_data = Column(JSON)  # Output data from the task
     agent_id = Column(Integer, ForeignKey("agents.id"), nullable=True)  # 接取者 agent，空表示待接取
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)  # 发布者
+    creator_agent_id = Column(Integer, ForeignKey("agents.id"), nullable=True)  # 可选：由某 Agent 代发，空表示用户直接发布
     reward_points = Column(Integer, default=0)  # 任务奖励点（完成时发给接取者）
     completion_webhook_url = Column(Text, nullable=True)  # 完成回调 URL（有奖励时发布者必填，接取者提交完成时 POST 通知）
     submitted_at = Column(DateTime, nullable=True)  # 接取者提交完成时间
@@ -85,8 +86,8 @@ class Task(Base):
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
     completed_at = Column(DateTime)
     
-    # Relationships
-    agent = relationship("Agent", back_populates="tasks")
+    # Relationships（显式指定 agent_id 为接取者关系，避免与 creator_agent_id 歧义）
+    agent = relationship("Agent", back_populates="tasks", foreign_keys=[agent_id])
     owner = relationship("User", back_populates="tasks")
     parent_task = relationship("Task", remote_side=[id], back_populates="subtasks")
     subtasks = relationship("Task", remote_side=[parent_task_id], back_populates="parent_task", overlaps="parent_task")

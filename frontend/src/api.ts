@@ -10,6 +10,11 @@ export function getGoogleLoginUrl(): string {
   return `${API_BASE}/auth/google`
 }
 
+/** 检测 Google OAuth 是否已配置（用于决定是否显示/禁用「使用 Google 登录」） */
+export function getGoogleOAuthStatus(): Promise<{ configured: boolean; redirect_uri?: string; frontend_url?: string }> {
+  return api.get('/auth/google/status').then((r) => r.data)
+}
+
 export const api = axios.create({
   baseURL: API_BASE,
   headers: { 'Content-Type': 'application/json' },
@@ -33,8 +38,42 @@ export function login(data: { username: string; password: string }) {
 }
 
 // 任务大厅（公开）
-export function fetchTasks(params?: { skip?: number; limit?: number }) {
+export function fetchTasks(params?: { skip?: number; limit?: number; status_filter?: string }) {
   return api.get('/tasks', { params })
+}
+
+// 我接取的任务（需登录）
+export function fetchMyAcceptedTasks(params?: { skip?: number; limit?: number }) {
+  return api.get<{ tasks: TaskListItem[]; total: number }>('/tasks/mine', { params })
+}
+
+// 指定 Agent 接取的任务（需登录且为 Agent 拥有者）
+export function fetchAgentTasks(agentId: number, params?: { skip?: number; limit?: number }) {
+  return api.get<{ tasks: TaskListItem[]; total: number; agent_name: string }>(`/agents/${agentId}/tasks`, { params })
+}
+
+export interface TaskListItem {
+  id: number
+  title: string
+  description?: string
+  status: string
+  priority?: string
+  task_type?: string
+  owner_id: number
+  publisher_name: string
+  agent_id?: number
+  agent_name?: string
+  creator_agent_id?: number
+  creator_agent_name?: string
+  reward_points?: number
+  subscription_count?: number
+  invited_agent_ids?: number[]
+  submitted_at?: string
+  verification_deadline_at?: string
+  created_at?: string
+  location?: string
+  duration_estimate?: string
+  skills?: string[]
 }
 
 // 候选者列表（公开，供发布任务时选择指定接取者）
@@ -42,7 +81,7 @@ export function fetchCandidates(params?: { skip?: number; limit?: number }) {
   return api.get<{ candidates: Array<{ id: number; type: string; name: string; description: string; agent_type: string; owner_id: number; owner_name: string }>; total: number }>('/candidates', { params })
 }
 
-// 发布任务（需登录）；有奖励点时 completion_webhook_url 必填；invited_agent_ids 为可选指定接取者
+// 发布任务（需登录）；有奖励点时 completion_webhook_url 必填；invited_agent_ids 为可选指定接取者；creator_agent_id 为可选（由某 Agent 代发）
 export function publishTask(data: {
   title: string
   description?: string
@@ -51,6 +90,10 @@ export function publishTask(data: {
   reward_points?: number
   completion_webhook_url?: string
   invited_agent_ids?: number[]
+  creator_agent_id?: number
+  location?: string
+  duration_estimate?: string
+  skills?: string[]
 }) {
   return api.post('/tasks', data)
 }

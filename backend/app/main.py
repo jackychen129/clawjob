@@ -9,6 +9,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from datetime import datetime, timedelta
+from typing import Optional
 import os
 import httpx
 from slowapi import _rate_limit_exceeded_handler
@@ -246,6 +247,11 @@ class PublishTaskBody(BaseModel):
     reward_points: int = 0  # 任务奖励点（发布时从账户扣减，验收通过或超时后发给接取者）
     completion_webhook_url: str = ""  # 有奖励点时必填：接取者提交完成时 POST 回调此 URL，供发布方验收
     invited_agent_ids: list = []  # 可选：仅这些 Agent 可接取；空表示对所有人开放
+    creator_agent_id: Optional[int] = None  # 可选：由某 Agent 代发（须为当前用户的 Agent）
+    # RentAHuman 风格可选属性
+    location: str = ""  # 地点要求，如 "远程"、"北京"
+    duration_estimate: str = ""  # 预计时长，如 "~1h"、"~3h"
+    skills: list = []  # 所需技能标签，如 ["数据分析", "Python"]
 
 
 class SubscribeTaskBody(BaseModel):
@@ -318,6 +324,103 @@ def _maybe_auto_confirm(task: Task, db: Session) -> None:
         db.commit()
 
 
+def _task_extra(t: Task) -> dict:
+    """从 input_data 取出 RentAHuman 风格扩展字段"""
+    d = getattr(t, "input_data", None) or {}
+    if not isinstance(d, dict):
+        return {}
+    return {
+        "location": d.get("location") or None,
+        "duration_estimate": d.get("duration_estimate") or None,
+        "skills": d.get("skills") if isinstance(d.get("skills"), list) else None,
+    }
+
+
+@app.get("/tasks/mine")
+def list_my_accepted_tasks(
+    skip: int = 0,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """我接取的任务：当前用户通过其 Agent 接取的任务（需登录）"""
+    uid = int(current_user["user_id"])
+    my_agent_ids = [a.id for a in db.query(Agent.id).filter(Agent.owner_id == uid).all()]
+    if not my_agent_ids:
+        return {"tasks": [], "total": 0}
+    q = (
+        db.query(Task)
+        .filter(Task.agent_id.in_(my_agent_ids))
+        .order_by(Task.created_at.desc())
+    )
+    tasks = q.offset(skip).limit(limit).all()
+    out = []
+    for t in tasks:
+        _maybe_auto_confirm(t, db)
+        db.refresh(t)
+        owner = db.query(User).filter(User.id == t.owner_id).first()
+        agent = db.query(Agent).filter(Agent.id == t.agent_id).first()
+        out.append({
+            "id": t.id,
+            "title": t.title,
+            "description": (t.description or "")[:200],
+            "status": t.status,
+            "priority": t.priority or "medium",
+            "task_type": t.task_type or "general",
+            "owner_id": t.owner_id,
+            "publisher_name": owner.username if owner else "",
+            "agent_id": t.agent_id,
+            "agent_name": agent.name if agent else "",
+            "reward_points": getattr(t, "reward_points", 0) or 0,
+            "submitted_at": t.submitted_at.isoformat() if getattr(t, "submitted_at", None) else None,
+            "verification_deadline_at": t.verification_deadline_at.isoformat() if getattr(t, "verification_deadline_at", None) else None,
+            "created_at": t.created_at.isoformat() if t.created_at else None,
+            **_task_extra(t),
+        })
+    return {"tasks": out, "total": len(out)}
+
+
+@app.get("/agents/{agent_id}/tasks")
+def list_agent_tasks(
+    agent_id: int,
+    skip: int = 0,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """指定 Agent 接取的任务列表（需登录且为该 Agent 的拥有者）"""
+    uid = int(current_user["user_id"])
+    agent = db.query(Agent).filter(Agent.id == agent_id, Agent.owner_id == uid).first()
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent 不存在或无权查看")
+    q = (
+        db.query(Task)
+        .filter(Task.agent_id == agent_id)
+        .order_by(Task.created_at.desc())
+    )
+    tasks = q.offset(skip).limit(limit).all()
+    out = []
+    for t in tasks:
+        _maybe_auto_confirm(t, db)
+        db.refresh(t)
+        owner = db.query(User).filter(User.id == t.owner_id).first()
+        out.append({
+            "id": t.id,
+            "title": t.title,
+            "description": (t.description or "")[:200],
+            "status": t.status,
+            "priority": t.priority or "medium",
+            "owner_id": t.owner_id,
+            "publisher_name": owner.username if owner else "",
+            "reward_points": getattr(t, "reward_points", 0) or 0,
+            "submitted_at": t.submitted_at.isoformat() if getattr(t, "submitted_at", None) else None,
+            "verification_deadline_at": t.verification_deadline_at.isoformat() if getattr(t, "verification_deadline_at", None) else None,
+            "created_at": t.created_at.isoformat() if t.created_at else None,
+            **_task_extra(t),
+        })
+    return {"tasks": out, "total": len(out), "agent_name": agent.name}
+
+
 @app.get("/tasks")
 def list_tasks_public(
     skip: int = 0,
@@ -337,6 +440,7 @@ def list_tasks_public(
         owner = db.query(User).filter(User.id == t.owner_id).first()
         sub_count = db.query(TaskSubscription).filter(TaskSubscription.task_id == t.id).count()
         invited = getattr(t, "invited_agent_ids", None)
+        creator_agent = db.query(Agent).filter(Agent.id == t.creator_agent_id).first() if getattr(t, "creator_agent_id", None) else None
         out.append({
             "id": t.id,
             "title": t.title,
@@ -347,12 +451,15 @@ def list_tasks_public(
             "owner_id": t.owner_id,
             "publisher_name": owner.username if owner else "",
             "agent_id": t.agent_id,
+            "creator_agent_id": getattr(t, "creator_agent_id", None),
+            "creator_agent_name": creator_agent.name if creator_agent else None,
             "reward_points": getattr(t, "reward_points", 0) or 0,
             "subscription_count": sub_count,
             "invited_agent_ids": invited if invited else [],
             "submitted_at": t.submitted_at.isoformat() if getattr(t, "submitted_at", None) else None,
             "verification_deadline_at": t.verification_deadline_at.isoformat() if getattr(t, "verification_deadline_at", None) else None,
             "created_at": t.created_at.isoformat() if t.created_at else None,
+            **_task_extra(t),
         })
     return {"tasks": out, "total": len(out)}
 
@@ -384,6 +491,18 @@ def publish_task(
             )
     invited_ids = getattr(body, "invited_agent_ids", None) or []
     invited_ids = [int(x) for x in invited_ids if x is not None] if invited_ids else None
+    creator_agent_id = getattr(body, "creator_agent_id", None)
+    if creator_agent_id is not None:
+        agent = db.query(Agent).filter(Agent.id == int(creator_agent_id), Agent.owner_id == uid).first()
+        if not agent:
+            raise HTTPException(status_code=400, detail="creator_agent_id 须为当前用户注册的 Agent")
+    extra = {}
+    if getattr(body, "location", None):
+        extra["location"] = (body.location or "").strip()[:200]
+    if getattr(body, "duration_estimate", None):
+        extra["duration_estimate"] = (body.duration_estimate or "").strip()[:50]
+    if getattr(body, "skills", None) and isinstance(body.skills, list):
+        extra["skills"] = [str(s).strip()[:50] for s in body.skills if s][:20]
     task = Task(
         title=body.title,
         description=body.description,
@@ -392,9 +511,11 @@ def publish_task(
         status="open",
         owner_id=uid,
         agent_id=None,
+        creator_agent_id=int(creator_agent_id) if creator_agent_id is not None else None,
         reward_points=reward_points,
         completion_webhook_url=webhook_url if webhook_url else None,
         invited_agent_ids=invited_ids if invited_ids else None,
+        input_data=extra if extra else None,
     )
     db.add(task)
     db.commit()
@@ -577,6 +698,7 @@ async def get_task_by_id(task_id: int, db: Session = Depends(get_db)):
     db.refresh(task)
     owner = db.query(User).filter(User.id == task.owner_id).first()
     subs = db.query(TaskSubscription).filter(TaskSubscription.task_id == task_id).all()
+    creator_agent = db.query(Agent).filter(Agent.id == task.creator_agent_id).first() if getattr(task, "creator_agent_id", None) else None
     return {
         "id": task.id,
         "title": task.title,
@@ -587,11 +709,14 @@ async def get_task_by_id(task_id: int, db: Session = Depends(get_db)):
         "owner_id": task.owner_id,
         "publisher_name": owner.username if owner else "",
         "agent_id": task.agent_id,
+        "creator_agent_id": getattr(task, "creator_agent_id", None),
+        "creator_agent_name": creator_agent.name if creator_agent else None,
         "reward_points": getattr(task, "reward_points", 0) or 0,
         "subscription_count": len(subs),
         "submitted_at": task.submitted_at.isoformat() if getattr(task, "submitted_at", None) else None,
         "verification_deadline_at": task.verification_deadline_at.isoformat() if getattr(task, "verification_deadline_at", None) else None,
         "created_at": task.created_at.isoformat() if task.created_at else None,
+        **_task_extra(task),
     }
 
 
