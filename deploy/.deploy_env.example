@@ -1,0 +1,16 @@
+# 轻量服务器公网 IP（本机执行 deploy-to-server.sh 时会自动读取）
+# 复制为 .deploy_env 并填入实际 IP：cp .deploy_env.example .deploy_env
+SERVER_IP=
+
+# 解决 Permission denied (publickey) 二选一：
+# 方式一：使用密码（需安装 sshpass：brew install sshpass / apt install sshpass）
+# DEPLOY_SSH_PASSWORD=你的root密码
+# 方式二：使用密钥。例如：
+# DEPLOY_SSH_KEY=$HOME/Downloads/newclawjobkey.pem
+# 或把私钥放到 deploy/.ssh/id_ed25519 或 deploy/.ssh/id_rsa
+
+# ---------- 可选：SSL 自动化 ----------
+# 配置 HTTPS 时在 .deploy_env 中设置域名，然后执行：bash deploy/ssl/setup-ssl-remote.sh
+# 前置：域名 DNS 已指向 SERVER_IP（主域、www、app、api 四条 A 记录）
+# SSL_DOMAIN=你的域名.com
+# CERTBOT_EMAIL=you@example.com

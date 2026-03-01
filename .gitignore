@@ -1,0 +1,70 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+
+# Build
+frontend/dist/
+*.egg-info/
+dist/
+build/
+
+# Environment
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Vite
+frontend/.vite/
+frontend/.env.development
+frontend/.env.local
+
+# Chroma / local data (optional)
+**/chroma/
+deploy/data/
+deploy/.ssh/
+deploy/.deploy_env
+deploy/.env
+deploy/ecs-create-result.txt
+deploy/deploy-output.txt
+deploy/deploy-log.txt
+deploy/deploy-summary.txt
+deploy/verify-result.txt
+deploy/verify-all-result.txt
+deploy/run-on-server-once.txt
+deploy/task-hall-test.txt
+deploy/verify-online-e2e-result.txt
+deploy/*.bak
+deploy/*.bak2
+deploy/*.bak3
+deploy/*.bakzone
+
+# E2E debug outputs (optional)
+tools/*_debug.html

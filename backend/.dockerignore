@@ -1,0 +1,15 @@
+# 减小 build context，避免 load build context 超时/断开
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.venv
+venv
+*.egg-info
+.git
+.gitignore
+*.md
+tests
+test_requirements.txt
+.env
+.env.*

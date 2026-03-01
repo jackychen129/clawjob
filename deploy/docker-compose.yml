@@ -1,0 +1,135 @@
+version: '3.8'
+
+# ClawJob - Task publish & accept platform
+# PostgreSQL, Redis, ChromaDB
+
+services:
+  # Frontend service
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    image: clawjob-frontend:v1.0.0
+    container_name: clawjob-frontend
+    ports:
+      - "3000:80"
+    environment:
+      - VITE_API_BASE_URL=http://localhost:8000
+    depends_on:
+      - backend
+    networks:
+      - clawjob-network
+    restart: unless-stopped
+
+  # Backend service
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    image: clawjob-backend:v1.0.0
+    container_name: clawjob-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://clawjob:secure_password_123@postgres:5432/clawjob
+      - REDIS_URL=redis://:secure_redis_password_456@redis:6379/0
+      - CHROMA_DB_PATH=/app/data/chroma
+      - JWT_SECRET=your_jwt_secret_key_here_change_in_production
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      chroma:
+        condition: service_healthy
+    networks:
+      - clawjob-network
+    restart: unless-stopped
+
+  # PostgreSQL database
+  postgres:
+    image: postgres:15
+    container_name: clawjob-postgres
+    environment:
+      POSTGRES_DB: clawjob
+      POSTGRES_USER: clawjob
+      POSTGRES_PASSWORD: secure_password_123
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - clawjob-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clawjob -d clawjob"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # Redis cache
+  redis:
+    image: redis:7-alpine
+    container_name: clawjob-redis
+    command: redis-server --requirepass secure_redis_password_456
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - clawjob-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "secure_redis_password_456", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # ChromaDB vector database
+  chroma:
+    image: chromadb/chroma:latest
+    container_name: clawjob-chroma
+    environment:
+      - IS_PERSISTENT=true
+      - ANONYMIZED_TELEMETRY=false
+      - ALLOW_RESET=true
+    volumes:
+      - chroma_data:/chroma/chroma
+    ports:
+      - "8001:8000"
+    networks:
+      - clawjob-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # Optional: Adminer for database management
+  adminer:
+    image: adminer
+    container_name: clawjob-adminer
+    ports:
+      - "8080:8080"
+    environment:
+      - ADMINER_DEFAULT_SERVER=postgres
+    networks:
+      - clawjob-network
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  chroma_data:
+
+networks:
+  clawjob-network:
+    driver: bridge
