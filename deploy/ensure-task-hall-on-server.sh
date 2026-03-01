@@ -12,20 +12,33 @@ if [ -f "$SCRIPT_DIR/.deploy_env" ]; then
   . "$SCRIPT_DIR/.deploy_env"
   set +a
 fi
-[ -z "$DEPLOY_SSH_KEY" ] && [ -f "$HOME/Downloads/newclawjobkey.pem" ] && export DEPLOY_SSH_KEY="$HOME/Downloads/newclawjobkey.pem"
+[ -f "$SCRIPT_DIR/ssh_key_fallback.sh" ] && . "$SCRIPT_DIR/ssh_key_fallback.sh"
 SERVER_IP="${SERVER_IP:-43.99.97.240}"
 SSH_USER="${SSH_USER:-root}"
 REMOTE_DIR="${REMOTE_DIR:-/opt/clawjob}"
 
 KEY="${DEPLOY_SSH_KEY/#\~/$HOME}"
-if [ -n "$DEPLOY_SSH_KEY" ] && [ -f "$KEY" ]; then
-  SSH_CMD="ssh -i $KEY -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15"
-else
-  SSH_CMD="ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15"
+if [ -z "$DEPLOY_SSH_KEY" ] || [ ! -f "$KEY" ]; then
+  echo "错误：未找到 SSH 私钥。请任选其一："
+  echo "  1) 在 deploy/.deploy_env 中设置：DEPLOY_SSH_KEY=/path/to/你的密钥.pem"
+  echo "  2) 或将私钥放到 ~/.ssh/id_rsa / ~/.ssh/id_ed25519"
+  exit 1
 fi
+
+# 保活避免长时间 Docker 构建时 SSH 断开（grpc: the client connection is closing）
+SSH_KEEPALIVE="-o ServerAliveInterval=60 -o ServerAliveCountMax=10"
+SSH_CMD="ssh -i $KEY -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 $SSH_KEEPALIVE"
 TARGET="${SSH_USER}@${SERVER_IP}"
 
-echo ">>> 目标: ${TARGET}，修补 .env 并重建任务大厅..."
+# SKIP_BUILD=1 时只启动容器不构建，速度快、不易断线
+if [ -n "$SKIP_BUILD" ]; then
+  echo ">>> 目标: ${TARGET}，修补 .env 并启动任务大厅（不构建）..."
+  UP_CMD="up -d"
+else
+  echo ">>> 目标: ${TARGET}，修补 .env 并重建任务大厅..."
+  UP_CMD="up -d --build"
+fi
+
 $SSH_CMD "$TARGET" "set -e
   cd ${REMOTE_DIR}/deploy
   [ ! -f .env ] && cp .env.example .env
@@ -33,10 +46,10 @@ $SSH_CMD "$TARGET" "set -e
   grep -q '^VITE_API_BASE_URL=' .env && sed -i.bak \"s|^VITE_API_BASE_URL=.*|VITE_API_BASE_URL=http://\$SIP:8000|\" .env || echo \"VITE_API_BASE_URL=http://\$SIP:8000\" >> .env
   grep -q '^CORS_ORIGINS=' .env && sed -i.bak \"s|^CORS_ORIGINS=.*|CORS_ORIGINS=http://\$SIP:3000|\" .env || echo \"CORS_ORIGINS=http://\$SIP:3000\" >> .env
   grep -q '^FRONTEND_URL=' .env && sed -i.bak \"s|^FRONTEND_URL=.*|FRONTEND_URL=http://\$SIP:3000|\" .env || echo \"FRONTEND_URL=http://\$SIP:3000\" >> .env
-  echo '重建并启动 frontend + backend...'
-  docker compose -f docker-compose.prod.yml --env-file .env up -d --build frontend backend
-  echo '等待 30 秒...'
-  sleep 30
+  echo '启动 frontend + backend...'
+  docker compose -f docker-compose.prod.yml --env-file .env $UP_CMD frontend backend
+  echo '等待 25 秒...'
+  sleep 25
   docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
   echo ''
   echo '任务大厅: http://${SERVER_IP}:3000'

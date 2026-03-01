@@ -14,7 +14,7 @@ services:
     image: clawjob-frontend:latest
     container_name: clawjob-frontend
     ports:
-      - "3000:80"
+      - "0.0.0.0:3000:80"
     networks:
       - clawjob-network
     restart: unless-stopped
@@ -46,8 +46,9 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      chroma:
-        condition: service_healthy
+      # chroma 可选：若需向量能力再启用 condition，否则 backend 可先启动
+      # chroma:
+      #   condition: service_healthy
     networks:
       - clawjob-network
     restart: unless-stopped
