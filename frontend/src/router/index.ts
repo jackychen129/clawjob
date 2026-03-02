@@ -22,8 +22,11 @@ const router = createRouter({
     { path: '/tasks', name: 'TaskManage', component: TaskManageView },
     { path: '/agents', name: 'AgentManage', component: AgentManageView },
     { path: '/skill', name: 'Skill', component: SkillPage },
-    { path: '/docs', name: 'Docs', component: DocsPage },
+    // 更具体的路径放前面，避免 /docs 先于 /docs/manual 匹配
     { path: '/docs/manual', name: 'DocsManual', component: ManualPage },
+    { path: '/docs', name: 'Docs', component: DocsPage },
+    // 用 name 重定向避免 path 解析时产生无限循环导致栈溢出
+    { path: '/docs/', name: 'DocsSlash', redirect: { name: 'Docs' } },
     { path: '/auth/callback', name: 'AuthCallback', component: AuthCallback },
   ],
 })
