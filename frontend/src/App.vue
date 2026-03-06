@@ -2,15 +2,17 @@
   <div id="app" class="app-container">
     <header class="app-header">
       <div class="header-content">
-        <router-link to="/" class="header-brand">
-          <h1>ClawJob</h1>
+        <router-link to="/" class="header-brand" :title="t('common.home')">
+          <h1 class="header-brand-logo">ClawJob</h1>
           <p class="tagline">{{ t('common.tagline') }}</p>
+          <p class="header-eyebrow">{{ t('common.heroEyebrow') }}</p>
         </router-link>
         <nav class="header-nav">
           <router-link to="/" class="nav-link" :class="{ active: route.path === '/' }">{{ t('common.home') }}</router-link>
           <router-link to="/tasks" class="nav-link" :class="{ active: route.path === '/tasks' }">{{ t('nav.taskManage') || '任务管理' }}</router-link>
           <router-link to="/agents" class="nav-link" :class="{ active: route.path === '/agents' }">{{ t('nav.agentManage') || 'Agent 管理' }}</router-link>
           <router-link to="/docs" class="nav-link" :class="{ active: route.path === '/docs' }">{{ t('common.docs') }}</router-link>
+          <router-link :to="{ path: '/docs', hash: '#docs-a2a' }" class="nav-link nav-link--a2a" :title="t('common.a2aTagTitle')">{{ t('common.a2aTag') }}</router-link>
           <router-link to="/skill" class="nav-link" :class="{ active: route.path === '/skill' }">{{ t('common.skill') }}</router-link>
         </nav>
         <div class="header-actions">
@@ -22,7 +24,7 @@
           <template v-if="auth.isLoggedIn">
             <span class="username">{{ auth.username }}</span>
             <span class="credits-badge" :title="t('common.credits')">💰 {{ accountCredits }}</span>
-            <button class="btn btn-secondary" @click="showAccountModal = true">{{ t('common.myAccount') }}</button>
+            <router-link to="/account" class="btn btn-secondary" :class="{ active: route.path === '/account' }">{{ t('common.myAccount') }}</router-link>
             <button class="btn btn-secondary" @click="auth.logout()">{{ t('common.logout') }}</button>
           </template>
           <template v-else>
@@ -40,170 +42,65 @@
       <SkillPage v-if="route.path === '/skill'" />
       <DocsPage v-else-if="route.path === '/docs'" />
       <ManualPage v-else-if="route.path === '/docs/manual'" />
+      <OpenClawQuickstartPage v-else-if="route.path === '/docs/openclaw-quickstart'" />
       <TaskManageView v-else-if="route.path === '/tasks'" @success="showSuccess" />
       <AgentManageView v-else-if="route.path === '/agents'" />
+      <AccountPage v-else-if="route.path === '/account'" @credits-updated="loadAccountMe" />
       <template v-else>
-      <!-- 首页 Hero：简洁标题区 -->
-      <section class="hero-section hero-home" role="region" aria-label="Hero">
-        <div class="hero-inner">
-          <h2 class="hero-title">
-            <span class="hero-title-gradient">{{ t('common.taglineHighlight') }}</span>
-          </h2>
+      <div class="home-wrap apple-layout">
+        <!-- Hero · Market-style -->
+        <div class="hero-block">
+          <h2 class="hero-title hero-title-gradient">{{ t('common.heroTitle') }}</h2>
           <p class="hero-desc">{{ t('common.heroDesc') }}</p>
+          <div class="hero-stats">
+            <div><span class="hero-stat">{{ tasksTotal }}</span><span class="hero-stat-label">{{ t('common.tasksCountLabel') }}</span></div>
+          </div>
+          <div class="hero-cta">
+            <button type="button" class="btn btn-primary" @click="openCreateTaskModal">{{ t('common.heroCtaPublish') }}</button>
+            <a href="#task-list" class="btn btn-secondary">{{ t('common.heroCtaBrowse') }}</a>
+          </div>
         </div>
-      </section>
-
-      <div class="home-grid">
-        <!-- 左侧：发布 + 候选者 + 智能体说明 -->
-        <aside class="home-aside">
-          <!-- 发布任务表单（带清晰 label 与 data-field 便于智能体填写） -->
-          <section id="section-publish" class="section section-publish" aria-labelledby="publish-heading">
-            <h2 id="publish-heading" class="section-title">{{ t('task.publish') }}</h2>
-            <div class="card publish-card">
-              <div v-if="!auth.isLoggedIn" class="card-content publish-gate">
-                <p class="hint">{{ t('task.publishHint') }}</p>
-                <button type="button" class="btn btn-primary" @click="showAuthModal = true">{{ t('task.loginToPublish') }}</button>
+        <h2 class="section-title section-title--center">{{ t('common.howItWorks') }}</h2>
+        <div class="steps-strip">
+          <div class="step-card"><div class="step-num">1</div><div class="step-label">{{ t('common.stepPost') }}</div><div class="step-desc">{{ t('common.stepPostDesc') }}</div></div>
+          <div class="step-card"><div class="step-num">2</div><div class="step-label">{{ t('common.stepAccept') }}</div><div class="step-desc">{{ t('common.stepAcceptDesc') }}</div></div>
+          <div class="step-card"><div class="step-num">3</div><div class="step-label">{{ t('common.stepDeliver') }}</div><div class="step-desc">{{ t('common.stepDeliverDesc') }}</div></div>
+          <div class="step-card"><div class="step-num">4</div><div class="step-label">{{ t('common.stepPay') }}</div><div class="step-desc">{{ t('common.stepPayDesc') }}</div></div>
+        </div>
+        <h2 id="task-list" class="section-title">{{ t('common.openTasks') }}</h2>
+      <div class="home-layout">
+        <main class="home-main">
+          <div class="home-toolbar">
+            <input
+              v-model="homeSearchQuery"
+              type="search"
+              class="home-search input"
+              :placeholder="t('task.searchPlaceholder')"
+              @input="onHomeSearchInput"
+            />
+            <div class="home-filters">
+              <div class="home-categories">
+                <button
+                  v-for="opt in homeCategoryOptions"
+                  :key="opt.value"
+                  type="button"
+                  class="filter-chip"
+                  :class="{ active: homeCategoryFilter === opt.value }"
+                  @click="homeCategoryFilter = opt.value; loadTasks()"
+                >
+                  {{ t(opt.labelKey) }}
+                </button>
               </div>
-              <div v-else class="card-content publish-form">
-                <div class="form-group">
-                  <label class="form-label" for="publish-title" data-field-label="title">{{ t('agentGuide.fieldTitle') }} <span class="required">*</span></label>
-                  <input
-                    id="publish-title"
-                    v-model="publishForm.title"
-                    class="input"
-                    type="text"
-                    data-field="title"
-                    data-testid="publish-title-input"
-                    :aria-label="t('agentGuide.fieldTitle')"
-                    :placeholder="t('task.title')"
-                  />
-                </div>
-                <div class="form-group">
-                  <label class="form-label" for="publish-desc" data-field-label="description">{{ t('agentGuide.fieldDescription') }} ({{ t('task.description') }})</label>
-                  <input
-                    id="publish-desc"
-                    v-model="publishForm.description"
-                    class="input"
-                    type="text"
-                    data-field="description"
-                    :aria-label="t('agentGuide.fieldDescription')"
-                    :placeholder="t('task.description')"
-                  />
-                </div>
-                <div class="form-group form-inline">
-                  <label class="form-label" for="publish-reward" data-field-label="reward_points">{{ t('agentGuide.fieldRewardPoints') }}</label>
-                  <input
-                    id="publish-reward"
-                    v-model.number="publishForm.reward_points"
-                    type="number"
-                    min="0"
-                    class="input input-num"
-                    data-field="reward_points"
-                    :aria-label="t('agentGuide.fieldRewardPoints')"
-                    :placeholder="t('task.rewardPoints')"
-                    :title="t('task.rewardPointsTitle')"
-                  />
-                  <button
-                    type="button"
-                    class="btn btn-primary"
-                    data-action="publish"
-                    :disabled="publishLoading"
-                    :aria-label="t('task.publishBtn')"
-                    @click="doPublish"
-                  >
-                    {{ publishLoading ? t('task.publishBtnLoading') : t('task.publishBtn') }}
-                  </button>
-                </div>
-                <template v-if="publishForm.reward_points > 0">
-                  <p class="hint field-hint">{{ t('task.webhookHint') }}</p>
-                  <div class="form-group">
-                    <label class="form-label" for="publish-webhook" data-field-label="completion_webhook_url">{{ t('agentGuide.fieldWebhook') }}</label>
-                    <input
-                      id="publish-webhook"
-                      v-model="publishForm.completion_webhook_url"
-                      class="input full-width"
-                      type="url"
-                      data-field="completion_webhook_url"
-                      :aria-label="t('agentGuide.fieldWebhook')"
-                      :placeholder="t('task.webhookPlaceholder')"
-                    />
-                  </div>
-                </template>
-                <div class="form-group">
-                  <label class="form-label">{{ t('task.invitedCandidates') }}</label>
-                  <p class="hint field-hint">{{ t('task.invitedCandidatesHint') }}</p>
-                  <div class="candidates-checkboxes">
-                    <label v-for="c in candidates" :key="c.id" class="candidate-checkbox">
-                      <input type="checkbox" :value="c.id" v-model="publishForm.invited_agent_ids" />
-                      <span class="candidate-name">{{ c.name }}</span>
-                      <span class="candidate-owner">@{{ c.owner_name }}</span>
-                    </label>
-                  </div>
-                  <p v-if="candidates.length === 0 && !candidatesLoading" class="hint">{{ t('task.noCandidates') }}</p>
-                </div>
-              </div>
-              <p v-if="auth.isLoggedIn" class="hint">{{ t('task.balanceHint', { n: accountCredits }) }}</p>
-              <p v-if="publishError" class="error-msg" role="alert">{{ publishError }}</p>
+              <select v-model="homeSort" class="home-sort input" @change="loadTasks">
+                <option value="created_at_desc">{{ t('task.sortNewest') }}</option>
+                <option value="reward_desc">{{ t('task.sortReward') }}</option>
+                <option value="created_at_asc">{{ t('task.sortEarliest') }}</option>
+                <option value="comments_desc">{{ t('task.sortComments') }}</option>
+              </select>
             </div>
-          </section>
-
-          <!-- 候选者（发布时可指定接取者） -->
-          <section id="section-candidates" class="section section-candidates-compact" aria-labelledby="candidates-heading">
-            <h2 id="candidates-heading" class="section-title section-title--small">{{ t('task.candidatesTitle') }}</h2>
-            <div v-if="candidatesLoading" class="loading"><div class="spinner"></div></div>
-            <div v-else class="candidates-list-compact">
-              <div v-for="c in candidates" :key="c.id" class="candidate-chip">
-                <span class="candidate-chip-name">{{ c.name }}</span>
-                <span class="candidate-chip-owner">@{{ c.owner_name }}</span>
-              </div>
-            </div>
-            <p v-if="!candidates.length && !candidatesLoading" class="hint hint--small">{{ t('task.noCandidates') }}</p>
-          </section>
-
-          <!-- 智能体快捷发布说明：默认折叠，点击展开 -->
-          <section class="agent-guide-wrap" data-agent-block="quick-publish-guide" role="complementary" aria-label="Agent quick publish guide">
-            <button
-              v-if="!showAgentGuide"
-              type="button"
-              class="agent-guide-trigger"
-              @click="showAgentGuide = true"
-            >
-              <span class="agent-guide-trigger-icon">⊕</span>
-              {{ t('agentGuide.showGuide') }}
-            </button>
-            <div v-else class="card agent-guide-card">
-              <div class="card-content">
-                <div class="agent-guide-header">
-                  <h3 class="agent-guide-title">{{ t('agentGuide.title') }}</h3>
-                  <button type="button" class="btn btn-text agent-guide-collapse" @click="showAgentGuide = false">{{ t('agentGuide.hideGuide') }}</button>
-                </div>
-                <p class="agent-guide-intro">{{ t('agentGuide.intro') }}</p>
-                <p class="agent-guide-skill">
-                  {{ t('agentGuide.skillLink') }}
-                  <a :href="skillRepoUrl" target="_blank" rel="noopener noreferrer" class="agent-guide-link">{{ t('agentGuide.skillLinkText') }}</a>
-                </p>
-                <ol class="agent-guide-steps">
-                  <li data-agent-step="1">{{ t('agentGuide.step1') }}</li>
-                  <li data-agent-step="2">{{ t('agentGuide.step2') }}</li>
-                  <li data-agent-step="3">{{ t('agentGuide.step3') }}</li>
-                </ol>
-                <div class="agent-guide-examples">
-                  <p class="agent-guide-example-title">{{ t('agentGuide.exampleTitle') }}</p>
-                  <p class="agent-guide-example">{{ t('agentGuide.exampleCreate') }}</p>
-                  <p class="agent-guide-example">{{ t('agentGuide.exampleAccept') }}</p>
-                </div>
-                <p class="agent-guide-api" data-agent-api="POST /tasks">{{ t('agentGuide.apiHint') }}</p>
-                <p class="agent-guide-commission">{{ t('agentGuide.commissionNote') }}</p>
-              </div>
-            </div>
-          </section>
-        </aside>
-
-        <!-- 右侧：任务大厅 -->
-        <section class="section task-hall-section task-hall-main" aria-labelledby="hall-heading">
-          <h2 id="hall-heading" class="section-title">{{ t('task.taskHall') }}</h2>
-        <div v-if="tasksLoading" class="loading"><div class="spinner"></div></div>
-        <div v-else class="task-list">
+          </div>
+          <div v-if="tasksLoading" class="loading"><div class="spinner"></div></div>
+          <div v-else class="task-list home-task-list">
           <div
             v-for="task in tasks"
             :key="task.id"
@@ -216,18 +113,21 @@
             :data-task-reward="(task.reward_points || 0).toString()"
           >
             <div class="task-card__top">
+              <span v-if="task.category" class="task-card__category" data-attr="category">{{ taskCategoryLabel(task.category) }}</span>
               <span v-if="task.task_type" class="task-card__type" data-attr="task_type">{{ task.task_type }}</span>
+              <span v-if="task.priority && task.priority !== 'medium'" class="task-card__priority" :class="'priority--' + task.priority">{{ task.priority }}</span>
               <span class="badge" :class="task.status">{{ t('status.' + task.status) || task.status }}</span>
               <span v-if="task.reward_points" class="task-card__reward" data-attr="reward">{{ t('task.reward', { n: task.reward_points }) }}</span>
             </div>
             <h3 class="task-card__title">{{ task.title }}</h3>
-            <p class="task-card__desc">{{ (task.description || t('common.noDescription')).slice(0, 120) }}{{ (task.description || '').length > 120 ? '…' : '' }}</p>
+            <p class="task-card__desc">{{ (task.description || t('common.noDescription')).slice(0, 150) }}{{ (task.description || '').length > 150 ? '…' : '' }}</p>
+            <p v-if="task.requirements" class="task-card__requirements-snippet">{{ (task.requirements || '').replace(/\s+/g, ' ').slice(0, 80) }}{{ (task.requirements || '').length > 80 ? '…' : '' }}</p>
             <div class="task-card__attrs" role="list" aria-label="Task attributes">
               <span v-if="task.location" class="task-attr task-attr--location" data-attr="location" role="listitem">{{ task.location }}</span>
               <span v-if="task.duration_estimate" class="task-attr task-attr--duration" data-attr="duration_estimate" role="listitem">{{ task.duration_estimate }}</span>
               <span v-for="s in getTaskSkills(task)" :key="s" class="task-attr task-attr--skill" data-attr="skill" role="listitem">{{ s }}</span>
             </div>
-            <p class="task-card__meta">{{ t('task.publisher') }}：{{ task.publisher_name }} · {{ task.subscription_count }}{{ t('task.subscribers') }}<span v-if="task.invited_agent_ids && task.invited_agent_ids.length" class="invited-only-badge"> · {{ t('task.invitedOnly') }}</span></p>
+            <p class="task-card__meta">{{ t('task.publisher') }}：{{ task.publisher_name }} · {{ task.subscription_count }}{{ t('task.subscribers') }}<span v-if="task.comment_count != null"> · 💬 {{ task.comment_count }}{{ t('task.commentCountLabel') }}</span><span v-if="task.invited_agent_ids && task.invited_agent_ids.length" class="invited-only-badge"> · {{ t('task.invitedOnly') }}</span></p>
             <p v-if="task.status === 'pending_verification' && task.verification_deadline_at" class="hint deadline-hint">{{ t('task.deadlineHint', { date: formatDeadline(task.verification_deadline_at) }) }}</p>
             <div class="card-content task-card__actions-wrap">
               <div class="task-actions">
@@ -261,16 +161,46 @@
               </button>
               <button v-else-if="auth.isLoggedIn && !myAgents.length" type="button" class="btn btn-secondary btn-sm" @click="scrollToAgentSection">{{ t('task.goRegisterAgent') }}</button>
               <button v-else-if="!auth.isLoggedIn" type="button" class="btn btn-primary btn-sm" @click="showAuthModal = true">{{ t('task.loginToAccept') }}</button>
+              <button type="button" class="btn btn-text btn-sm task-card-comment-btn" @click="openHomeTaskDetail(task)">💬 {{ t('task.comments') }}</button>
               </div>
             </div>
           </div>
           <div v-if="!tasks.length && !tasksLoading" class="empty-state">
             <p class="empty">{{ t('task.emptyTasks') }}</p>
-            <button type="button" class="btn btn-primary" @click="scrollToPublishSection">{{ t('task.publishFirst') }}</button>
+            <button type="button" class="btn btn-primary" @click="showCreateTaskModal = true">{{ t('task.publishFirst') }}</button>
+          </div>
+          </div>
+        </main>
+        <aside class="home-sidebar">
+          <button type="button" class="btn btn-primary home-publish-btn" @click="openCreateTaskModal">
+            {{ t('task.publish') || '发布任务' }}
+          </button>
+        </aside>
+      </div>
+      </div>
+
+      <!-- 我当前创建的任务（登录后显示） -->
+      <section v-if="auth.isLoggedIn" class="home-my-created section apple-section">
+        <h2 class="section-title">{{ t('task.myCreatedTasks') }}</h2>
+        <div v-if="myCreatedTasksLoading" class="loading"><div class="spinner"></div></div>
+        <div v-else class="my-created-list">
+          <div
+            v-for="task in myCreatedTasks"
+            :key="task.id"
+            class="card task-card task-card--compact"
+          >
+            <div class="task-card__top">
+              <span v-if="task.category" class="task-card__category">{{ taskCategoryLabel(task.category) }}</span>
+              <span class="badge" :class="task.status">{{ t('status.' + task.status) || task.status }}</span>
+              <span v-if="task.reward_points" class="task-card__reward">{{ t('task.reward', { n: task.reward_points }) }}</span>
+            </div>
+            <h3 class="task-card__title">{{ task.title }}</h3>
+            <p class="task-card__meta">{{ task.publisher_name }} · {{ task.subscription_count || 0 }}{{ t('task.subscribers') }}</p>
+            <router-link :to="'/tasks?taskId=' + task.id" class="btn btn-text btn-sm">{{ t('task.viewDetail') }}</router-link>
           </div>
         </div>
-        </section>
-      </div>
+        <p v-if="!myCreatedTasks.length && !myCreatedTasksLoading" class="hint">{{ t('task.noMyCreatedTasks') }}</p>
+      </section>
 
       <!-- 我的 Agent（全宽） -->
       <section id="section-my-agents" class="section section-full" aria-labelledby="agent-heading">
@@ -304,6 +234,98 @@
       </section>
       </template>
     </main>
+
+    <!-- 创建任务弹窗（参考 market.near.ai 流程） -->
+    <div v-if="showCreateTaskModal" class="modal-mask" @click.self="closeCreateTaskModal">
+      <div class="modal modal--create-task">
+        <h3 class="modal-title">{{ t('task.publish') }}</h3>
+        <div v-if="!auth.isLoggedIn" class="publish-gate">
+          <p class="hint">{{ t('task.publishHint') }}</p>
+          <button type="button" class="btn btn-primary" @click="showCreateTaskModal = false; showAuthModal = true">{{ t('task.loginToPublish') }}</button>
+          <button type="button" class="btn btn-secondary" @click="closeCreateTaskModal">{{ t('common.cancel') }}</button>
+        </div>
+        <div v-else class="create-task-steps">
+          <div class="create-step-tabs">
+            <button type="button" class="step-tab" :class="{ active: createStep === 1 }" @click="createStep = 1">1. {{ t('taskManage.stepTaskInfo') || '任务信息' }}</button>
+            <button type="button" class="step-tab" :class="{ active: createStep === 2 }" @click="createStep = 2">2. {{ t('taskManage.stepReward') || '奖励与回调' }}</button>
+            <button type="button" class="step-tab" :class="{ active: createStep === 3 }" @click="createStep = 3">3. {{ t('task.optional') }}</button>
+          </div>
+          <div v-show="createStep === 1" class="step-panel">
+            <div class="form-group">
+              <label class="form-label">{{ t('agentGuide.fieldTitle') }} <span class="required">*</span></label>
+              <input v-model="publishForm.title" class="input" type="text" :placeholder="t('task.title')" minlength="2" />
+              <p class="form-hint">{{ t('task.titleHint') }}</p>
+            </div>
+            <div class="form-group">
+              <label class="form-label">{{ t('task.description') }}</label>
+              <textarea v-model="publishForm.description" class="input textarea-input" rows="4" :placeholder="t('task.requirementsPlaceholder')" />
+              <p class="form-hint">{{ t('task.descriptionHint') }}</p>
+            </div>
+            <div class="form-group">
+              <label class="form-label">{{ t('task.category') }}</label>
+              <select v-model="publishForm.category" class="input select-input">
+                <option value="">{{ t('task.categoryPlaceholder') }}</option>
+                <option value="development">{{ t('task.categoryDevelopment') }}</option>
+                <option value="design">{{ t('task.categoryDesign') }}</option>
+                <option value="research">{{ t('task.categoryResearch') }}</option>
+                <option value="writing">{{ t('task.categoryWriting') }}</option>
+                <option value="data">{{ t('task.categoryData') }}</option>
+                <option value="other">{{ t('task.categoryOther') }}</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">{{ t('task.requirements') }}</label>
+              <textarea v-model="publishForm.requirements" class="input textarea-input" rows="2" :placeholder="t('task.requirementsPlaceholder')" />
+              <p class="form-hint">{{ t('task.requirementsHint') }}</p>
+            </div>
+            <div class="form-group form-row-2">
+              <div class="form-group">
+                <label class="form-label">{{ t('task.location') }}</label>
+                <input v-model="publishForm.location" class="input" type="text" :placeholder="t('task.locationPlaceholder')" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">{{ t('task.durationEstimate') }}</label>
+                <input v-model="publishForm.duration_estimate" class="input" type="text" :placeholder="t('task.durationPlaceholder')" />
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">{{ t('task.skills') }}</label>
+              <input v-model="publishForm.skills_text" class="input" type="text" :placeholder="t('task.skillsPlaceholder')" />
+            </div>
+            <button type="button" class="btn btn-primary" @click="createStep = 2">{{ t('common.next') }}</button>
+          </div>
+          <div v-show="createStep === 2" class="step-panel">
+            <div class="form-group form-inline">
+              <label class="form-label">{{ t('agentGuide.fieldRewardPoints') }}</label>
+              <input v-model.number="publishForm.reward_points" type="number" min="0" class="input input-num" />
+            </div>
+            <template v-if="publishForm.reward_points > 0">
+              <p class="hint">{{ t('task.webhookHint') }}</p>
+              <div class="form-group">
+                <label class="form-label">{{ t('agentGuide.fieldWebhook') }}</label>
+                <input v-model="publishForm.completion_webhook_url" class="input full-width" type="url" :placeholder="t('task.webhookPlaceholder')" />
+              </div>
+            </template>
+            <div class="step-actions">
+              <button type="button" class="btn btn-secondary" @click="createStep = 1">{{ t('common.prev') }}</button>
+              <button type="button" class="btn btn-primary" @click="createStep = 3">{{ t('common.next') }}</button>
+            </div>
+          </div>
+          <div v-show="createStep === 3" class="step-panel">
+            <div class="form-group">
+              <label class="form-label">{{ t('task.discordWebhookLabel') }}</label>
+              <input v-model="publishForm.discord_webhook_url" class="input full-width" type="url" :placeholder="t('task.discordWebhookPlaceholder')" />
+            </div>
+            <p class="hint">{{ t('task.balanceHint', { n: accountCredits }) }}</p>
+            <p v-if="publishError" class="error-msg" role="alert">{{ publishError }}</p>
+            <div class="step-actions">
+              <button type="button" class="btn btn-secondary" @click="createStep = 2">{{ t('common.prev') }}</button>
+              <button type="button" class="btn btn-primary" :disabled="publishLoading" @click="doPublishFromModal">{{ publishLoading ? t('task.publishBtnLoading') : t('task.publishBtn') }}</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- 登录/注册弹窗 -->
     <div v-if="showAuthModal" class="modal-mask" data-testid="auth-modal-mask" @click.self="showAuthModal = false">
@@ -341,104 +363,6 @@
       </div>
     </div>
 
-    <!-- 我的账户弹窗 -->
-    <div v-if="showAccountModal" class="modal-mask" @click.self="showAccountModal = false">
-      <div class="modal modal-account">
-        <h3>{{ t('account.title') }}</h3>
-        <p class="balance-line">{{ t('account.balance') }}<strong>{{ accountCredits }}</strong> {{ t('account.points') }}</p>
-        <div class="account-section account-section--token">
-          <h4>{{ t('account.apiTokenTitle') }}</h4>
-          <p class="hint">{{ t('account.apiTokenHint') }}</p>
-          <div class="form-inline token-copy-row">
-            <code class="token-masked">{{ auth.token ? (auth.token.slice(0, 12) + '…' + auth.token.slice(-4)) : '' }}</code>
-            <button type="button" class="btn btn-secondary btn-sm" :disabled="!auth.token" @click="copyApiToken">
-              {{ tokenCopied ? t('account.tokenCopied') : t('account.copyToken') }}
-            </button>
-            <button type="button" class="btn btn-text btn-sm" :disabled="!auth.token" @click="copyEnvSnippet">
-              {{ envSnippetCopied ? t('account.tokenCopied') : t('account.copyEnvSnippet') }}
-            </button>
-          </div>
-        </div>
-        <div class="account-section">
-          <h4>{{ t('account.commissionTitle') }}</h4>
-          <p class="commission-balance-line">{{ t('account.commissionBalance') }}<strong>{{ commissionBalance }}</strong> {{ t('account.points') }}</p>
-          <p class="hint">{{ t('account.commissionHint') }}</p>
-        </div>
-        <div class="account-section">
-          <h4>{{ t('account.receivingAccountTitle') }}</h4>
-          <p class="hint">{{ t('account.receivingAccountHint') }}</p>
-          <div class="form receiving-account-form">
-            <select v-model="receivingAccountForm.account_type" class="input">
-              <option value="alipay">{{ t('account.alipay') }}</option>
-              <option value="bank_card">{{ t('account.bank_card') }}</option>
-            </select>
-            <input v-model="receivingAccountForm.account_name" class="input" :placeholder="t('account.receivingAccountName')" />
-            <input v-model="receivingAccountForm.account_number" class="input" :placeholder="t('account.receivingAccountNumber')" />
-            <button class="btn btn-primary" :disabled="receivingAccountLoading" @click="doSaveReceivingAccount">{{ t('account.saveReceivingAccount') }}</button>
-            <p v-if="receivingAccountError" class="error-msg">{{ receivingAccountError }}</p>
-          </div>
-        </div>
-        <div class="account-section">
-          <h4>{{ t('account.recharge') }}</h4>
-          <p class="hint account-recharge-hint">{{ t('account.rechargeHint') }}</p>
-          <div class="form-inline">
-            <input v-model.number="rechargeForm.amount" type="number" min="1" class="input input-num" :placeholder="t('account.amount')" />
-            <button class="btn btn-primary" :disabled="rechargeLoading" @click="doRecharge">{{ t('account.rechargeSimulate') }}</button>
-          </div>
-          <p v-if="rechargeError" class="error-msg">{{ rechargeError }}</p>
-          <h5 class="recharge-channel-title">{{ t('account.rechargeByChannel') }}</h5>
-          <div class="form recharge-order-form">
-            <select v-model="rechargeOrderForm.payment_method_type" class="input">
-              <option value="credit_card">{{ t('account.credit_card') }}</option>
-              <option value="alipay">{{ t('account.alipay') }}</option>
-              <option value="bitcoin">{{ t('account.bitcoin') }}</option>
-            </select>
-            <input v-model.number="rechargeOrderForm.amount" type="number" min="1" class="input input-num" :placeholder="t('account.amount')" />
-            <button class="btn btn-primary" :disabled="createOrderLoading" @click="doCreateRechargeOrder">{{ t('account.createOrder') }}</button>
-          </div>
-          <div v-if="lastRechargeOrder" class="recharge-order-result">
-            <p v-if="lastRechargeOrder.payment_url">
-              {{ t('account.paymentUrl') }}：<a :href="lastRechargeOrder.payment_url" target="_blank" rel="noopener noreferrer">{{ lastRechargeOrder.payment_url }}</a>
-            </p>
-            <p v-if="lastRechargeOrder.payment_qr">{{ t('account.paymentQr') }}：<code>{{ lastRechargeOrder.payment_qr }}</code></p>
-            <p v-if="lastRechargeOrder.btc_address">{{ t('account.btcAddress') }}：<code>{{ lastRechargeOrder.btc_address }}</code></p>
-            <button class="btn btn-secondary" :disabled="confirmOrderLoading" @click="doConfirmRecharge">{{ t('account.confirmPaySimulate') }}</button>
-          </div>
-        </div>
-        <div class="account-section">
-          <h4>{{ t('account.paymentMethods') }}</h4>
-          <div class="form bind-form">
-            <select v-model="bindPaymentForm.type" class="input">
-              <option value="alipay">{{ t('account.alipay') }}</option>
-              <option value="credit_card">{{ t('account.credit_card') }}</option>
-              <option value="bitcoin">{{ t('account.bitcoin') }}</option>
-            </select>
-            <input v-model="bindPaymentForm.masked_info" class="input" :placeholder="t('account.maskedInfoPlaceholder')" />
-            <button class="btn btn-secondary" :disabled="bindLoading" @click="doBindPayment">{{ t('common.add') }}</button>
-          </div>
-          <ul class="payment-list">
-            <li v-for="pm in paymentMethods" :key="pm.id">
-              <span class="pm-type">{{ t('account.' + pm.type) }}</span> {{ pm.masked_info }}
-              <button class="btn btn-sm link-btn" @click="doUnbind(pm.id)">{{ t('common.unbind') }}</button>
-            </li>
-            <p v-if="paymentMethods.length === 0 && !paymentMethodsLoading" class="hint">{{ t('account.noPaymentMethods') }}</p>
-          </ul>
-        </div>
-        <div class="account-section">
-          <h4>{{ t('account.recentTransactions') }}</h4>
-          <ul class="tx-list">
-            <li v-for="tx in transactions" :key="tx.id">
-              <span :class="tx.amount > 0 ? 'tx-in' : 'tx-out'">{{ tx.amount > 0 ? '+' : '' }}{{ tx.amount }}</span>
-              {{ t('txType.' + tx.type) }} · {{ tx.remark || '-' }}
-              <span class="tx-time">{{ tx.created_at ? tx.created_at.slice(0, 19) : '' }}</span>
-            </li>
-            <p v-if="transactions.length === 0 && !transactionsLoading" class="hint">{{ t('account.noTransactions') }}</p>
-          </ul>
-        </div>
-        <button class="btn btn-secondary close-btn" @click="showAccountModal = false">{{ t('common.close') }}</button>
-      </div>
-    </div>
-
     <!-- 提交完成弹窗（接取者填写结果摘要）-->
     <div v-if="submitCompletionTask" class="modal-mask" @click.self="submitCompletionTask = null">
       <div class="modal">
@@ -449,6 +373,37 @@
           <button class="btn btn-primary" :disabled="submitCompletionLoading" @click="doSubmitCompletion">{{ t('task.submitCompletion') }}</button>
         </div>
         <button class="btn btn-secondary close-btn" @click="submitCompletionTask = null">{{ t('common.cancel') }}</button>
+      </div>
+    </div>
+
+    <!-- 首页任务详情 + 评论弹窗 -->
+    <div v-if="homeTaskDetail" class="modal-mask" @click.self="closeHomeTaskDetail">
+      <div class="modal modal--task-detail">
+        <div class="task-detail-modal-head">
+          <h3 class="task-detail-modal-title">{{ homeTaskDetail.title }}</h3>
+          <button type="button" class="btn btn-text btn-sm" aria-label="关闭" @click="closeHomeTaskDetail">×</button>
+        </div>
+        <p class="task-detail-modal-meta">{{ t('task.publisher') }}：{{ homeTaskDetail.publisher_name }} · <span class="badge" :class="homeTaskDetail.status">{{ t('status.' + homeTaskDetail.status) || homeTaskDetail.status }}</span><span v-if="homeTaskDetail.reward_points" class="detail-reward"> · {{ t('task.reward', { n: homeTaskDetail.reward_points }) }}</span></p>
+        <p class="task-detail-modal-desc">{{ homeTaskDetail.description || t('common.noDescription') }}</p>
+        <div class="task-detail-modal-comments">
+          <h4 class="task-comments-title">{{ t('task.comments') }}</h4>
+          <div v-if="homeTaskCommentsLoading" class="loading"><div class="spinner"></div></div>
+          <ul v-else class="task-comments-list">
+            <li v-for="c in homeTaskComments" :key="c.id" class="task-comment-item" :class="{ 'comment-kind-status': c.kind === 'status_update' }">
+              <span class="task-comment-author">{{ c.agent_name || c.author_name }}</span>
+              <span v-if="c.agent_name" class="task-comment-by-user">{{ c.author_name }}</span>
+              <span v-if="c.kind === 'status_update'" class="task-comment-kind-badge">{{ t('task.statusUpdate') }}</span>
+              <span class="task-comment-time">{{ formatCommentTimeHome(c.created_at) }}</span>
+              <p class="task-comment-content">{{ c.content }}</p>
+            </li>
+          </ul>
+          <p v-if="!homeTaskComments.length && !homeTaskCommentsLoading" class="task-comments-empty">{{ t('task.noComments') }}</p>
+          <div v-if="auth.isLoggedIn" class="task-comment-form">
+            <textarea v-model="homeNewCommentContent" class="input textarea-input" rows="2" :placeholder="t('task.writeComment')" />
+            <button type="button" class="btn btn-primary btn-sm" :disabled="homePostCommentLoading || !homeNewCommentContent.trim()" @click="postHomeComment">{{ t('task.postComment') }}</button>
+          </div>
+          <p v-else class="hint">{{ t('task.loginToComment') }}</p>
+        </div>
       </div>
     </div>
 
@@ -496,6 +451,10 @@
 python3 tools/quick_register.py &lt;用户名&gt; &lt;邮箱&gt; &lt;密码&gt;</pre>
           <p class="help-note">{{ t('help.quickRegisterNote') }}</p>
         </section>
+        <section class="help-section">
+          <h4>{{ t('help.a2aTitle') }}</h4>
+          <p class="help-note">{{ t('help.a2aDesc') }}</p>
+        </section>
         <p class="help-skill-link">
           <router-link to="/docs" class="btn btn-text" @click="showHelpModal = false">{{ t('help.fullDocsLink') }}</router-link>
           <router-link to="/skill" class="btn btn-primary" @click="showHelpModal = false">{{ t('help.fullSetupLink') }}</router-link>
@@ -510,7 +469,14 @@ python3 tools/quick_register.py &lt;用户名&gt; &lt;邮箱&gt; &lt;密码&gt;<
     </Transition>
 
     <footer class="app-footer">
-      <p>ClawJob · {{ t('common.tagline') }}</p>
+      <div class="app-footer-inner">
+        <nav class="app-footer-links" aria-label="Footer">
+          <router-link to="/docs">{{ t('common.docs') }}</router-link>
+          <router-link to="/skill">{{ t('common.skill') }}</router-link>
+          <a href="https://github.com" target="_blank" rel="noopener noreferrer">GitHub</a>
+        </nav>
+        <p>ClawJob · {{ t('common.tagline') }}</p>
+      </div>
     </footer>
   </div>
 </template>
@@ -527,6 +493,8 @@ import DocsPage from './views/DocsPage.vue'
 import ManualPage from './views/ManualPage.vue'
 import TaskManageView from './views/TaskManageView.vue'
 import AgentManageView from './views/AgentManageView.vue'
+import AccountPage from './views/AccountPage.vue'
+import OpenClawQuickstartPage from './views/OpenClawQuickstartPage.vue'
 
 const route = useRoute()
 const _i18n = useI18n()
@@ -552,25 +520,46 @@ const sendCodeLoading = ref(false)
 const sendCodeCountdown = ref(0)
 let sendCodeTimer: ReturnType<typeof setInterval> | null = null
 
-const tasks = ref<Array<{
-  id: number
-  title: string
-  description: string
-  status: string
-  publisher_name: string
-  owner_id: number
-  subscription_count: number
-  reward_points?: number
-  submitted_at?: string
-  verification_deadline_at?: string
-}>>([])
+const tasks = ref<api.TaskListItem[]>([])
 const tasksLoading = ref(false)
 
-const publishForm = reactive({ title: '', description: '', reward_points: 0, completion_webhook_url: '', invited_agent_ids: [] as number[] })
+const homeCategoryFilter = ref('')
+const homeSort = ref<'created_at_desc' | 'reward_desc' | 'created_at_asc' | 'comments_desc'>('reward_desc')
+const homeSearchQuery = ref('')
+let homeSearchTimer: ReturnType<typeof setTimeout> | null = null
+const homeCategoryOptions = [
+  { value: '', labelKey: 'taskManage.categoryAll' },
+  { value: 'development', labelKey: 'task.categoryDevelopment' },
+  { value: 'design', labelKey: 'task.categoryDesign' },
+  { value: 'research', labelKey: 'task.categoryResearch' },
+  { value: 'writing', labelKey: 'task.categoryWriting' },
+  { value: 'data', labelKey: 'task.categoryData' },
+  { value: 'other', labelKey: 'task.categoryOther' },
+]
+
+const tasksTotal = ref<number>(0)
+const showCreateTaskModal = ref(false)
+const createStep = ref(1)
+const myCreatedTasks = ref<typeof tasks.value>([])
+const myCreatedTasksLoading = ref(false)
+
+const publishForm = reactive({
+  title: '',
+  description: '',
+  reward_points: 0,
+  completion_webhook_url: '',
+  discord_webhook_url: '',
+  invited_agent_ids: [] as number[],
+  category: '',
+  requirements: '',
+  location: '',
+  duration_estimate: '',
+  skills_text: '',
+})
 const publishLoading = ref(false)
 const publishError = ref('')
 
-const candidates = ref<Array<{ id: number; name: string; description: string; agent_type: string; owner_name: string }>>([])
+const candidates = ref<Array<{ id: number; name: string; description: string; agent_type: string; owner_name: string; points?: number }>>([])
 const candidatesLoading = ref(false)
 const myAgents = ref<Array<{ id: number; name: string; description: string; agent_type: string }>>([])
 const agentsLoading = ref(false)
@@ -581,14 +570,17 @@ const agentError = ref('')
 const subscribeTaskItem = ref<{ id: number; title: string } | null>(null)
 const subscribeLoading = ref<number | null>(null)
 const submitCompletionTask = ref<{ id: number; title: string } | null>(null)
+
+const homeTaskDetail = ref<api.TaskListItem | null>(null)
+const homeTaskComments = ref<api.TaskCommentItem[]>([])
+const homeTaskCommentsLoading = ref(false)
+const homeNewCommentContent = ref('')
+const homePostCommentLoading = ref(false)
 const submitCompletionForm = reactive({ result_summary: '' })
 const submitCompletionLoading = ref(false)
 const confirmLoading = ref<number | null>(null)
 const rejectLoading = ref<number | null>(null)
 
-const showAccountModal = ref(false)
-const tokenCopied = ref(false)
-const envSnippetCopied = ref(false)
 const showHelpModal = ref(false)
 const SKILL_BANNER_KEY = 'clawjob_skill_banner_dismissed'
 const showSkillBanner = ref(false)
@@ -621,66 +613,110 @@ function onGoogleLoginClick(e: Event) {
   window.location.href = api.getGoogleLoginUrl()
 }
 
-async function copyApiToken() {
-  if (!auth.token) return
-  try {
-    await navigator.clipboard.writeText(auth.token)
-    tokenCopied.value = true
-    setTimeout(() => { tokenCopied.value = false }, 2000)
-  } catch (_) {
-    tokenCopied.value = false
-  }
-}
-
-async function copyEnvSnippet() {
-  if (!auth.token) return
-  const apiBase = api.getApiBase()
-  const snippet = `export CLAWJOB_API_URL=${apiBase}\nexport CLAWJOB_ACCESS_TOKEN=${auth.token}`
-  try {
-    await navigator.clipboard.writeText(snippet)
-    envSnippetCopied.value = true
-    setTimeout(() => { envSnippetCopied.value = false }, 2000)
-  } catch (_) {
-    envSnippetCopied.value = false
-  }
-}
-
 function onEscapeKey(e: KeyboardEvent) {
   if (e.key !== 'Escape') return
+  if (homeTaskDetail.value) { closeHomeTaskDetail(); return }
+  if (showCreateTaskModal.value) { closeCreateTaskModal(); return }
   if (showAuthModal.value) { showAuthModal.value = false; return }
-  if (showAccountModal.value) { showAccountModal.value = false; return }
   if (submitCompletionTask.value) { submitCompletionTask.value = null; return }
   if (subscribeTaskItem.value) { subscribeTaskItem.value = null; return }
   if (showHelpModal.value) { showHelpModal.value = false }
 }
 const accountCredits = ref(0)
-const commissionBalance = ref(0)
-const receivingAccountForm = reactive({ account_type: 'alipay', account_name: '', account_number: '' })
-const receivingAccountLoading = ref(false)
-const receivingAccountError = ref('')
-const rechargeForm = reactive({ amount: 100 })
-const rechargeLoading = ref(false)
-const rechargeError = ref('')
-const rechargeOrderForm = reactive({ payment_method_type: 'credit_card', amount: 100 })
-const createOrderLoading = ref(false)
-const lastRechargeOrder = ref<{ order_id: number; payment_url?: string; payment_qr?: string; btc_address?: string; status: string } | null>(null)
-const confirmOrderLoading = ref(false)
-const paymentMethods = ref<Array<{ id: number; type: string; masked_info: string }>>([])
-const paymentMethodsLoading = ref(false)
-const bindPaymentForm = reactive({ type: 'alipay', masked_info: '' })
-const bindLoading = ref(false)
-const transactions = ref<Array<{ id: number; amount: number; type: string; remark: string | null; created_at: string | null }>>([])
-const transactionsLoading = ref(false)
 
 function loadTasks() {
   tasksLoading.value = true
-  api.fetchTasks().then((res) => {
+  const params: { skip?: number; limit?: number; category_filter?: string; sort?: string; q?: string } = { limit: 50 }
+  if (homeCategoryFilter.value) params.category_filter = homeCategoryFilter.value
+  params.sort = homeSort.value
+  if (homeSearchQuery.value.trim()) params.q = homeSearchQuery.value.trim()
+  api.fetchTasks(params).then((res) => {
     tasks.value = res.data.tasks || []
+    tasksTotal.value = res.data.total ?? (res.data.tasks?.length ?? 0)
   }).catch(() => {
     tasks.value = []
+    tasksTotal.value = 0
   }).finally(() => {
     tasksLoading.value = false
   })
+}
+
+function onHomeSearchInput() {
+  if (homeSearchTimer) clearTimeout(homeSearchTimer)
+  homeSearchTimer = setTimeout(() => loadTasks(), 300)
+}
+
+function formatCommentTimeHome(iso: string | null) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  const now = new Date()
+  const diff = (now.getTime() - d.getTime()) / 60000
+  if (diff < 1) return t('task.justNow')
+  if (diff < 60) return t('task.minutesAgo', { n: Math.floor(diff) })
+  if (diff < 1440) return t('task.hoursAgo', { n: Math.floor(diff / 60) })
+  return iso.slice(0, 16).replace('T', ' ')
+}
+
+function openHomeTaskDetail(task: api.TaskListItem) {
+  homeTaskDetail.value = { ...task }
+  homeTaskComments.value = []
+  homeNewCommentContent.value = ''
+  homeTaskCommentsLoading.value = true
+  api.getTaskComments(task.id).then((res) => {
+    homeTaskComments.value = res.data.comments || []
+  }).catch(() => { homeTaskComments.value = [] }).finally(() => { homeTaskCommentsLoading.value = false })
+}
+
+function closeHomeTaskDetail() {
+  homeTaskDetail.value = null
+  homeTaskComments.value = []
+}
+
+function postHomeComment() {
+  if (!homeTaskDetail.value || !homeNewCommentContent.value.trim()) return
+  homePostCommentLoading.value = true
+  api.postTaskComment(homeTaskDetail.value.id, { content: homeNewCommentContent.value.trim() }).then((res) => {
+    homeTaskComments.value = [...homeTaskComments.value, res.data]
+    homeNewCommentContent.value = ''
+    showSuccess(t('task.commentPosted'))
+    const task = tasks.value.find((x) => x.id === homeTaskDetail.value!.id)
+    if (task && task.comment_count != null) task.comment_count = (task.comment_count || 0) + 1
+  }).catch(() => {}).finally(() => { homePostCommentLoading.value = false })
+}
+
+function openCreateTaskModal() {
+  if (!auth.isLoggedIn) {
+    showAuthModal.value = true
+    return
+  }
+  publishError.value = ''
+  createStep.value = 1
+  showCreateTaskModal.value = true
+}
+
+function closeCreateTaskModal() {
+  showCreateTaskModal.value = false
+  publishError.value = ''
+}
+
+function loadMyCreatedTasks() {
+  if (!auth.isLoggedIn) return
+  myCreatedTasksLoading.value = true
+  api.fetchMyCreatedTasks({ limit: 20 }).then((res) => {
+    myCreatedTasks.value = res.data.tasks || []
+  }).catch(() => {
+    myCreatedTasks.value = []
+  }).finally(() => {
+    myCreatedTasksLoading.value = false
+  })
+}
+
+function doPublishFromModal() {
+  doPublish()
+  if (!publishLoading.value) {
+    closeCreateTaskModal()
+    loadMyCreatedTasks()
+  }
 }
 
 function loadCandidates() {
@@ -714,6 +750,7 @@ function doLogin() {
     showAuthModal.value = false
     loadAccountMe()
     loadMyAgents()
+    loadMyCreatedTasks()
   }).catch((e) => {
     authError.value = e.response?.data?.detail || t('common.loginFailed')
   }).finally(() => {
@@ -763,6 +800,7 @@ function doRegister() {
     showAuthModal.value = false
     loadAccountMe()
     loadMyAgents()
+    loadMyCreatedTasks()
   }).catch((e) => {
     authError.value = e.response?.data?.detail || t('common.registerFailed')
   }).finally(() => {
@@ -781,21 +819,36 @@ function doPublish() {
     publishLoading.value = false
     return
   }
+  const skills = publishForm.skills_text ? publishForm.skills_text.split(/[,，\s]+/).map((s) => s.trim()).filter(Boolean) : undefined
   api.publishTask({
     title: publishForm.title.trim(),
-    description: publishForm.description.trim(),
+    description: (publishForm.description || '').trim(),
     reward_points: reward,
     completion_webhook_url: webhook || undefined,
     invited_agent_ids: publishForm.invited_agent_ids?.length ? publishForm.invited_agent_ids.map(Number).filter(Boolean) : undefined,
+    discord_webhook_url: (publishForm.discord_webhook_url || '').trim() || undefined,
+    category: (publishForm.category || '').trim() || undefined,
+    requirements: (publishForm.requirements || '').trim() || undefined,
+    location: (publishForm.location || '').trim() || undefined,
+    duration_estimate: (publishForm.duration_estimate || '').trim() || undefined,
+    skills,
   }).then(() => {
     publishForm.title = ''
     publishForm.description = ''
     publishForm.reward_points = 0
     publishForm.completion_webhook_url = ''
+    publishForm.discord_webhook_url = ''
     publishForm.invited_agent_ids = []
+    publishForm.category = ''
+    publishForm.requirements = ''
+    publishForm.location = ''
+    publishForm.duration_estimate = ''
+    publishForm.skills_text = ''
     showSuccess(t('task.publishSuccess'))
+    if (showCreateTaskModal.value) closeCreateTaskModal()
     loadAccountMe()
     loadTasks()
+    loadMyCreatedTasks()
   }).catch((e) => {
     publishError.value = e.response?.data?.detail || t('task.publishErrorGeneric')
   }).finally(() => {
@@ -850,6 +903,17 @@ function getTaskSkills(t: { skills?: string[] | string }): string[] {
   if (typeof t.skills === 'string') return t.skills.split(/[,，]/).map((s) => s.trim()).filter(Boolean)
   return []
 }
+const categoryLabels: Record<string, string> = {
+  development: 'task.categoryDevelopment',
+  design: 'task.categoryDesign',
+  research: 'task.categoryResearch',
+  writing: 'task.categoryWriting',
+  data: 'task.categoryData',
+  other: 'task.categoryOther',
+}
+function taskCategoryLabel(cat: string) {
+  return t(categoryLabels[cat] || cat)
+}
 function openSubmitCompletionModal(task: { id: number; title: string }) {
   submitCompletionTask.value = task
   submitCompletionForm.result_summary = ''
@@ -886,105 +950,6 @@ function loadAccountMe() {
     if (res.data.user_id != null) auth.setUserId(res.data.user_id)
     accountCredits.value = res.data.credits ?? 0
   }).catch(() => {})
-}
-
-function loadAccountData() {
-  if (!auth.isLoggedIn) return
-  loadAccountMe()
-  api.getCommission().then((res) => {
-    commissionBalance.value = res.data.commission_balance ?? 0
-  }).catch(() => {})
-  api.getReceivingAccount().then((res) => {
-    receivingAccountForm.account_type = res.data.account_type || 'alipay'
-    receivingAccountForm.account_name = res.data.account_name || ''
-    receivingAccountForm.account_number = res.data.account_number || ''
-  }).catch(() => {})
-  paymentMethodsLoading.value = true
-  api.getPaymentMethods().then((res) => {
-    paymentMethods.value = res.data.payment_methods || []
-  }).catch(() => {}).finally(() => { paymentMethodsLoading.value = false })
-  transactionsLoading.value = true
-  api.getTransactions({ limit: 20 }).then((res) => {
-    transactions.value = res.data.transactions || []
-  }).catch(() => {}).finally(() => { transactionsLoading.value = false })
-}
-
-function doSaveReceivingAccount() {
-  receivingAccountLoading.value = true
-  api.updateReceivingAccount({
-    account_type: receivingAccountForm.account_type,
-    account_name: receivingAccountForm.account_name,
-    account_number: receivingAccountForm.account_number,
-  }).then(() => {
-    receivingAccountError.value = ''
-    showSuccess(t('account.receivingAccountSaved'))
-  }).catch((e) => {
-    receivingAccountError.value = e.response?.data?.detail || t('account.receivingAccountSaveFailed')
-  }).finally(() => { receivingAccountLoading.value = false })
-}
-
-function doRecharge() {
-  const amount = Number(rechargeForm.amount) || 0
-  if (amount <= 0) return
-  rechargeError.value = ''
-  rechargeLoading.value = true
-  api.recharge({ amount }).then((res) => {
-    accountCredits.value = res.data.credits ?? 0
-    if (showAccountModal.value) {
-      api.getTransactions({ limit: 20 }).then((r) => { transactions.value = r.data.transactions || [] })
-    }
-  }).catch((e) => {
-    rechargeError.value = e.response?.data?.detail || '充值失败'
-  }).finally(() => { rechargeLoading.value = false })
-}
-
-function doCreateRechargeOrder() {
-  const amount = Number(rechargeOrderForm.amount) || 0
-  if (amount <= 0) return
-  rechargeError.value = ''
-  createOrderLoading.value = true
-  lastRechargeOrder.value = null
-  api.createRechargeOrder({ amount, payment_method_type: rechargeOrderForm.payment_method_type }).then((res) => {
-    lastRechargeOrder.value = {
-      order_id: res.data.order_id,
-      payment_url: res.data.payment_url,
-      payment_qr: res.data.payment_qr,
-      btc_address: res.data.btc_address,
-      status: res.data.status,
-    }
-  }).catch((e) => {
-    rechargeError.value = e.response?.data?.detail || '创建订单失败'
-  }).finally(() => { createOrderLoading.value = false })
-}
-
-function doConfirmRecharge() {
-  if (!lastRechargeOrder.value) return
-  confirmOrderLoading.value = true
-  api.confirmRecharge({ order_id: lastRechargeOrder.value.order_id }).then((res) => {
-    accountCredits.value = res.data.credits ?? 0
-    lastRechargeOrder.value = null
-    if (showAccountModal.value) {
-      api.getTransactions({ limit: 20 }).then((r) => { transactions.value = r.data.transactions || [] })
-    }
-  }).catch((e) => {
-    rechargeError.value = e.response?.data?.detail || '确认失败'
-  }).finally(() => { confirmOrderLoading.value = false })
-}
-
-function doBindPayment() {
-  const type = bindPaymentForm.type
-  const masked_info = bindPaymentForm.masked_info.trim() || `${type} ***`
-  bindLoading.value = true
-  api.bindPaymentMethod({ type, masked_info }).then(() => {
-    bindPaymentForm.masked_info = ''
-    api.getPaymentMethods().then((res) => { paymentMethods.value = res.data.payment_methods || [] })
-  }).catch(() => {}).finally(() => { bindLoading.value = false })
-}
-
-function doUnbind(pmId: number) {
-  api.unbindPaymentMethod(pmId).then(() => {
-    paymentMethods.value = paymentMethods.value.filter((p) => p.id !== pmId)
-  })
 }
 
 const helpDownloadStepKeys = ['help.step1', 'help.step2', 'help.step3']
@@ -1054,18 +1019,12 @@ onMounted(() => {
   if (auth.isLoggedIn) {
     loadAccountMe()
     loadMyAgents()
+    loadMyCreatedTasks()
   }
 })
 
 onUnmounted(() => {
   document.removeEventListener('keydown', onEscapeKey)
-})
-
-watch(showAccountModal, (open) => {
-  if (open) {
-    receivingAccountError.value = ''
-    loadAccountData()
-  }
 })
 </script>
 
@@ -1074,13 +1033,25 @@ watch(showAccountModal, (open) => {
   display: flex;
   flex-direction: column;
   gap: 0;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
 }
+.header-brand:hover { color: var(--text-primary); }
 .header-brand:hover .tagline { color: var(--text-primary); }
+.header-brand-logo { margin: 0; font-size: 1.25rem; font-weight: 700; }
 .tagline {
   font-size: 0.8rem;
   color: var(--text-secondary);
   margin: 0.15rem 0 0 0;
   font-weight: 400;
+}
+.header-eyebrow {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  margin: 0.2rem 0 0 0;
+  font-weight: 500;
+  letter-spacing: 0.02em;
 }
 .btn-text {
   background: transparent;
@@ -1138,106 +1109,9 @@ watch(showAccountModal, (open) => {
 .publish-form .full-width { width: 100%; margin-top: 0.5rem; }
 .field-hint, .deadline-hint { margin-top: 0.35rem; font-size: 0.85rem; }
 .textarea { resize: vertical; min-height: 60px; }
-.modal-account {
-  max-width: 520px;
-  max-height: 90vh;
-  overflow-y: auto;
-  padding: 1.5rem 1.75rem;
-}
-.balance-line,
-.commission-balance-line {
-  font-size: 1.1rem;
-  margin-bottom: 1rem;
-}
-.receiving-account-form .input,
-.receiving-account-form select {
-  display: block;
-  width: 100%;
-  margin-bottom: 0.5rem;
-}
-.receiving-account-form .btn { margin-top: 0.25rem; }
-.recharge-channel-title {
-  font-size: 0.9rem;
-  margin: 1rem 0 0.5rem;
-  color: var(--text-secondary);
-}
-.recharge-order-form {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  align-items: center;
-  margin-bottom: 0.5rem;
-}
-.recharge-order-form .input-num { min-width: 80px; width: 80px; }
-.recharge-order-result {
-  margin-top: 0.75rem;
-  padding: 0.6rem;
-  background: var(--background-darker);
-  border-radius: 6px;
-  font-size: 0.9rem;
-}
-.recharge-order-result p { margin: 0.35rem 0; }
-.recharge-order-result code { word-break: break-all; font-size: 0.85rem; }
-.recharge-order-result a { color: var(--primary-color); }
-.account-section {
-  margin-bottom: 1.25rem;
-}
-.account-section h4 {
-  font-size: 0.95rem;
-  margin-bottom: 0.5rem;
-  color: var(--text-secondary);
-}
-.token-copy-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
-}
-.token-copy-row code.token-masked {
-  font-size: 0.85rem;
-  word-break: break-all;
-  max-width: 100%;
-}
-.bind-form {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  align-items: center;
-}
-.bind-form .input { flex: 1; min-width: 120px; }
-.payment-list, .tx-list {
-  list-style: none;
-  padding: 0;
-  margin: 0.5rem 0 0 0;
-  font-size: 0.9rem;
-}
-.payment-list li, .tx-list li {
-  padding: 0.35rem 0;
-  border-bottom: 1px solid var(--border-color);
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
-}
-.pm-type { font-weight: 600; color: var(--primary-color); }
-.link-btn { margin-left: auto; }
-.tx-in { color: var(--success-color); }
-.tx-out { color: var(--danger-color); }
-.tx-time { font-size: 0.8rem; color: var(--text-secondary); margin-left: auto; }
 .app-container {
   min-width: 0;
   overflow-x: hidden;
-}
-.app-header {
-  position: relative;
-  z-index: 100;
-}
-.main-content {
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 0 1.5rem 2rem;
-  width: 100%;
-  min-width: 0;
 }
 .oauth-error-banner {
   display: flex;
@@ -1284,18 +1158,93 @@ watch(showAccountModal, (open) => {
   line-height: 1.55;
 }
 .hero-home .hero-desc { font-size: 0.9rem; max-width: 32rem; }
-.home-grid {
+
+/* 首页 · 区块间距与 RunPod 风格一致 */
+.apple-layout { max-width: 1120px; margin: 0 auto; }
+.home-wrap .section-title {
+  margin-top: 0;
+  margin-bottom: var(--space-5, 1.25rem);
+}
+.home-wrap #task-list.section-title {
+  margin-top: 0.5rem;
+  margin-bottom: var(--space-5);
+}
+.home-layout {
   display: grid;
-  grid-template-columns: minmax(280px, 380px) 1fr;
-  gap: 2rem 2.5rem;
+  grid-template-columns: 1fr 200px;
+  gap: 2rem;
   align-items: start;
 }
-@media (max-width: 900px) {
-  .home-grid {
-    grid-template-columns: 1fr;
-    gap: 1.5rem;
-  }
+.home-main { min-width: 0; }
+.home-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
 }
+.home-search { max-width: 320px; }
+.home-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+}
+.home-categories { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.filter-chip {
+  padding: 0.4rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--border, #333);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s, color 0.2s;
+}
+.filter-chip:hover { border-color: var(--primary-color); color: var(--text-primary); }
+.filter-chip.active { background: rgba(var(--primary-rgb, 99, 102, 241), 0.12); border-color: var(--primary-color); color: var(--primary-color); }
+.home-sort { width: auto; min-width: 120px; }
+.home-task-list { display: flex; flex-direction: column; gap: 1rem; }
+.home-sidebar { position: sticky; top: 5rem; }
+.home-publish-btn { width: 100%; }
+.home-my-created {
+  margin-top: 3rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--border-color);
+}
+.apple-section .section-title { font-size: 1.1rem; margin-bottom: 1.25rem; }
+.my-created-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem; }
+.task-card--compact { padding: 1rem; }
+.task-card--compact .task-card__title { font-size: 1rem; margin-bottom: 0.35rem; }
+.task-card--compact .task-card__meta { font-size: 0.8rem; margin-bottom: 0.5rem; }
+
+.modal--create-task { max-width: 520px; padding: var(--space-6, 1.5rem); }
+.create-task-steps .create-step-tabs { display: flex; gap: 0.35rem; margin-bottom: var(--space-5, 1.25rem); }
+.create-task-steps .step-tab {
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-sm, 8px);
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s, color 0.2s;
+}
+.create-task-steps .step-tab.active { background: rgba(var(--primary-rgb), 0.12); border-color: var(--primary-color); color: var(--primary-color); }
+.create-task-steps .step-panel .form-group { margin-bottom: var(--space-4, 1rem); }
+.create-task-steps .step-panel .form-label { margin-bottom: 0.35rem; font-size: 0.9rem; color: var(--text-secondary); }
+.create-task-steps .form-hint { font-size: 0.8rem; color: var(--text-secondary); margin: 0.35rem 0 0; line-height: 1.4; }
+.create-task-steps .form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
+@media (max-width: 420px) { .create-task-steps .form-row-2 { grid-template-columns: 1fr; } }
+.create-task-steps .step-actions { display: flex; gap: 0.5rem; margin-top: var(--space-5, 1.25rem); flex-wrap: wrap; }
+.create-task-steps .textarea-input { min-height: 4.5rem; resize: vertical; padding: 0.6rem 0.75rem; border-radius: var(--radius-sm, 8px); }
+
+@media (max-width: 900px) {
+  .home-layout { grid-template-columns: 1fr; }
+  .home-sidebar { position: static; }
+  .home-publish-btn { width: auto; }
+}
+.header-nav .nav-link--a2a { font-size: 0.85em; font-weight: 600; }
 @media (max-width: 600px) {
   .main-content { padding: 0 1rem 1.5rem; }
   .app-header { padding: 0.75rem 1rem; }
@@ -1391,9 +1340,13 @@ watch(showAccountModal, (open) => {
 }
 .form-group.form-inline .form-label { margin-bottom: 0; margin-right: 0.25rem; }
 .required { color: var(--danger-color); }
-.section-full { margin-top: 1.5rem; }
+.section-full {
+  margin-top: 2rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--border-color);
+}
 .section {
-  margin-bottom: 1.5rem;
+  margin-bottom: 2rem;
 }
 .section-title {
   font-size: 1.2rem;
@@ -1401,6 +1354,32 @@ watch(showAccountModal, (open) => {
   color: var(--text-primary);
 }
 .task-hall-section .section-title { margin-top: 0; }
+
+/* 发布任务区块：卡片加左侧强调线、内边距与表单间距 */
+.section-publish .section-title {
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin-bottom: 0.85rem;
+}
+.publish-card {
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  background: var(--card-background);
+  border-left: 4px solid var(--primary-color);
+  box-shadow: 0 2px 12px var(--shadow-color);
+}
+.publish-card .card-content {
+  padding: 1.25rem 1.5rem;
+}
+.publish-form .form-group {
+  margin-bottom: 1rem;
+}
+.publish-form .form-group:last-of-type { margin-bottom: 0; }
+.publish-gate {
+  padding: 1rem 0;
+}
+.publish-gate .hint { margin-bottom: 0.25rem; }
 .section-desc { margin-top: -0.5rem; margin-bottom: 0.75rem; font-size: 0.9rem; }
 .candidates-section { margin-bottom: 1rem; }
 .candidates-grid {
@@ -1440,6 +1419,7 @@ watch(showAccountModal, (open) => {
 }
 .candidate-checkbox input { margin: 0; }
 .candidate-checkbox .candidate-name { color: var(--text-primary); }
+.candidate-checkbox .candidate-points { margin-left: 0.35rem; font-size: 0.8rem; color: var(--secondary-color, #8b5cf6); }
 .candidate-checkbox .candidate-owner { color: var(--text-secondary); font-size: 0.85rem; }
 .invited-only-badge {
   margin-left: 0.5rem;
@@ -1587,6 +1567,12 @@ watch(showAccountModal, (open) => {
 .task-tag--skill, .task-attr--skill { border-color: rgba(168, 85, 247, 0.5); color: #7c3aed; }
 .task-card--structured .task-card__meta { font-size: 0.8rem; color: var(--text-secondary); margin: 0 0 0.5rem; }
 .task-card--structured .task-card__actions-wrap { padding: 0; margin-top: 0.25rem; border: none; }
+.task-card__category { font-size: 0.75rem; padding: 0.2rem 0.5rem; background: var(--surface-700, #333); border-radius: 4px; margin-right: 0.35rem; }
+.task-card__requirements-snippet { font-size: 0.8rem; color: var(--text-secondary); margin: 0 0 0.4rem; padding-left: 0.5rem; border-left: 2px solid var(--surface-700); line-height: 1.35; }
+.task-card__priority { font-size: 0.7rem; padding: 0.15rem 0.4rem; border-radius: 4px; text-transform: uppercase; }
+.task-card__priority.priority--high { background: rgba(234, 179, 8, 0.2); color: #eab308; }
+.task-card__priority.priority--critical { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+.task-card__priority.priority--low { background: rgba(148, 163, 184, 0.2); color: #94a3b8; }
 .section-candidates-compact { margin-top: 0.5rem; }
 .section-title--small { font-size: 1rem; margin-bottom: 0.5rem; }
 .candidates-list-compact { display: flex; flex-wrap: wrap; gap: 0.4rem; }
@@ -1649,27 +1635,13 @@ watch(showAccountModal, (open) => {
 .toast-enter-active, .toast-leave-active { transition: opacity 0.25s ease, transform 0.25s ease; }
 .toast-enter-from, .toast-leave-to { opacity: 0; transform: translateX(-50%) translateY(10px); }
 
-.modal-mask {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  animation: modal-fade-in 0.2s ease;
-}
-.modal {
-  background: var(--card-background);
-  border-radius: 12px;
-  padding: 1.5rem;
-  max-width: 400px;
-  width: 90%;
-  border: 1px solid var(--border-color);
-  animation: modal-scale-in 0.22s ease;
-}
-@keyframes modal-fade-in { from { opacity: 0; } to { opacity: 1; } }
-@keyframes modal-scale-in { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: scale(1); } }
+.modal-help { max-width: 520px; }
+.modal-help .help-section { margin-bottom: var(--space-5, 1.25rem); }
+.modal-help .help-section:last-of-type { margin-bottom: 0; }
+.modal-help h4 { font-size: 1rem; font-weight: 600; margin: 0 0 0.5rem; color: var(--text-primary); }
+.modal-help .help-list { margin: 0 0 0.5rem 1rem; padding: 0; font-size: 0.9rem; color: var(--text-secondary); line-height: 1.5; }
+.modal-help .help-note { font-size: 0.85rem; color: var(--text-secondary); margin: 0 0 0.5rem; }
+.modal-help .help-code { background: var(--background-darker); padding: 0.75rem 1rem; border-radius: var(--radius-sm); font-size: 0.85rem; overflow-x: auto; white-space: pre-wrap; margin: 0.5rem 0; }
 .help-skill-link {
   margin-top: 1rem;
   display: flex;
@@ -1678,9 +1650,10 @@ watch(showAccountModal, (open) => {
   gap: 0.5rem;
 }
 .help-skill-link .btn { display: inline-block; text-decoration: none; }
-.modal h3 { margin-bottom: 1rem; }
+.modal h3 { margin-bottom: var(--space-4, 1rem); }
 .tabs { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
 .tabs .active { border-color: var(--primary-color); color: var(--primary-color); }
+.header-actions .btn.active { border-color: var(--primary-color); color: var(--primary-color); }
 .form { display: flex; flex-direction: column; gap: 0.75rem; }
 .form .input { width: 100%; min-width: 0; }
 .agent-select-list { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1rem; }
@@ -1721,4 +1694,25 @@ watch(showAccountModal, (open) => {
   margin-top: 0.5rem;
   font-size: 0.85rem;
 }
+/* 首页任务详情+评论弹窗 */
+.modal--task-detail { max-width: 520px; max-height: 85vh; overflow-y: auto; }
+.task-detail-modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.5rem; }
+.task-detail-modal-title { margin: 0; font-size: 1.1rem; line-height: 1.35; flex: 1; }
+.task-detail-modal-meta { font-size: 0.85rem; color: var(--text-secondary); margin: 0 0 0.5rem; }
+.task-detail-modal-desc { font-size: 0.9rem; line-height: 1.5; margin: 0 0 1rem; white-space: pre-wrap; }
+.task-detail-modal-comments { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color, rgba(255,255,255,0.1)); }
+.task-detail-modal-comments .task-comments-title { font-size: 0.9rem; font-weight: 600; margin: 0 0 0.5rem; }
+.task-detail-modal-comments .task-comments-list { list-style: none; padding: 0; margin: 0 0 1rem; }
+.task-detail-modal-comments .task-comment-item { padding: 0.6rem 0; border-bottom: 1px solid var(--border-color, rgba(255,255,255,0.06)); }
+.task-detail-modal-comments .task-comment-item:last-child { border-bottom: none; }
+.task-detail-modal-comments .task-comment-item.comment-kind-status { border-left: 3px solid var(--secondary-color, #8b5cf6); padding-left: 0.5rem; }
+.task-detail-modal-comments .task-comment-author { font-weight: 600; font-size: 0.9rem; margin-right: 0.5rem; }
+.task-detail-modal-comments .task-comment-by-user { font-size: 0.8rem; color: var(--text-secondary); margin-right: 0.35rem; }
+.task-detail-modal-comments .task-comment-kind-badge { font-size: 0.7rem; padding: 0.1rem 0.35rem; border-radius: 4px; background: rgba(139, 92, 246, 0.15); color: var(--secondary-color); margin-right: 0.35rem; }
+.task-detail-modal-comments .task-comment-time { font-size: 0.75rem; color: var(--muted, #888); }
+.task-detail-modal-comments .task-comment-content { margin: 0.35rem 0 0; font-size: 0.9rem; line-height: 1.45; white-space: pre-wrap; word-break: break-word; }
+.task-detail-modal-comments .task-comments-empty { font-size: 0.85rem; color: var(--muted); margin: 0 0 0.75rem; }
+.task-detail-modal-comments .task-comment-form { margin-top: 0.75rem; }
+.task-detail-modal-comments .task-comment-form .textarea-input { min-height: 3rem; margin-bottom: 0.5rem; width: 100%; }
+.task-card-comment-btn { margin-left: auto; }
 </style>

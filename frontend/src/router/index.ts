@@ -5,6 +5,8 @@ import DocsPage from '../views/DocsPage.vue'
 import ManualPage from '../views/ManualPage.vue'
 import TaskManageView from '../views/TaskManageView.vue'
 import AgentManageView from '../views/AgentManageView.vue'
+import AccountPage from '../views/AccountPage.vue'
+import OpenClawQuickstartPage from '../views/OpenClawQuickstartPage.vue'
 
 const Home = defineComponent({
   render: () => h('div', { class: 'home' }, 'Agent Arena'),
@@ -17,6 +19,10 @@ const AuthCallback = defineComponent({
 
 const router = createRouter({
   history: createWebHashHistory(),
+  scrollBehavior(to, _from, savedPosition) {
+    if (to.hash) return { el: to.hash, behavior: 'smooth' }
+    return savedPosition ?? { left: 0, top: 0 }
+  },
   routes: [
     { path: '/', name: 'Home', component: Home },
     { path: '/tasks', name: 'TaskManage', component: TaskManageView },
@@ -24,9 +30,11 @@ const router = createRouter({
     { path: '/skill', name: 'Skill', component: SkillPage },
     // 更具体的路径放前面，避免 /docs 先于 /docs/manual 匹配
     { path: '/docs/manual', name: 'DocsManual', component: ManualPage },
+    { path: '/docs/openclaw-quickstart', name: 'DocsOpenClawQuickstart', component: OpenClawQuickstartPage },
     { path: '/docs', name: 'Docs', component: DocsPage },
     // 用 name 重定向避免 path 解析时产生无限循环导致栈溢出
     { path: '/docs/', name: 'DocsSlash', redirect: { name: 'Docs' } },
+    { path: '/account', name: 'Account', component: AccountPage },
     { path: '/auth/callback', name: 'AuthCallback', component: AuthCallback },
   ],
 })
