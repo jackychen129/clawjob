@@ -7,9 +7,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
 from starlette.middleware.base import BaseHTTPMiddleware
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from pydantic import BaseModel
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, List, Any
 import os
 import httpx
 from slowapi import _rate_limit_exceeded_handler
@@ -25,6 +27,7 @@ from app.database.relational_db import (
     Task,
     Agent,
     TaskSubscription,
+    TaskComment,
     User,
     CreditTransaction,
     PlatformClearingAccount,
@@ -59,12 +62,33 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    """启动时创建/更新数据库表，并校验生产环境配置。"""
+    try:
+        init_db()
+    except Exception as e:
+        import logging
+        logging.getLogger("uvicorn.error").warning("init_db: %s", e)
+    env = os.getenv("ENV", "").strip().lower()
+    if env == "production":
+        secret = os.getenv("JWT_SECRET", "").strip()
+        if not secret or secret == "clawjob-secret-key-change-in-production":
+            raise RuntimeError("生产环境必须设置 JWT_SECRET 且不可使用默认值。")
+        cors = os.getenv("CORS_ORIGINS", "").strip()
+        if not cors or cors == "*":
+            raise RuntimeError("生产环境必须设置 CORS_ORIGINS 为具体前端域名，禁止使用 *。")
+    yield
+    # shutdown 暂无逻辑
+
+
 app = FastAPI(
     title="ClawJob API",
     description="任务发布与接取：注册 Agent、发布任务、订阅他人任务",
     version="1.0.0",
     docs_url="/docs",
-    redoc_url="/redoc"
+    redoc_url="/redoc",
+    lifespan=_lifespan,
 )
 
 # Initialize database systems
@@ -104,28 +128,6 @@ app.add_middleware(
 )
 
 
-@app.on_event("startup")
-def _startup():
-    """启动时创建/更新数据库表（含 verification_codes 等），并校验生产环境配置。"""
-    try:
-        init_db()
-    except Exception as e:
-        import logging
-        logging.getLogger("uvicorn.error").warning("init_db: %s", e)
-    env = os.getenv("ENV", "").strip().lower()
-    if env != "production":
-        return
-    secret = os.getenv("JWT_SECRET", "").strip()
-    if not secret or secret == "clawjob-secret-key-change-in-production":
-        raise RuntimeError(
-            "生产环境必须设置 JWT_SECRET 且不可使用默认值。请在环境变量中配置 JWT_SECRET。"
-        )
-    cors = os.getenv("CORS_ORIGINS", "").strip()
-    if not cors or cors == "*":
-        raise RuntimeError(
-            "生产环境必须设置 CORS_ORIGINS 为具体前端域名（逗号分隔），禁止使用 *。"
-        )
-
 @app.get("/health")
 async def health_check():
     return {
@@ -144,11 +146,46 @@ async def health_check():
         }
     }
 
-# Agent 注册（在 DB 中创建，用于接取任务）
+
+@app.get("/stats")
+def get_public_stats(db: Session = Depends(get_db)):
+    """公开统计：任务总数、Agent 总数（供首页与官网展示）。"""
+    tasks_count = db.query(Task).count()
+    agents_count = db.query(Agent).count()
+    return {"tasks_count": tasks_count, "agents_count": agents_count}
+
+# OpenClaw/Clawl 对齐：capability 项 { id?, name, category? }
+class CapabilityItem(BaseModel):
+    id: Optional[str] = None
+    name: str
+    category: Optional[str] = None
+
+
+# Agent 注册（在 DB 中创建，用于接取任务；参数对齐 OpenClaw agent 属性）
 class RegisterAgentBody(BaseModel):
     name: str
     description: str = ""
-    agent_type: str = "general"
+    agent_type: str = "general"  # 主类型，与 OpenClaw type 首项对应
+    types: Optional[List[str]] = None  # OpenClaw 多类型，如 ["assistant"], ["developer","security"]
+    capabilities: Optional[List[CapabilityItem]] = None  # OpenClaw capabilities: [{ id, name, category }]
+    status: Optional[str] = "active"  # active | inactive
+    avatar_url: Optional[str] = None
+    profile_url: Optional[str] = None
+    webhook_url: Optional[str] = None  # 存活探测 GET + 接收消息 POST 的 URL
+
+
+def _norm_capabilities(caps: Optional[List[Any]]) -> list:
+    if not caps:
+        return []
+    out = []
+    for c in caps:
+        if isinstance(c, dict):
+            out.append({"id": c.get("id"), "name": c.get("name") or "", "category": c.get("category")})
+        elif hasattr(c, "name"):
+            out.append({"id": getattr(c, "id", None), "name": c.name, "category": getattr(c, "category", None)})
+        else:
+            continue
+    return out
 
 
 @app.post("/agents/register")
@@ -157,20 +194,39 @@ def register_agent(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    """注册我的 Agent（需登录），用于接取/订阅他人任务"""
+    """注册我的 Agent（需登录），用于接取/订阅他人任务。参数对齐 OpenClaw/Clawl agent。"""
     uid = int(current_user["user_id"])
+    primary_type = (body.agent_type or "general").strip() or "general"
+    if body.types and len(body.types) > 0:
+        primary_type = (body.types[0] or primary_type).strip() or primary_type
+    capabilities = _norm_capabilities(body.capabilities) if body.capabilities else []
+    config = {}
+    if body.avatar_url and body.avatar_url.strip():
+        config["avatar_url"] = body.avatar_url.strip()
+    if body.profile_url and body.profile_url.strip():
+        config["profile_url"] = body.profile_url.strip()
+    if body.webhook_url and body.webhook_url.strip():
+        config["webhook_url"] = body.webhook_url.strip()
+    is_active = (body.status or "active").strip().lower() != "inactive"
     agent = Agent(
-        name=body.name,
-        description=body.description or "",
-        agent_type=body.agent_type or "general",
+        name=body.name.strip(),
+        description=(body.description or "").strip(),
+        agent_type=primary_type,
         owner_id=uid,
-        capabilities=[],
-        config={},
+        capabilities=capabilities,
+        config=config,
+        is_active=is_active,
     )
     db.add(agent)
     db.commit()
     db.refresh(agent)
-    return {"id": agent.id, "name": agent.name, "agent_type": agent.agent_type}
+    return {
+        "id": agent.id,
+        "name": agent.name,
+        "agent_type": agent.agent_type,
+        "capabilities": agent.capabilities or [],
+        "status": "active" if agent.is_active else "inactive",
+    }
 
 
 @app.get("/agents/mine")
@@ -178,15 +234,95 @@ def list_my_agents(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    """我注册的 Agent 列表（需登录）"""
+    """我注册的 Agent 列表（需登录），按积分（完成任务获得）降序"""
     uid = int(current_user["user_id"])
-    agents = db.query(Agent).filter(Agent.owner_id == uid).order_by(Agent.id.desc()).all()
+    points_subq = (
+        db.query(Task.agent_id, func.coalesce(func.sum(Task.reward_points), 0).label("points"))
+        .filter(Task.status == "completed", Task.agent_id.isnot(None))
+        .group_by(Task.agent_id)
+        .subquery()
+    )
+    rows = (
+        db.query(Agent, func.coalesce(points_subq.c.points, 0).label("points"))
+        .outerjoin(points_subq, Agent.id == points_subq.c.agent_id)
+        .filter(Agent.owner_id == uid)
+        .order_by(points_subq.c.points.desc().nullslast(), Agent.id.desc())
+        .all()
+    )
     return {
         "agents": [
-            {"id": a.id, "name": a.name, "description": a.description or "", "agent_type": a.agent_type}
-            for a in agents
+            {
+                "id": a.id,
+                "name": a.name,
+                "description": a.description or "",
+                "agent_type": a.agent_type or "general",
+                "capabilities": a.capabilities or [],
+                "status": "active" if a.is_active else "inactive",
+                "config": a.config or {},
+                "points": int(points),
+            }
+            for a, points in rows
         ]
     }
+
+
+def _get_my_agent(agent_id: int, db: Session, user_id: int) -> Optional[Agent]:
+    agent = db.query(Agent).filter(Agent.id == agent_id).first()
+    if not agent or agent.owner_id != user_id:
+        return None
+    return agent
+
+
+@app.get("/agents/{agent_id}/ping")
+def agent_ping(
+    agent_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """探测 Agent 是否存活：对配置的 webhook_url 发 GET 请求，仅 Agent 所有者可调用。"""
+    uid = int(current_user["user_id"])
+    agent = _get_my_agent(agent_id, db, uid)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found or not yours")
+    config = agent.config or {}
+    webhook_url = (config.get("webhook_url") or "").strip()
+    if not webhook_url:
+        return {"alive": False, "reason": "no_webhook", "message": "未配置 Webhook URL"}
+    try:
+        with httpx.Client(timeout=5.0) as client:
+            r = client.get(webhook_url)
+            return {"alive": 200 <= r.status_code < 400, "status_code": r.status_code}
+    except Exception as e:
+        return {"alive": False, "reason": "request_failed", "message": str(e)}
+
+
+class SendMessageBody(BaseModel):
+    content: str
+
+
+@app.post("/agents/{agent_id}/send-message")
+def agent_send_message(
+    agent_id: int,
+    body: SendMessageBody,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """向 Agent 发送消息：POST 到 webhook_url，仅 Agent 所有者可调用。"""
+    uid = int(current_user["user_id"])
+    agent = _get_my_agent(agent_id, db, uid)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found or not yours")
+    config = agent.config or {}
+    webhook_url = (config.get("webhook_url") or "").strip()
+    if not webhook_url:
+        raise HTTPException(status_code=400, detail="未配置 Webhook URL，无法发送消息")
+    try:
+        payload = {"type": "message", "content": (body.content or "").strip(), "agent_id": agent_id}
+        with httpx.Client(timeout=10.0) as client:
+            r = client.post(webhook_url, json=payload)
+            return {"sent": 200 <= r.status_code < 400, "status_code": r.status_code, "response": r.text[:500] if r.text else None}
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"发送失败: {str(e)}")
 
 
 @app.get("/candidates")
@@ -195,27 +331,39 @@ def list_candidates(
     limit: int = 100,
     db: Session = Depends(get_db),
 ):
-    """候选者列表（公开）：已注册的 Agent 及所属用户，供发布任务时选择指定接取者"""
-    agents = (
-        db.query(Agent)
+    """候选者列表（公开）：已注册的 Agent 及所属用户，按积分降序，供发布任务时选择指定接取者"""
+    points_subq = (
+        db.query(Task.agent_id, func.coalesce(func.sum(Task.reward_points), 0).label("points"))
+        .filter(Task.status == "completed", Task.agent_id.isnot(None))
+        .group_by(Task.agent_id)
+        .subquery()
+    )
+    rows = (
+        db.query(Agent, User, func.coalesce(points_subq.c.points, 0).label("points"))
         .join(User, Agent.owner_id == User.id)
+        .outerjoin(points_subq, Agent.id == points_subq.c.agent_id)
         .filter(Agent.is_active == True, User.is_active == True)
-        .order_by(Agent.id.desc())
+        .order_by(points_subq.c.points.desc().nullslast(), Agent.id.desc())
         .offset(skip)
         .limit(limit)
         .all()
     )
     out = []
-    for a in agents:
-        owner = db.query(User).filter(User.id == a.owner_id).first()
+    for a, owner, points in rows:
+        cfg = a.config or {}
         out.append({
             "id": a.id,
             "type": "agent",
             "name": a.name,
             "description": (a.description or "")[:300],
             "agent_type": a.agent_type or "general",
+            "capabilities": a.capabilities or [],
+            "status": "active" if a.is_active else "inactive",
+            "avatar_url": cfg.get("avatar_url"),
+            "profile_url": cfg.get("profile_url"),
             "owner_id": a.owner_id,
             "owner_name": owner.username if owner else "",
+            "points": int(points),
         })
     return {"candidates": out, "total": len(out)}
 
@@ -245,6 +393,10 @@ async def delete_agent(agent_id: str, current_user: str = Depends(get_current_us
 VERIFICATION_HOURS = 6  # 发布者验收截止时间（小时），超时自动完成
 PLATFORM_COMMISSION_RATE = 0.01  # 任务成功发放奖励时，若发布方已配置佣金则按此比例计入发布者（可选功能）
 
+# 前端地址，用于 Discord 推送中的任务链接
+_FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/")
+
+
 class PublishTaskBody(BaseModel):
     title: str
     description: str = ""
@@ -254,10 +406,56 @@ class PublishTaskBody(BaseModel):
     completion_webhook_url: str = ""  # 有奖励点时必填：接取者提交完成时 POST 回调此 URL，供发布方验收
     invited_agent_ids: list = []  # 可选：仅这些 Agent 可接取；空表示对所有人开放
     creator_agent_id: Optional[int] = None  # 可选：由某 Agent 代发（须为当前用户的 Agent）
+    # 任务分类与详情
+    category: str = ""  # 任务分类：development, design, research, writing, data, other
+    requirements: str = ""  # 详细要求说明
     # 任务可选属性（地点、时长、技能等）
     location: str = ""  # 地点要求，如 "远程"、"北京"
     duration_estimate: str = ""  # 预计时长，如 "~1h"、"~3h"
     skills: list = []  # 所需技能标签，如 ["数据分析", "Python"]
+    discord_webhook_url: str = ""  # 可选：将任务推送到指定 Discord 频道，便于具备 Skill 的 Agent 发现并接取
+
+
+def _push_task_to_discord(task: Task, webhook_url: str, frontend_url: str) -> None:
+    """将任务信息推送到 Discord 频道（Webhook），便于 Agent 通过 Skill 发现并接取。"""
+    if not webhook_url or not webhook_url.strip().startswith(("http://", "https://")):
+        return
+    task_link = f"{frontend_url}/tasks"
+    if getattr(task, "id", None):
+        task_link = f"{frontend_url}/tasks?taskId={task.id}"
+    desc = (task.description or "").strip() or "无描述"
+    if len(desc) > 150:
+        desc = desc[:147] + "..."
+    reward = getattr(task, "reward_points", 0) or 0
+    category = (getattr(task, "category", None) or "").strip() or "—"
+    extra = getattr(task, "input_data", None) or {}
+    location = (extra.get("location") or "").strip() or "—"
+    skills = extra.get("skills") or []
+    skills_str = ", ".join(str(s) for s in skills[:5]) if skills else "—"
+    fields = [
+        {"name": "奖励点", "value": str(reward), "inline": True},
+        {"name": "分类", "value": category, "inline": True},
+        {"name": "地点", "value": location, "inline": True},
+        {"name": "技能", "value": skills_str[:100], "inline": False},
+        {"name": "接取方式", "value": "通过 ClawJob Skill 或打开任务大厅接取", "inline": False},
+    ]
+    payload = {
+        "embeds": [
+            {
+                "title": (task.title or "新任务")[:256],
+                "description": desc,
+                "url": task_link,
+                "color": 5814783,
+                "fields": fields,
+                "footer": {"text": "ClawJob"},
+            }
+        ]
+    }
+    try:
+        with httpx.Client(timeout=8.0) as client:
+            client.post(webhook_url.strip(), json=payload)
+    except Exception:
+        pass  # 不因 Discord 失败而影响发布结果
 
 
 class SubscribeTaskBody(BaseModel):
@@ -331,15 +529,18 @@ def _maybe_auto_confirm(task: Task, db: Session) -> None:
 
 
 def _task_extra(t: Task) -> dict:
-    """从 input_data 取出任务扩展字段（地点、时长、技能等）"""
+    """任务扩展字段：分类、要求、地点、时长、技能等"""
     d = getattr(t, "input_data", None) or {}
     if not isinstance(d, dict):
-        return {}
-    return {
+        d = {}
+    out = {
+        "category": getattr(t, "category", None) or None,
+        "requirements": getattr(t, "requirements", None) or None,
         "location": d.get("location") or None,
         "duration_estimate": d.get("duration_estimate") or None,
         "skills": d.get("skills") if isinstance(d.get("skills"), list) else None,
     }
+    return out
 
 
 @app.get("/tasks/mine")
@@ -432,15 +633,47 @@ def list_tasks_public(
     skip: int = 0,
     limit: int = 50,
     status_filter: str = None,
+    category_filter: str = None,
+    q: str = None,
+    sort: str = "created_at_desc",
     db: Session = Depends(get_db),
 ):
-    """任务大厅：公开列出所有任务（无需登录）"""
-    q = db.query(Task).order_by(Task.created_at.desc())
+    """任务大厅：公开列出所有任务（无需登录）；支持分类、关键词搜索、排序。"""
+    query = db.query(Task)
     if status_filter:
-        q = q.filter(Task.status == status_filter)
-    tasks = q.offset(skip).limit(limit).all()
+        query = query.filter(Task.status == status_filter)
+    if category_filter and category_filter.strip():
+        query = query.filter(Task.category == category_filter.strip())
+    if q and q.strip():
+        from sqlalchemy import or_
+        term = f"%{q.strip()}%"
+        query = query.filter(or_(Task.title.ilike(term), Task.description.ilike(term)))
+    if sort == "comments_desc":
+        query = db.query(Task, func.count(TaskComment.id).label("comment_count")).outerjoin(
+            TaskComment, Task.id == TaskComment.task_id
+        )
+        if status_filter:
+            query = query.filter(Task.status == status_filter)
+        if category_filter and category_filter.strip():
+            query = query.filter(Task.category == category_filter.strip())
+        if q and q.strip():
+            from sqlalchemy import or_
+            term = f"%{q.strip()}%"
+            query = query.filter(or_(Task.title.ilike(term), Task.description.ilike(term)))
+        query = query.group_by(Task.id).order_by(func.count(TaskComment.id).desc().nullslast(), Task.created_at.desc())
+        rows = query.offset(skip).limit(limit).all()
+        tasks_with_count = [(row[0], row[1]) for row in rows]
+    else:
+        if sort == "reward_desc":
+            query = query.order_by(Task.reward_points.desc().nullslast(), Task.created_at.desc())
+        elif sort == "created_at_asc":
+            query = query.order_by(Task.created_at.asc())
+        else:
+            query = query.order_by(Task.created_at.desc())
+        tasks = query.offset(skip).limit(limit).all()
+        tasks_with_count = [(t, db.query(TaskComment).filter(TaskComment.task_id == t.id).count()) for t in tasks]
     out = []
-    for t in tasks:
+    for t, comment_count in tasks_with_count:
         _maybe_auto_confirm(t, db)
         db.refresh(t)
         owner = db.query(User).filter(User.id == t.owner_id).first()
@@ -461,6 +694,7 @@ def list_tasks_public(
             "creator_agent_name": creator_agent.name if creator_agent else None,
             "reward_points": getattr(t, "reward_points", 0) or 0,
             "subscription_count": sub_count,
+            "comment_count": comment_count,
             "invited_agent_ids": invited if invited else [],
             "submitted_at": t.submitted_at.isoformat() if getattr(t, "submitted_at", None) else None,
             "verification_deadline_at": t.verification_deadline_at.isoformat() if getattr(t, "verification_deadline_at", None) else None,
@@ -468,6 +702,51 @@ def list_tasks_public(
             **_task_extra(t),
         })
     return {"tasks": out, "total": len(out)}
+
+
+@app.get("/tasks/created-by-me")
+def list_my_created_tasks(
+    skip: int = 0,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """当前用户发布的任务（我创建的任务）。"""
+    uid = int(current_user["user_id"])
+    query = db.query(Task).filter(Task.owner_id == uid).order_by(Task.created_at.desc())
+    tasks = query.offset(skip).limit(limit).all()
+    out = []
+    for t in tasks:
+        _maybe_auto_confirm(t, db)
+        db.refresh(t)
+        owner = db.query(User).filter(User.id == t.owner_id).first()
+        sub_count = db.query(TaskSubscription).filter(TaskSubscription.task_id == t.id).count()
+        comment_count = db.query(TaskComment).filter(TaskComment.task_id == t.id).count()
+        invited = getattr(t, "invited_agent_ids", None)
+        creator_agent = db.query(Agent).filter(Agent.id == t.creator_agent_id).first() if getattr(t, "creator_agent_id", None) else None
+        out.append({
+            "id": t.id,
+            "title": t.title,
+            "description": (t.description or "")[:200],
+            "status": t.status,
+            "priority": t.priority or "medium",
+            "task_type": t.task_type or "general",
+            "owner_id": t.owner_id,
+            "publisher_name": owner.username if owner else "",
+            "agent_id": t.agent_id,
+            "creator_agent_id": getattr(t, "creator_agent_id", None),
+            "creator_agent_name": creator_agent.name if creator_agent else None,
+            "reward_points": getattr(t, "reward_points", 0) or 0,
+            "subscription_count": sub_count,
+            "comment_count": comment_count,
+            "invited_agent_ids": invited if invited else [],
+            "submitted_at": t.submitted_at.isoformat() if getattr(t, "submitted_at", None) else None,
+            "verification_deadline_at": t.verification_deadline_at.isoformat() if getattr(t, "verification_deadline_at", None) else None,
+            "created_at": t.created_at.isoformat() if t.created_at else None,
+            **_task_extra(t),
+        })
+    total = db.query(Task).filter(Task.owner_id == uid).count()
+    return {"tasks": out, "total": total}
 
 
 @app.post("/tasks")
@@ -509,6 +788,8 @@ def publish_task(
         extra["duration_estimate"] = (body.duration_estimate or "").strip()[:50]
     if getattr(body, "skills", None) and isinstance(body.skills, list):
         extra["skills"] = [str(s).strip()[:50] for s in body.skills if s][:20]
+    category = (getattr(body, "category", None) or "").strip()[:64] or None
+    requirements = (getattr(body, "requirements", None) or "").strip() or None
     task = Task(
         title=body.title,
         description=body.description,
@@ -521,6 +802,8 @@ def publish_task(
         reward_points=reward_points,
         completion_webhook_url=webhook_url if webhook_url else None,
         invited_agent_ids=invited_ids if invited_ids else None,
+        category=category,
+        requirements=requirements,
         input_data=extra if extra else None,
     )
     db.add(task)
@@ -537,6 +820,9 @@ def publish_task(
         )
         db.add(tx)
         db.commit()
+    discord_webhook = (getattr(body, "discord_webhook_url", None) or "").strip()
+    if discord_webhook:
+        _push_task_to_discord(task, discord_webhook, _FRONTEND_URL)
     return {"id": task.id, "title": task.title, "status": task.status, "reward_points": reward_points}
 
 
@@ -547,11 +833,17 @@ def subscribe_task(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    """订阅任务：用我的 Agent 接取该任务（需登录）"""
+    """订阅任务：用我的 Agent 接取该任务（需登录）。任务已被接取后不可再由其他 Agent 接取。"""
     uid = int(current_user["user_id"])
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
+    # 已被接取的任务不允许其他 Agent 再次接取（同一接取者重复订阅由下面 existing 返回「已订阅过」）
+    if task.agent_id is not None and task.agent_id != body.agent_id:
+        raise HTTPException(
+            status_code=403,
+            detail="该任务已被接取，无法由其他 Agent 再次接取",
+        )
     invited = getattr(task, "invited_agent_ids", None)
     if invited and isinstance(invited, list) and len(invited) > 0:
         if body.agent_id not in [int(x) for x in invited]:
@@ -724,6 +1016,208 @@ async def get_task_by_id(task_id: int, db: Session = Depends(get_db)):
         "created_at": task.created_at.isoformat() if task.created_at else None,
         **_task_extra(task),
     }
+
+
+@app.get("/tasks/{task_id}/comments")
+def list_task_comments(task_id: int, db: Session = Depends(get_db)):
+    """任务评论列表（公开）。"""
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    comments = db.query(TaskComment).filter(TaskComment.task_id == task_id).order_by(TaskComment.created_at.asc()).all()
+    out = []
+    for c in comments:
+        user = db.query(User).filter(User.id == c.user_id).first()
+        agent = db.query(Agent).filter(Agent.id == c.agent_id).first() if getattr(c, "agent_id", None) else None
+        out.append({
+            "id": c.id,
+            "task_id": c.task_id,
+            "user_id": c.user_id,
+            "author_name": user.username if user else "",
+            "agent_id": getattr(c, "agent_id", None),
+            "agent_name": agent.name if agent else None,
+            "kind": getattr(c, "kind", None) or "message",
+            "content": c.content,
+            "created_at": c.created_at.isoformat() if c.created_at else None,
+        })
+    return {"comments": out}
+
+
+class PostCommentBody(BaseModel):
+    content: str = ""
+    agent_id: Optional[int] = None  # A2A: 以该 Agent 身份留言（需为当前用户的 Agent）
+    kind: str = "message"  # message | status_update
+
+
+@app.post("/tasks/{task_id}/comments")
+def post_task_comment(
+    task_id: int,
+    body: PostCommentBody,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """发布任务评论（需登录）。支持 A2A：传入 agent_id 可以 Agent 身份留言，kind 可为 status_update 表示状态同步。"""
+    uid = int(current_user["user_id"])
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    content = (body.content or "").strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="评论内容不能为空")
+    agent_id = body.agent_id
+    kind = (body.kind or "message").strip().lower() or "message"
+    if kind not in ("message", "status_update"):
+        kind = "message"
+    if agent_id is not None:
+        agent = db.query(Agent).filter(Agent.id == agent_id, Agent.owner_id == uid).first()
+        if not agent:
+            raise HTTPException(status_code=400, detail="Agent 不存在或不属于当前用户")
+    comment = TaskComment(
+        task_id=task_id,
+        user_id=uid,
+        content=content,
+        agent_id=agent_id,
+        kind=kind,
+    )
+    db.add(comment)
+    db.commit()
+    db.refresh(comment)
+    user = db.query(User).filter(User.id == uid).first()
+    agent = db.query(Agent).filter(Agent.id == comment.agent_id).first() if getattr(comment, "agent_id", None) else None
+    return {
+        "id": comment.id,
+        "task_id": comment.task_id,
+        "user_id": comment.user_id,
+        "author_name": user.username if user else "",
+        "agent_id": getattr(comment, "agent_id", None),
+        "agent_name": agent.name if agent else None,
+        "kind": getattr(comment, "kind", None) or "message",
+        "content": comment.content,
+        "created_at": comment.created_at.isoformat() if comment.created_at else None,
+    }
+
+
+def _a2a_can_access_task(task: Task, uid: int, db: Session) -> bool:
+    """A2A：当前用户是否为任务发布者或接取者（Agent 所属用户）。"""
+    if task.owner_id == uid:
+        return True
+    if task.agent_id:
+        agent = db.query(Agent).filter(Agent.id == task.agent_id).first()
+        if agent and agent.owner_id == uid:
+            return True
+    return False
+
+
+# ---------- A2A 协议：任务状态同步与留言 ----------
+class A2AMessageBody(BaseModel):
+    content: str = ""
+    agent_id: Optional[int] = None
+    kind: str = "message"  # message | status_update
+
+
+@app.get("/a2a/tasks/{task_id}")
+def a2a_get_task(
+    task_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """A2A：获取任务状态，供 Agent 同步。需登录且为任务发布者或接取者。"""
+    uid = int(current_user["user_id"])
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    if not _a2a_can_access_task(task, uid, db):
+        raise HTTPException(status_code=403, detail="无权访问该任务")
+    owner = db.query(User).filter(User.id == task.owner_id).first()
+    executor = db.query(Agent).filter(Agent.id == task.agent_id).first() if task.agent_id else None
+    return {
+        "id": task.id,
+        "title": task.title,
+        "description": task.description or "",
+        "status": task.status,
+        "owner_id": task.owner_id,
+        "publisher_name": owner.username if owner else "",
+        "agent_id": task.agent_id,
+        "executor_agent_name": executor.name if executor else None,
+        "reward_points": getattr(task, "reward_points", 0) or 0,
+        "submitted_at": task.submitted_at.isoformat() if getattr(task, "submitted_at", None) else None,
+        "verification_deadline_at": task.verification_deadline_at.isoformat() if getattr(task, "verification_deadline_at", None) else None,
+        "created_at": task.created_at.isoformat() if task.created_at else None,
+        "completed_at": task.completed_at.isoformat() if getattr(task, "completed_at", None) else None,
+    }
+
+
+@app.post("/a2a/tasks/{task_id}/messages")
+def a2a_post_message(
+    task_id: int,
+    body: A2AMessageBody,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """A2A：在任务下留言或发送状态更新。需登录且为任务发布者或接取者；可选 agent_id 表示以该 Agent 身份发言。"""
+    uid = int(current_user["user_id"])
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    if not _a2a_can_access_task(task, uid, db):
+        raise HTTPException(status_code=403, detail="无权在该任务下留言")
+    content = (body.content or "").strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="内容不能为空")
+    agent_id = body.agent_id
+    kind = (body.kind or "message").strip().lower() or "message"
+    if kind not in ("message", "status_update"):
+        kind = "message"
+    if agent_id is not None:
+        agent = db.query(Agent).filter(Agent.id == agent_id, Agent.owner_id == uid).first()
+        if not agent:
+            raise HTTPException(status_code=400, detail="Agent 不存在或不属于当前用户")
+    comment = TaskComment(task_id=task_id, user_id=uid, content=content, agent_id=agent_id, kind=kind)
+    db.add(comment)
+    db.commit()
+    db.refresh(comment)
+    agent = db.query(Agent).filter(Agent.id == comment.agent_id).first() if getattr(comment, "agent_id", None) else None
+    return {
+        "id": comment.id,
+        "task_id": comment.task_id,
+        "agent_id": getattr(comment, "agent_id", None),
+        "agent_name": agent.name if agent else None,
+        "kind": getattr(comment, "kind", None) or "message",
+        "content": comment.content,
+        "created_at": comment.created_at.isoformat() if comment.created_at else None,
+    }
+
+
+@app.get("/a2a/tasks/{task_id}/messages")
+def a2a_list_messages(
+    task_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """A2A：拉取任务下的留言/状态更新。需登录且为任务发布者或接取者。"""
+    uid = int(current_user["user_id"])
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    if not _a2a_can_access_task(task, uid, db):
+        raise HTTPException(status_code=403, detail="无权查看该任务留言")
+    comments = db.query(TaskComment).filter(TaskComment.task_id == task_id).order_by(TaskComment.created_at.asc()).all()
+    out = []
+    for c in comments:
+        agent = db.query(Agent).filter(Agent.id == c.agent_id).first() if getattr(c, "agent_id", None) else None
+        user = db.query(User).filter(User.id == c.user_id).first()
+        out.append({
+            "id": c.id,
+            "task_id": c.task_id,
+            "user_id": c.user_id,
+            "author_name": user.username if user else "",
+            "agent_id": getattr(c, "agent_id", None),
+            "agent_name": agent.name if agent else None,
+            "kind": getattr(c, "kind", None) or "message",
+            "content": c.content,
+            "created_at": c.created_at.isoformat() if c.created_at else None,
+        })
+    return {"messages": out}
 
 
 @app.post("/tasks/{task_id}/execute")

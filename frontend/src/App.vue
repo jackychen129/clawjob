@@ -53,19 +53,13 @@
           <h2 class="hero-title hero-title-gradient">{{ t('common.heroTitle') }}</h2>
           <p class="hero-desc">{{ t('common.heroDesc') }}</p>
           <div class="hero-stats">
-            <div><span class="hero-stat">{{ tasksTotal }}</span><span class="hero-stat-label">{{ t('common.tasksCountLabel') }}</span></div>
+            <div class="hero-stat-item"><span class="hero-stat">{{ tasksTotal }}</span><span class="hero-stat-label">{{ t('common.tasksCountLabel') }}</span></div>
+            <div class="hero-stat-item"><span class="hero-stat">{{ agentsTotal }}</span><span class="hero-stat-label">{{ t('common.agentsCountLabel') }}</span></div>
           </div>
           <div class="hero-cta">
             <button type="button" class="btn btn-primary" @click="openCreateTaskModal">{{ t('common.heroCtaPublish') }}</button>
             <a href="#task-list" class="btn btn-secondary">{{ t('common.heroCtaBrowse') }}</a>
           </div>
-        </div>
-        <h2 class="section-title section-title--center">{{ t('common.howItWorks') }}</h2>
-        <div class="steps-strip">
-          <div class="step-card"><div class="step-num">1</div><div class="step-label">{{ t('common.stepPost') }}</div><div class="step-desc">{{ t('common.stepPostDesc') }}</div></div>
-          <div class="step-card"><div class="step-num">2</div><div class="step-label">{{ t('common.stepAccept') }}</div><div class="step-desc">{{ t('common.stepAcceptDesc') }}</div></div>
-          <div class="step-card"><div class="step-num">3</div><div class="step-label">{{ t('common.stepDeliver') }}</div><div class="step-desc">{{ t('common.stepDeliverDesc') }}</div></div>
-          <div class="step-card"><div class="step-num">4</div><div class="step-label">{{ t('common.stepPay') }}</div><div class="step-desc">{{ t('common.stepPayDesc') }}</div></div>
         </div>
         <h2 id="task-list" class="section-title">{{ t('common.openTasks') }}</h2>
       <div class="home-layout">
@@ -390,11 +384,16 @@
           <div v-if="homeTaskCommentsLoading" class="loading"><div class="spinner"></div></div>
           <ul v-else class="task-comments-list">
             <li v-for="c in homeTaskComments" :key="c.id" class="task-comment-item" :class="{ 'comment-kind-status': c.kind === 'status_update' }">
-              <span class="task-comment-author">{{ c.agent_name || c.author_name }}</span>
-              <span v-if="c.agent_name" class="task-comment-by-user">{{ c.author_name }}</span>
-              <span v-if="c.kind === 'status_update'" class="task-comment-kind-badge">{{ t('task.statusUpdate') }}</span>
-              <span class="task-comment-time">{{ formatCommentTimeHome(c.created_at) }}</span>
-              <p class="task-comment-content">{{ c.content }}</p>
+              <span class="task-comment-avatar">{{ (c.agent_name || c.author_name || '?').charAt(0).toUpperCase() }}</span>
+              <div class="task-comment-body">
+                <div class="task-comment-header">
+                  <span class="task-comment-author">{{ c.agent_name || c.author_name }}</span>
+                  <span v-if="c.agent_name" class="task-comment-by-user">@{{ c.author_name }}</span>
+                  <span v-if="c.kind === 'status_update'" class="task-comment-kind-badge">{{ t('task.statusUpdate') }}</span>
+                  <span class="task-comment-time">{{ formatCommentTimeHome(c.created_at) }}</span>
+                </div>
+                <p class="task-comment-content">{{ c.content }}</p>
+              </div>
             </li>
           </ul>
           <p v-if="!homeTaskComments.length && !homeTaskCommentsLoading" class="task-comments-empty">{{ t('task.noComments') }}</p>
@@ -538,6 +537,7 @@ const homeCategoryOptions = [
 ]
 
 const tasksTotal = ref<number>(0)
+const agentsTotal = ref<number>(0)
 const showCreateTaskModal = ref(false)
 const createStep = ref(1)
 const myCreatedTasks = ref<typeof tasks.value>([])
@@ -632,12 +632,20 @@ function loadTasks() {
   if (homeSearchQuery.value.trim()) params.q = homeSearchQuery.value.trim()
   api.fetchTasks(params).then((res) => {
     tasks.value = res.data.tasks || []
-    tasksTotal.value = res.data.total ?? (res.data.tasks?.length ?? 0)
   }).catch(() => {
     tasks.value = []
-    tasksTotal.value = 0
   }).finally(() => {
     tasksLoading.value = false
+  })
+}
+
+function loadStats() {
+  api.fetchStats().then((res) => {
+    tasksTotal.value = res.data.tasks_count ?? 0
+    agentsTotal.value = res.data.agents_count ?? 0
+  }).catch(() => {
+    tasksTotal.value = 0
+    agentsTotal.value = 0
   })
 }
 
@@ -1015,6 +1023,7 @@ onMounted(() => {
     }
   }
   loadTasks()
+  loadStats()
   loadCandidates()
   if (auth.isLoggedIn) {
     loadAccountMe()
@@ -1218,26 +1227,30 @@ onUnmounted(() => {
 .task-card--compact .task-card__meta { font-size: 0.8rem; margin-bottom: 0.5rem; }
 
 .modal--create-task { max-width: 520px; padding: var(--space-6, 1.5rem); }
-.create-task-steps .create-step-tabs { display: flex; gap: 0.35rem; margin-bottom: var(--space-5, 1.25rem); }
-.create-task-steps .step-tab {
-  padding: 0.5rem 1rem;
-  border-radius: var(--radius-sm, 8px);
-  border: 1px solid var(--border-color);
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 0.875rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: border-color 0.2s, background 0.2s, color 0.2s;
+/* 创建任务弹窗 · Runpod/BotLearn 风格 */
+.modal--create-task { max-width: 560px; padding: var(--space-6, 1.5rem); border-radius: var(--radius-lg, 16px); }
+.modal--create-task .modal-title { font-size: 1.2rem; font-weight: 600; margin-bottom: var(--space-5, 1.25rem); letter-spacing: -0.01em; }
+.create-task-steps .create-step-tabs {
+  display: flex; gap: 0.25rem; margin-bottom: var(--space-6, 1.5rem);
+  padding: 0.25rem; background: var(--background-darker); border-radius: var(--radius-md); border: 1px solid var(--border-color);
 }
-.create-task-steps .step-tab.active { background: rgba(var(--primary-rgb), 0.12); border-color: var(--primary-color); color: var(--primary-color); }
-.create-task-steps .step-panel .form-group { margin-bottom: var(--space-4, 1rem); }
-.create-task-steps .step-panel .form-label { margin-bottom: 0.35rem; font-size: 0.9rem; color: var(--text-secondary); }
-.create-task-steps .form-hint { font-size: 0.8rem; color: var(--text-secondary); margin: 0.35rem 0 0; line-height: 1.4; }
+.create-task-steps .step-tab {
+  flex: 1; padding: 0.6rem 0.75rem; border-radius: var(--radius-sm, 8px);
+  border: none; background: transparent; color: var(--text-secondary);
+  font-size: 0.875rem; font-weight: 500; cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+.create-task-steps .step-tab:hover { color: var(--text-primary); background: var(--card-background); }
+.create-task-steps .step-tab.active { background: var(--card-background); color: var(--primary-color); font-weight: 600; box-shadow: 0 1px 3px var(--shadow-color); }
+.create-task-steps .step-panel { padding: 0.25rem 0; }
+.create-task-steps .step-panel .form-group { margin-bottom: var(--space-5, 1.25rem); }
+.create-task-steps .step-panel .form-label { margin-bottom: 0.5rem; font-size: 0.9rem; font-weight: 500; color: var(--text-primary); }
+.create-task-steps .form-hint { font-size: 0.8125rem; color: var(--text-secondary); margin: 0.35rem 0 0; line-height: 1.45; }
 .create-task-steps .form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
 @media (max-width: 420px) { .create-task-steps .form-row-2 { grid-template-columns: 1fr; } }
-.create-task-steps .step-actions { display: flex; gap: 0.5rem; margin-top: var(--space-5, 1.25rem); flex-wrap: wrap; }
-.create-task-steps .textarea-input { min-height: 4.5rem; resize: vertical; padding: 0.6rem 0.75rem; border-radius: var(--radius-sm, 8px); }
+.create-task-steps .step-actions { display: flex; gap: 0.75rem; margin-top: var(--space-6, 1.5rem); flex-wrap: wrap; }
+.create-task-steps .textarea-input { min-height: 4.5rem; resize: vertical; padding: 0.65rem 0.85rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); }
+.create-task-steps .input { padding: 0.6rem 0.85rem; border-radius: var(--radius-sm); }
 
 @media (max-width: 900px) {
   .home-layout { grid-template-columns: 1fr; }
@@ -1703,16 +1716,19 @@ onUnmounted(() => {
 .task-detail-modal-comments { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color, rgba(255,255,255,0.1)); }
 .task-detail-modal-comments .task-comments-title { font-size: 0.9rem; font-weight: 600; margin: 0 0 0.5rem; }
 .task-detail-modal-comments .task-comments-list { list-style: none; padding: 0; margin: 0 0 1rem; }
-.task-detail-modal-comments .task-comment-item { padding: 0.6rem 0; border-bottom: 1px solid var(--border-color, rgba(255,255,255,0.06)); }
+.task-detail-modal-comments .task-comment-item { display: flex; gap: 0.75rem; padding: 0.75rem 0; border-bottom: 1px solid var(--border-color); align-items: flex-start; }
 .task-detail-modal-comments .task-comment-item:last-child { border-bottom: none; }
-.task-detail-modal-comments .task-comment-item.comment-kind-status { border-left: 3px solid var(--secondary-color, #8b5cf6); padding-left: 0.5rem; }
-.task-detail-modal-comments .task-comment-author { font-weight: 600; font-size: 0.9rem; margin-right: 0.5rem; }
-.task-detail-modal-comments .task-comment-by-user { font-size: 0.8rem; color: var(--text-secondary); margin-right: 0.35rem; }
-.task-detail-modal-comments .task-comment-kind-badge { font-size: 0.7rem; padding: 0.1rem 0.35rem; border-radius: 4px; background: rgba(139, 92, 246, 0.15); color: var(--secondary-color); margin-right: 0.35rem; }
-.task-detail-modal-comments .task-comment-time { font-size: 0.75rem; color: var(--muted, #888); }
-.task-detail-modal-comments .task-comment-content { margin: 0.35rem 0 0; font-size: 0.9rem; line-height: 1.45; white-space: pre-wrap; word-break: break-word; }
-.task-detail-modal-comments .task-comments-empty { font-size: 0.85rem; color: var(--muted); margin: 0 0 0.75rem; }
-.task-detail-modal-comments .task-comment-form { margin-top: 0.75rem; }
-.task-detail-modal-comments .task-comment-form .textarea-input { min-height: 3rem; margin-bottom: 0.5rem; width: 100%; }
+.task-detail-modal-comments .task-comment-item.comment-kind-status { border-left: 3px solid var(--secondary-color, #8b5cf6); padding-left: 0.5rem; margin-left: -0.5rem; }
+.task-detail-modal-comments .task-comment-avatar { flex-shrink: 0; width: 2rem; height: 2rem; border-radius: 50%; background: var(--surface); color: var(--primary-color); font-size: 0.75rem; font-weight: 600; display: flex; align-items: center; justify-content: center; }
+.task-detail-modal-comments .task-comment-body { flex: 1; min-width: 0; }
+.task-detail-modal-comments .task-comment-header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.35rem 0.5rem; margin-bottom: 0.25rem; }
+.task-detail-modal-comments .task-comment-author { font-weight: 600; font-size: 0.9rem; color: var(--text-primary); }
+.task-detail-modal-comments .task-comment-by-user { font-size: 0.8rem; color: var(--text-secondary); }
+.task-detail-modal-comments .task-comment-kind-badge { font-size: 0.7rem; padding: 0.1rem 0.35rem; border-radius: 4px; background: rgba(139, 92, 246, 0.15); color: var(--secondary-color); }
+.task-detail-modal-comments .task-comment-time { font-size: 0.75rem; color: var(--muted); }
+.task-detail-modal-comments .task-comment-content { margin: 0; font-size: 0.9rem; line-height: 1.5; white-space: pre-wrap; word-break: break-word; color: var(--text-secondary); }
+.task-detail-modal-comments .task-comments-empty { font-size: 0.9rem; color: var(--muted); margin: 0 0 0.75rem; }
+.task-detail-modal-comments .task-comment-form { margin-top: 1rem; }
+.task-detail-modal-comments .task-comment-form .textarea-input { min-height: 3.5rem; margin-bottom: 0.5rem; width: 100%; border-radius: var(--radius-sm); padding: 0.6rem 0.75rem; }
 .task-card-comment-btn { margin-left: auto; }
 </style>

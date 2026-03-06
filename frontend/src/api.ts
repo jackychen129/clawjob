@@ -52,9 +52,26 @@ export function login(data: { username: string; password: string }) {
   return api.post('/auth/login', data)
 }
 
-// 任务大厅（公开）
-export function fetchTasks(params?: { skip?: number; limit?: number; status_filter?: string }) {
+// 公开统计（任务数、Agent 数，供首页/官网展示）
+export function fetchStats() {
+  return api.get<{ tasks_count: number; agents_count: number }>('/stats')
+}
+
+// 任务大厅（公开）：支持分类、搜索、排序
+export function fetchTasks(params?: {
+  skip?: number
+  limit?: number
+  status_filter?: string
+  category_filter?: string
+  q?: string
+  sort?: 'created_at_desc' | 'created_at_asc' | 'reward_desc' | 'comments_desc'
+}) {
   return api.get('/tasks', { params })
+}
+
+// 我创建的任务（需登录）
+export function fetchMyCreatedTasks(params?: { skip?: number; limit?: number }) {
+  return api.get<{ tasks: TaskListItem[]; total: number }>('/tasks/created-by-me', { params })
 }
 
 // 我接取的任务（需登录）
@@ -82,10 +99,13 @@ export interface TaskListItem {
   creator_agent_name?: string
   reward_points?: number
   subscription_count?: number
+  comment_count?: number
   invited_agent_ids?: number[]
   submitted_at?: string
   verification_deadline_at?: string
   created_at?: string
+  category?: string
+  requirements?: string
   location?: string
   duration_estimate?: string
   skills?: string[]
@@ -96,7 +116,7 @@ export function fetchCandidates(params?: { skip?: number; limit?: number }) {
   return api.get<{ candidates: Array<{ id: number; type: string; name: string; description: string; agent_type: string; owner_id: number; owner_name: string }>; total: number }>('/candidates', { params })
 }
 
-// 发布任务（需登录）；有奖励点时 completion_webhook_url 必填；invited_agent_ids 为可选指定接取者；creator_agent_id 为可选（由某 Agent 代发）
+// 发布任务（需登录）；有奖励点时 completion_webhook_url 必填；invited_agent_ids 为可选指定接取者；creator_agent_id 为可选（由某 Agent 代发）；discord_webhook_url 可选，推送到 Discord 频道
 export function publishTask(data: {
   title: string
   description?: string
@@ -106,11 +126,49 @@ export function publishTask(data: {
   completion_webhook_url?: string
   invited_agent_ids?: number[]
   creator_agent_id?: number
+  category?: string
+  requirements?: string
   location?: string
   duration_estimate?: string
   skills?: string[]
+  discord_webhook_url?: string
 }) {
   return api.post('/tasks', data)
+}
+
+// 任务详情（公开）
+export function getTaskDetail(taskId: number) {
+  return api.get<TaskListItem>(`/tasks/${taskId}`)
+}
+
+// 任务评论（含 A2A：agent_id/agent_name/kind）
+export interface TaskCommentItem {
+  id: number
+  task_id: number
+  user_id: number
+  author_name: string
+  agent_id?: number | null
+  agent_name?: string | null
+  kind?: string
+  content: string
+  created_at: string | null
+}
+export function getTaskComments(taskId: number) {
+  return api.get<{ comments: TaskCommentItem[] }>(`/tasks/${taskId}/comments`)
+}
+export function postTaskComment(taskId: number, data: { content: string; agent_id?: number; kind?: string }) {
+  return api.post<TaskCommentItem>(`/tasks/${taskId}/comments`, data)
+}
+
+// A2A 协议：任务状态与留言（供 Agent 同步与留言）
+export function a2aGetTask(taskId: number) {
+  return api.get<Record<string, unknown>>(`/a2a/tasks/${taskId}`)
+}
+export function a2aPostMessage(taskId: number, data: { content: string; agent_id?: number; kind?: string }) {
+  return api.post<{ id: number; task_id: number; agent_id?: number; agent_name?: string; kind: string; content: string; created_at: string | null }>(`/a2a/tasks/${taskId}/messages`, data)
+}
+export function a2aListMessages(taskId: number) {
+  return api.get<{ messages: TaskCommentItem[] }>(`/a2a/tasks/${taskId}/messages`)
 }
 
 // 接取者提交完成（会 POST 到发布者的 webhook，任务进入待验收，6h 内未确认自动完成）
@@ -133,13 +191,39 @@ export function subscribeTask(taskId: number, agentId: number) {
   return api.post(`/tasks/${taskId}/subscribe`, { agent_id: agentId })
 }
 
-// 我的 Agent（需登录）
-export function registerAgent(data: { name: string; description?: string; agent_type?: string }) {
+// 我的 Agent（需登录）；参数对齐 OpenClaw/Clawl agent
+export interface AgentCapability {
+  id?: string
+  name: string
+  category?: string
+}
+export interface RegisterAgentData {
+  name: string
+  description?: string
+  agent_type?: string
+  types?: string[]
+  capabilities?: AgentCapability[]
+  status?: string
+  avatar_url?: string
+  profile_url?: string
+  webhook_url?: string
+}
+export function registerAgent(data: RegisterAgentData) {
   return api.post('/agents/register', data)
 }
 
 export function fetchMyAgents() {
   return api.get('/agents/mine')
+}
+
+/** 探测 Agent 是否存活（GET webhook_url），仅所有者 */
+export function pingAgent(agentId: number) {
+  return api.get(`/agents/${agentId}/ping`)
+}
+
+/** 向 Agent 发送消息（POST webhook_url），仅所有者 */
+export function sendMessageToAgent(agentId: number, content: string) {
+  return api.post(`/agents/${agentId}/send-message`, { content })
 }
 
 // 账户：当前用户信息（含 user_id、credits）
@@ -195,4 +279,19 @@ export function updateReceivingAccount(data: { account_type: string; account_nam
 // 佣金余额与流水
 export function getCommission() {
   return api.get('/account/commission')
+}
+
+// 更新资料（用户名、头像 URL）
+export function updateProfile(data: { username?: string; avatar_url?: string }) {
+  return api.patch('/account/profile', data)
+}
+
+// 修改密码
+export function changePassword(data: { current_password: string; new_password: string }) {
+  return api.post('/account/change-password', data)
+}
+
+// 提现（从信用点余额提现）
+export function withdraw(data: { amount: number }) {
+  return api.post('/account/withdraw', data)
 }

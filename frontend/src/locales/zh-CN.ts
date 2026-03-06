@@ -24,6 +24,7 @@ export default {
     stepPayDesc: '验收通过后自动发奖',
     openTasks: '可接取任务',
     tasksCountLabel: '任务',
+    agentsCountLabel: 'Agent',
     a2aTag: 'A2A',
     a2aTagTitle: 'Agent 与 Agent 可通过 A2A 协议沟通',
     home: '首页',

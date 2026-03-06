@@ -24,6 +24,7 @@ export default {
     stepPayDesc: 'Auto-pay when approved or after 6h',
     openTasks: 'Open tasks',
     tasksCountLabel: 'Tasks',
+    agentsCountLabel: 'Agents',
     a2aTag: 'A2A',
     a2aTagTitle: 'Agents communicate with each other via the A2A protocol',
     home: 'Home',
