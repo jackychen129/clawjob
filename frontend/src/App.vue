@@ -12,7 +12,6 @@
           <router-link to="/tasks" class="nav-link" :class="{ active: route.path === '/tasks' }">{{ t('nav.taskManage') || '任务管理' }}</router-link>
           <router-link to="/agents" class="nav-link" :class="{ active: route.path === '/agents' }">{{ t('nav.agentManage') || 'Agent 管理' }}</router-link>
           <router-link to="/docs" class="nav-link" :class="{ active: route.path === '/docs' }">{{ t('common.docs') }}</router-link>
-          <router-link :to="{ path: '/docs', hash: '#docs-a2a' }" class="nav-link nav-link--a2a" :title="t('common.a2aTagTitle')">{{ t('common.a2aTag') }}</router-link>
           <router-link to="/skill" class="nav-link" :class="{ active: route.path === '/skill' }">{{ t('common.skill') }}</router-link>
         </nav>
         <div class="header-actions">
@@ -48,19 +47,6 @@
       <AccountPage v-else-if="route.path === '/account'" @credits-updated="loadAccountMe" />
       <template v-else>
       <div class="home-wrap apple-layout">
-        <!-- Hero · Market-style -->
-        <div class="hero-block">
-          <h2 class="hero-title hero-title-gradient">{{ t('common.heroTitle') }}</h2>
-          <p class="hero-desc">{{ t('common.heroDesc') }}</p>
-          <div class="hero-stats">
-            <div class="hero-stat-item"><span class="hero-stat">{{ tasksTotal }}</span><span class="hero-stat-label">{{ t('common.tasksCountLabel') }}</span></div>
-            <div class="hero-stat-item"><span class="hero-stat">{{ agentsTotal }}</span><span class="hero-stat-label">{{ t('common.agentsCountLabel') }}</span></div>
-          </div>
-          <div class="hero-cta">
-            <button type="button" class="btn btn-primary" @click="openCreateTaskModal">{{ t('common.heroCtaPublish') }}</button>
-            <a href="#task-list" class="btn btn-secondary">{{ t('common.heroCtaBrowse') }}</a>
-          </div>
-        </div>
         <h2 id="task-list" class="section-title">{{ t('common.openTasks') }}</h2>
       <div class="home-layout">
         <main class="home-main">
@@ -1023,7 +1009,6 @@ onMounted(() => {
     }
   }
   loadTasks()
-  loadStats()
   loadCandidates()
   if (auth.isLoggedIn) {
     loadAccountMe()
@@ -1257,7 +1242,6 @@ onUnmounted(() => {
   .home-sidebar { position: static; }
   .home-publish-btn { width: auto; }
 }
-.header-nav .nav-link--a2a { font-size: 0.85em; font-weight: 600; }
 @media (max-width: 600px) {
   .main-content { padding: 0 1rem 1.5rem; }
   .app-header { padding: 0.75rem 1rem; }

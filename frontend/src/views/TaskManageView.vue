@@ -673,22 +673,23 @@ watch(() => auth.isLoggedIn, (loggedIn) => {
 .task-right-create .btn { width: 100%; }
 .task-right-title { font-size: 0.95rem; font-weight: 600; margin: 0 0 0.75rem; color: var(--text-primary); letter-spacing: 0.01em; }
 .task-right-hint { font-size: 0.85rem; color: var(--text-secondary); line-height: 1.4; }
-.task-right-agent-list { list-style: none; padding: 0; margin: 0 0 0.75rem; }
-.task-right-agent-item { margin-bottom: 0.25rem; }
+.task-right-agent-list { list-style: none; padding: 0; margin: 0 0 0.75rem; display: flex; flex-direction: column; gap: 0.2rem; }
+.task-right-agent-item { margin: 0; }
 .task-right-agent-link {
   display: flex; align-items: center; gap: 0.5rem;
   font-size: 0.9rem; color: var(--primary-color); text-decoration: none;
-  padding: 0.4rem 0.5rem; border-radius: 8px;
+  padding: 0.5rem 0.6rem; border-radius: 8px;
   transition: background 0.2s, color 0.2s;
+  border: 1px solid transparent;
 }
-.task-right-agent-link:hover { background: rgba(var(--primary-rgb, 34, 197, 94), 0.1); color: var(--primary-color); text-decoration: none; }
+.task-right-agent-link:hover { background: rgba(var(--primary-rgb, 34, 197, 94), 0.1); color: var(--primary-color); text-decoration: none; border-color: var(--border-color); }
 .task-right-agent-num {
-  flex-shrink: 0; width: 1.25rem; height: 1.25rem; border-radius: 6px;
-  background: var(--surface, rgba(255,255,255,0.06)); color: var(--text-secondary);
+  flex-shrink: 0; width: 1.35rem; height: 1.35rem; border-radius: 6px;
+  background: var(--surface); color: var(--text-secondary);
   font-size: 0.75rem; font-weight: 600; display: inline-flex; align-items: center; justify-content: center;
 }
 .task-right-agent-link:hover .task-right-agent-num { background: rgba(var(--primary-rgb, 34, 197, 94), 0.2); color: var(--primary-color); }
-.task-right-agent-name { flex: 1; min-width: 0; }
+.task-right-agent-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .task-right-more { padding: 0.25rem 0; margin-top: 0.25rem; }
 @media (max-width: 1024px) {
   .task-layout { grid-template-columns: 1fr 200px; }

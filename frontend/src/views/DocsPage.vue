@@ -1,25 +1,6 @@
 <template>
   <div class="docs-page">
-    <div class="docs-layout">
-      <aside class="docs-toc-wrap">
-        <nav class="docs-toc card" aria-label="文档目录">
-          <div class="card-content">
-            <h2 class="docs-toc-title">{{ tocTitle }}</h2>
-            <ul class="docs-toc-list">
-              <li><a href="#docs-intro" class="docs-toc-link" @click.prevent="scrollToId('docs-intro')">{{ projectIntroLabel }}</a></li>
-              <li v-for="(section, idx) in sections" :key="idx">
-                <a :href="'#' + section.id" class="docs-toc-link" @click.prevent="scrollToId(section.id)">{{ section.title }}</a>
-              </li>
-            </ul>
-            <p class="docs-toc-other-label">{{ t('docsPage.otherDocs') || '其他文档' }}</p>
-            <div class="docs-nav docs-nav-in-toc">
-              <router-link to="/docs/openclaw-quickstart" class="btn btn-primary btn-sm">{{ openClawQuickstartLabel }}</router-link>
-              <router-link to="/docs/manual" class="btn btn-secondary btn-sm">{{ userManualLabel }}</router-link>
-            </div>
-          </div>
-        </nav>
-      </aside>
-
+    <div class="docs-layout docs-layout--single">
       <main class="docs-content">
         <section id="docs-intro" class="docs-section docs-intro-section card">
           <div class="card-content">
@@ -27,7 +8,6 @@
             <div class="docs-body">
               <p class="docs-para">{{ intro }}</p>
               <p class="docs-para">{{ projectIntroExtra }}</p>
-              <router-link to="/docs/manual" class="btn btn-primary btn-sm">{{ fullManual }}</router-link>
             </div>
           </div>
         </section>
@@ -40,11 +20,6 @@
             </div>
           </div>
         </section>
-
-        <div class="docs-back-wrap docs-links">
-          <router-link to="/docs/manual" class="btn btn-primary docs-manual-btn">{{ userManualLabel }} · {{ fullManual }}</router-link>
-          <router-link to="/" class="btn btn-secondary docs-back-btn">{{ backToHome }}</router-link>
-        </div>
       </main>
     </div>
   </div>
@@ -152,109 +127,35 @@ function scrollToId(id: string) {
 .docs-nav-in-toc { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .docs-nav-in-toc a { text-decoration: none; }
 
-.docs-layout {
-  display: grid;
-  grid-template-columns: 200px 1fr;
-  gap: 2rem;
-  align-items: start;
-}
-@media (max-width: 768px) {
-  .docs-layout {
-    grid-template-columns: 1fr;
-    gap: 1.5rem;
-  }
-}
-
-.docs-toc-wrap {
-  position: relative;
-}
-.docs-toc {
-  position: sticky;
-  top: 4rem;
-  border-radius: 12px;
-  overflow: hidden;
-  border: 1px solid var(--border-color);
-  background: var(--card-background);
-  border-left: 4px solid var(--primary-color);
-  box-shadow: 0 2px 12px var(--shadow-color, rgba(0,0,0,0.3));
-}
-.docs-toc .card-content {
-  padding: 1rem 1.25rem;
-  color: var(--text-secondary);
-}
-.docs-toc-title {
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin: 0 0 0.75rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 1px solid var(--border-color);
-}
-.docs-toc-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-.docs-toc-list li { margin: 0; }
-.docs-toc-link {
-  display: block;
-  padding: 0.4rem 0;
-  font-size: 0.9rem;
-  color: var(--text-secondary);
-  text-decoration: none;
-  border-radius: 6px;
-  transition: color 0.2s, background 0.2s;
-}
-.docs-toc-link:hover {
-  color: var(--primary-color);
-  background: rgba(var(--primary-rgb, 34, 197, 94), 0.08);
-}
-
-.docs-content {
-  min-width: 0;
-}
+.docs-layout { max-width: 720px; margin: 0 auto; }
+.docs-layout--single { display: block; }
+.docs-content { min-width: 0; }
 .docs-page .docs-section.card {
-  border-radius: 12px;
-  overflow: hidden;
+  border-radius: var(--radius-md, 12px);
   border: 1px solid var(--border-color);
   background: var(--card-background);
-  margin-bottom: 1.5rem;
-  box-shadow: 0 2px 10px var(--shadow-color, rgba(0,0,0,0.25));
+  margin-bottom: 0.75rem;
 }
 .docs-section.card .card-content {
-  padding: 1.35rem 1.5rem;
+  padding: 0.85rem 1.1rem;
   color: var(--text-secondary);
 }
 .docs-section-title {
-  font-size: 1.15rem;
+  font-size: 1rem;
   font-weight: 600;
   color: var(--text-primary);
-  margin: 0 0 0.85rem;
-  padding-bottom: 0.5rem;
+  margin: 0 0 0.5rem;
+  padding-bottom: 0.35rem;
   border-bottom: 1px solid var(--border-color);
 }
-.docs-intro-section { margin-bottom: 1.5rem; }
+.docs-intro-section { margin-bottom: 0.5rem; }
 .docs-body {
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   color: var(--text-secondary);
-  line-height: 1.7;
+  line-height: 1.55;
 }
 .docs-para {
-  margin: 0 0 0.9rem;
+  margin: 0 0 0.5rem;
 }
 .docs-para:last-child { margin-bottom: 0; }
-.docs-back-wrap {
-  margin-top: 2rem;
-  text-align: center;
-}
-.docs-links {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 0.75rem;
-}
-.docs-manual-btn, .docs-back-btn {
-  text-decoration: none;
-  display: inline-block;
-}
 </style>
