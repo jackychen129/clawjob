@@ -1,21 +1,28 @@
 <template>
-  <div id="app" class="app-container">
-    <header class="app-header">
+  <div id="app" class="app-container relative min-h-screen">
+    <!-- Aura 背景光晕：角落深紫色渐变模糊块 -->
+    <div class="aura-glow aura-glow--tl" aria-hidden="true"></div>
+    <div class="aura-glow aura-glow--br" aria-hidden="true"></div>
+
+    <header class="app-header sticky top-0 z-[50] backdrop-blur-md bg-zinc-900/80 border-b border-zinc-800">
       <div class="header-content">
-        <router-link to="/" class="header-brand" :title="t('common.home')">
-          <h1 class="header-brand-logo">ClawJob</h1>
+        <a href="https://clawjob.com.cn" class="header-brand" :title="t('common.websiteHome') || '返回官网'" target="_self">
+          <h1 class="header-brand-logo">ClawJob <span class="header-brand-website">{{ t('common.websiteShort') || '官网' }}</span></h1>
           <p class="tagline">{{ t('common.tagline') }}</p>
           <p class="header-eyebrow">{{ t('common.heroEyebrow') }}</p>
-        </router-link>
+        </a>
         <nav class="header-nav">
           <router-link to="/" class="nav-link" :class="{ active: route.path === '/' }">{{ t('common.home') }}</router-link>
+          <router-link to="/dashboard" class="nav-link" :class="{ active: route.path === '/dashboard' }">{{ t('nav.dashboard') || '实况' }}</router-link>
+          <router-link to="/leaderboard" class="nav-link" :class="{ active: route.path === '/leaderboard' }">{{ t('nav.leaderboard') || '排行榜' }}</router-link>
           <router-link to="/tasks" class="nav-link" :class="{ active: route.path === '/tasks' }">{{ t('nav.taskManage') || '任务管理' }}</router-link>
           <router-link to="/agents" class="nav-link" :class="{ active: route.path === '/agents' }">{{ t('nav.agentManage') || 'Agent 管理' }}</router-link>
+          <router-link to="/playbook" class="nav-link" :class="{ active: route.path === '/playbook' }">{{ t('nav.playbook') || 'Playbook' }}</router-link>
+          <router-link to="/rental" class="nav-link" :class="{ active: route.path === '/rental' }">{{ t('nav.rental') || '租赁' }}</router-link>
           <router-link to="/docs" class="nav-link" :class="{ active: route.path === '/docs' }">{{ t('common.docs') }}</router-link>
           <router-link to="/skill" class="nav-link" :class="{ active: route.path === '/skill' }">{{ t('common.skill') }}</router-link>
         </nav>
         <div class="header-actions">
-          <button type="button" class="btn btn-text" data-testid="help-btn" @click="showHelpModal = true">{{ t('help.menu') }}</button>
           <select v-model="locale" class="locale-select" @change="onLocaleChange">
             <option value="zh-CN">中文</option>
             <option value="en">English</option>
@@ -37,11 +44,15 @@
       <span>{{ t('common.oauthErrorPrefix') }} {{ t('oauthError.' + oauthError.split(':')[0], t('oauthError.unknown')) }}{{ oauthError.includes(':') ? ' ' + oauthError.split(':').slice(1).join(':') : '' }}</span>
       <button type="button" class="btn btn-sm" @click="oauthError = ''">{{ t('common.dismiss') }}</button>
     </div>
-    <main class="main-content" :key="route.path">
+    <main class="main-content relative z-0 px-6 sm:px-8 md:px-12 max-w-7xl mx-auto w-full flex-1 py-8 md:py-12" :key="route.path">
       <SkillPage v-if="route.path === '/skill'" />
       <DocsPage v-else-if="route.path === '/docs'" />
       <ManualPage v-else-if="route.path === '/docs/manual'" />
       <OpenClawQuickstartPage v-else-if="route.path === '/docs/openclaw-quickstart'" />
+      <DashboardView v-else-if="route.path === '/dashboard'" />
+      <LeaderboardView v-else-if="route.path === '/leaderboard'" />
+      <PlaybookOnboardingView v-else-if="route.path === '/playbook'" />
+      <AgentRentalView v-else-if="route.path === '/rental'" />
       <TaskManageView v-else-if="route.path === '/tasks'" @success="showSuccess" />
       <AgentManageView v-else-if="route.path === '/agents'" />
       <AccountPage v-else-if="route.path === '/account'" @credits-updated="loadAccountMe" />
@@ -79,12 +90,18 @@
               </select>
             </div>
           </div>
-          <div v-if="tasksLoading" class="loading"><div class="spinner"></div></div>
-          <div v-else class="task-list home-task-list">
+          <div v-if="tasksLoading" class="task-list home-task-list space-y-4">
+            <div v-for="i in 4" :key="i" class="tw-skeleton-card p-6">
+              <div class="tw-skeleton w-3/4 h-5"></div>
+              <div class="tw-skeleton h-4"></div>
+              <div class="tw-skeleton h-4 w-1/2"></div>
+            </div>
+          </div>
+          <div v-else class="task-list home-task-list grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
           <div
             v-for="task in tasks"
             :key="task.id"
-            class="card task-card task-card--structured"
+            class="card tw-card task-card task-card--structured p-6 h-full min-w-0 hover:border-purple-500/50 hover:bg-white/[0.02]"
             :data-task-id="task.id"
             :data-task-status="task.status"
             :data-task-location="task.location || ''"
@@ -99,15 +116,24 @@
               <span class="badge" :class="task.status">{{ t('status.' + task.status) || task.status }}</span>
               <span v-if="task.reward_points" class="task-card__reward" data-attr="reward">{{ t('task.reward', { n: task.reward_points }) }}</span>
             </div>
-            <h3 class="task-card__title">{{ task.title }}</h3>
-            <p class="task-card__desc">{{ (task.description || t('common.noDescription')).slice(0, 150) }}{{ (task.description || '').length > 150 ? '…' : '' }}</p>
+            <h3 class="task-card__title truncate min-w-0">{{ task.title }}</h3>
+            <p class="task-card__desc line-clamp-2 min-w-0 break-words">{{ (task.description || t('common.noDescription')).slice(0, 150) }}{{ (task.description || '').length > 150 ? '…' : '' }}</p>
             <p v-if="task.requirements" class="task-card__requirements-snippet">{{ (task.requirements || '').replace(/\s+/g, ' ').slice(0, 80) }}{{ (task.requirements || '').length > 80 ? '…' : '' }}</p>
             <div class="task-card__attrs" role="list" aria-label="Task attributes">
               <span v-if="task.location" class="task-attr task-attr--location" data-attr="location" role="listitem">{{ task.location }}</span>
               <span v-if="task.duration_estimate" class="task-attr task-attr--duration" data-attr="duration_estimate" role="listitem">{{ task.duration_estimate }}</span>
               <span v-for="s in getTaskSkills(task)" :key="s" class="task-attr task-attr--skill" data-attr="skill" role="listitem">{{ s }}</span>
             </div>
-            <p class="task-card__meta">{{ t('task.publisher') }}：{{ task.publisher_name }} · {{ task.subscription_count }}{{ t('task.subscribers') }}<span v-if="task.comment_count != null"> · 💬 {{ task.comment_count }}{{ t('task.commentCountLabel') }}</span><span v-if="task.invited_agent_ids && task.invited_agent_ids.length" class="invited-only-badge"> · {{ t('task.invitedOnly') }}</span></p>
+            <p class="task-card__meta">
+              <span class="task-publisher-row">
+                <span class="task-publisher-avatar" aria-hidden="true">{{ (task.publisher_name || '?').charAt(0).toUpperCase() }}</span>
+                <span>{{ task.publisher_name }}</span>
+              </span>
+              <span v-if="task.created_at" class="task-created-at"> · {{ formatTaskCreatedAt(task.created_at) }}</span>
+              <span> · {{ task.subscription_count }}{{ t('task.subscribers') }}</span>
+              <span v-if="task.comment_count != null"> · 💬 {{ task.comment_count }}{{ t('task.commentCountLabel') }}</span>
+              <span v-if="task.invited_agent_ids && task.invited_agent_ids.length" class="invited-only-badge"> · {{ t('task.invitedOnly') }}</span>
+            </p>
             <p v-if="task.status === 'pending_verification' && task.verification_deadline_at" class="hint deadline-hint">{{ t('task.deadlineHint', { date: formatDeadline(task.verification_deadline_at) }) }}</p>
             <div class="card-content task-card__actions-wrap">
               <div class="task-actions">
@@ -145,9 +171,10 @@
               </div>
             </div>
           </div>
-          <div v-if="!tasks.length && !tasksLoading" class="empty-state">
-            <p class="empty">{{ t('task.emptyTasks') }}</p>
-            <button type="button" class="btn btn-primary" @click="showCreateTaskModal = true">{{ t('task.publishFirst') }}</button>
+          <div v-if="!tasks.length && !tasksLoading" class="tw-empty-state empty-state">
+            <div class="tw-empty-state__icon" aria-hidden="true">📋</div>
+            <p class="tw-empty-state__text">{{ t('task.emptyTasks') }}</p>
+            <button type="button" class="tw-btn mt-2 border border-purple-500/50 text-purple-400 hover:bg-purple-500/10" @click="showCreateTaskModal = true">{{ t('task.publishFirst') }}</button>
           </div>
           </div>
         </main>
@@ -155,6 +182,21 @@
           <button type="button" class="btn btn-primary home-publish-btn" @click="openCreateTaskModal">
             {{ t('task.publish') || '发布任务' }}
           </button>
+          <div class="home-sidebar-recent-agents">
+            <h3 class="home-sidebar-title">{{ t('task.recentAgents') || '最近注册的 Agent' }}</h3>
+            <div v-if="recentAgentsLoading" class="loading"><div class="spinner"></div></div>
+            <div v-else class="recent-agents-cards">
+              <div v-for="a in recentAgents" :key="a.id" class="recent-agent-card">
+                <span class="recent-agent-card-avatar" aria-hidden="true">{{ (a.name || 'A').charAt(0).toUpperCase() }}</span>
+                <div class="recent-agent-card-body">
+                  <span class="recent-agent-name">{{ a.name }}</span>
+                  <span class="recent-agent-meta">{{ a.owner_name }} · {{ a.agent_type }}</span>
+                </div>
+              </div>
+            </div>
+            <p v-if="!recentAgents.length && !recentAgentsLoading" class="hint recent-agents-empty">{{ t('task.noRecentAgents') || '暂无' }}</p>
+            <router-link v-if="recentAgents.length" to="/agents" class="btn btn-text btn-sm recent-agents-link">{{ t('task.viewAllAgents') || '查看全部' }}</router-link>
+          </div>
         </aside>
       </div>
       </div>
@@ -167,7 +209,7 @@
           <div
             v-for="task in myCreatedTasks"
             :key="task.id"
-            class="card task-card task-card--compact"
+            class="card tw-card task-card task-card--compact p-5"
           >
             <div class="task-card__top">
               <span v-if="task.category" class="task-card__category">{{ taskCategoryLabel(task.category) }}</span>
@@ -185,10 +227,10 @@
       <!-- 我的 Agent（全宽） -->
       <section id="section-my-agents" class="section section-full" aria-labelledby="agent-heading">
         <h2 id="agent-heading" class="section-title">{{ t('agent.myAgents') }}</h2>
-        <div v-if="!auth.isLoggedIn" class="card">
+        <div v-if="!auth.isLoggedIn" class="card tw-card p-6">
           <div class="card-content agent-gate">
-            <p class="hint">{{ t('agent.registerHint') }}</p>
-            <button type="button" class="btn btn-primary" @click="showAuthModal = true">{{ t('agent.loginToRegister') }}</button>
+            <p class="hint text-zinc-400">{{ t('agent.registerHint') }}</p>
+            <button type="button" class="tw-btn tw-btn-primary" @click="showAuthModal = true">{{ t('agent.loginToRegister') }}</button>
           </div>
         </div>
         <div v-else>
@@ -231,6 +273,19 @@
             <button type="button" class="step-tab" :class="{ active: createStep === 3 }" @click="createStep = 3">3. {{ t('task.optional') }}</button>
           </div>
           <div v-show="createStep === 1" class="step-panel">
+            <div class="form-group form-group--template">
+              <label class="form-label">{{ t('task.useTemplate') || '使用模板' }}</label>
+              <select v-model="selectedTaskTemplateId" class="input select-input" @change="applyTaskTemplateHome">
+                <option value="none">{{ t('task.templateNone') || '从空白创建' }}</option>
+                <option value="general">{{ t('task.templateGeneral') || '通用任务' }}</option>
+                <option value="best_practice">{{ t('task.templateBestPractice') || '最佳实践分享' }}</option>
+                <option value="development">{{ t('task.templateDevelopment') || '需求/开发' }}</option>
+                <option value="research">{{ t('task.templateResearch') || '调研' }}</option>
+                <option value="writing">{{ t('task.templateWriting') || '写作' }}</option>
+                <option value="data">{{ t('task.templateData') || '数据标注' }}</option>
+              </select>
+              <p class="form-hint">{{ t('task.templateHint') || '选择模板后可自动填充描述与要求结构，便于接取者理解' }}</p>
+            </div>
             <div class="form-group">
               <label class="form-label">{{ t('agentGuide.fieldTitle') }} <span class="required">*</span></label>
               <input v-model="publishForm.title" class="input" type="text" :placeholder="t('task.title')" minlength="2" />
@@ -292,6 +347,27 @@
             </div>
           </div>
           <div v-show="createStep === 3" class="step-panel">
+            <div class="form-group candidates-section-create">
+              <label class="form-label form-label--block">{{ t('task.invitedCandidates') }}</label>
+              <p class="form-hint">{{ t('task.invitedCandidatesHint') }}</p>
+              <div v-if="candidatesLoading" class="loading-inline"><div class="spinner"></div></div>
+              <div v-else class="candidates-cards create-task-candidates">
+                <label v-for="c in candidates" :key="c.id" class="candidate-card-create" :class="{ selected: publishForm.invited_agent_ids?.includes(c.id) }">
+                  <input type="checkbox" :value="c.id" v-model="publishForm.invited_agent_ids" class="candidate-card-checkbox" />
+                  <span class="candidate-card-avatar" aria-hidden="true">{{ (c.name || 'A').charAt(0).toUpperCase() }}</span>
+                  <div class="candidate-card-body">
+                    <span class="candidate-name">{{ c.name }}</span>
+                    <span class="candidate-owner">{{ c.owner_name }}</span>
+                    <span class="candidate-meta">
+                      <span class="candidate-type-badge" :class="(c.type || 'agent')">{{ (c.type === 'human' ? t('task.receiverHuman') : t('task.receiverAgent')) || (c.type === 'human' ? '人类' : 'Agent') }}</span>
+                      {{ c.agent_type }}<span v-if="c.points != null" class="candidate-points"> · 💰 {{ c.points }}</span>
+                    </span>
+                    <p v-if="c.description" class="candidate-desc">{{ (c.description || '').slice(0, 60) }}{{ (c.description || '').length > 60 ? '…' : '' }}</p>
+                  </div>
+                </label>
+              </div>
+              <p v-if="!candidates.length && !candidatesLoading" class="hint">{{ t('task.noCandidates') }}</p>
+            </div>
             <div class="form-group">
               <label class="form-label">{{ t('task.discordWebhookLabel') }}</label>
               <input v-model="publishForm.discord_webhook_url" class="input full-width" type="url" :placeholder="t('task.discordWebhookPlaceholder')" />
@@ -356,15 +432,28 @@
       </div>
     </div>
 
-    <!-- 首页任务详情 + 评论弹窗 -->
+    <!-- 首页任务详情 + 评论弹窗（BotLearn 风格：发布者/时间/结构化信息） -->
     <div v-if="homeTaskDetail" class="modal-mask" @click.self="closeHomeTaskDetail">
       <div class="modal modal--task-detail">
         <div class="task-detail-modal-head">
           <h3 class="task-detail-modal-title">{{ homeTaskDetail.title }}</h3>
           <button type="button" class="btn btn-text btn-sm" aria-label="关闭" @click="closeHomeTaskDetail">×</button>
         </div>
-        <p class="task-detail-modal-meta">{{ t('task.publisher') }}：{{ homeTaskDetail.publisher_name }} · <span class="badge" :class="homeTaskDetail.status">{{ t('status.' + homeTaskDetail.status) || homeTaskDetail.status }}</span><span v-if="homeTaskDetail.reward_points" class="detail-reward"> · {{ t('task.reward', { n: homeTaskDetail.reward_points }) }}</span></p>
+        <div class="task-detail-modal-meta-row">
+          <span class="task-publisher-avatar" aria-hidden="true">{{ (homeTaskDetail.publisher_name || '?').charAt(0).toUpperCase() }}</span>
+          <span>{{ t('task.publisher') }}：{{ homeTaskDetail.publisher_name }}</span>
+          <span v-if="homeTaskDetail.created_at" class="task-created-at"> · {{ formatTaskCreatedAt(homeTaskDetail.created_at) }}</span>
+          <span class="badge" :class="homeTaskDetail.status">{{ t('status.' + homeTaskDetail.status) || homeTaskDetail.status }}</span>
+          <span v-if="homeTaskDetail.reward_points" class="detail-reward"> · {{ t('task.reward', { n: homeTaskDetail.reward_points }) }}</span>
+        </div>
         <p class="task-detail-modal-desc">{{ homeTaskDetail.description || t('common.noDescription') }}</p>
+        <dl v-if="homeTaskDetail.requirements || homeTaskDetail.category || (getTaskSkills(homeTaskDetail).length) || homeTaskDetail.location || homeTaskDetail.duration_estimate" class="task-detail-modal-attrs">
+          <template v-if="homeTaskDetail.category"><dt>{{ t('task.detailCategory') }}</dt><dd>{{ taskCategoryLabel(homeTaskDetail.category) }}</dd></template>
+          <template v-if="homeTaskDetail.requirements"><dt>{{ t('task.detailRequirements') }}</dt><dd class="task-detail-requirements">{{ homeTaskDetail.requirements }}</dd></template>
+          <template v-if="getTaskSkills(homeTaskDetail).length"><dt>{{ t('task.detailSkills') }}</dt><dd><span v-for="s in getTaskSkills(homeTaskDetail)" :key="s" class="task-attr task-attr--skill">{{ s }}</span></dd></template>
+          <template v-if="homeTaskDetail.location"><dt>{{ t('task.detailLocation') }}</dt><dd>{{ homeTaskDetail.location }}</dd></template>
+          <template v-if="homeTaskDetail.duration_estimate"><dt>{{ t('task.detailDuration') }}</dt><dd>{{ homeTaskDetail.duration_estimate }}</dd></template>
+        </dl>
         <div class="task-detail-modal-comments">
           <h4 class="task-comments-title">{{ t('task.comments') }}</h4>
           <div v-if="homeTaskCommentsLoading" class="loading"><div class="spinner"></div></div>
@@ -411,43 +500,6 @@
       </div>
     </div>
 
-    <!-- 帮助文档弹窗：OpenClaw Skill 下载与配置 -->
-    <div v-if="showHelpModal" class="modal-mask" data-testid="help-modal-mask" @click.self="showHelpModal = false">
-      <div class="modal modal-help" data-testid="help-modal">
-        <h3>{{ t('help.title') }}</h3>
-        <section class="help-section">
-          <h4>{{ t('help.downloadTitle') }}</h4>
-          <ol class="help-list">
-            <li v-for="(stepKey, i) in helpDownloadStepKeys" :key="i">{{ t(stepKey) }}</li>
-          </ol>
-          <p class="help-note">{{ t('help.downloadNote') }}</p>
-        </section>
-        <section class="help-section">
-          <h4>{{ t('help.configTitle') }}</h4>
-          <ul class="help-list help-vars">
-            <li><code>CLAWJOB_API_URL</code> — {{ t('help.configApiUrl') }}</li>
-            <li><code>CLAWJOB_ACCESS_TOKEN</code> — {{ t('help.configToken') }}</li>
-          </ul>
-          <p class="help-note">{{ t('help.configNote') }}</p>
-        </section>
-        <section class="help-section">
-          <h4>{{ t('help.quickRegisterTitle') }}</h4>
-          <pre class="help-code">export CLAWJOB_API_URL=http://localhost:8000
-python3 tools/quick_register.py &lt;用户名&gt; &lt;邮箱&gt; &lt;密码&gt;</pre>
-          <p class="help-note">{{ t('help.quickRegisterNote') }}</p>
-        </section>
-        <section class="help-section">
-          <h4>{{ t('help.a2aTitle') }}</h4>
-          <p class="help-note">{{ t('help.a2aDesc') }}</p>
-        </section>
-        <p class="help-skill-link">
-          <router-link to="/docs" class="btn btn-text" @click="showHelpModal = false">{{ t('help.fullDocsLink') }}</router-link>
-          <router-link to="/skill" class="btn btn-primary" @click="showHelpModal = false">{{ t('help.fullSetupLink') }}</router-link>
-        </p>
-        <button type="button" class="btn btn-secondary close-btn" @click="showHelpModal = false">{{ t('common.close') }}</button>
-      </div>
-    </div>
-
     <!-- 成功提示 Toast -->
     <Transition name="toast">
       <div v-if="successToast" class="toast" role="status">{{ successToast }}</div>
@@ -460,13 +512,14 @@ python3 tools/quick_register.py &lt;用户名&gt; &lt;邮箱&gt; &lt;密码&gt;<
           <router-link to="/skill">{{ t('common.skill') }}</router-link>
           <a href="https://github.com" target="_blank" rel="noopener noreferrer">GitHub</a>
         </nav>
-        <p>ClawJob · {{ t('common.tagline') }}</p>
+        <p>ClawJob · {{ t('common.tagline') }} <span class="build-id" aria-hidden="true">· {{ buildId }}</span></p>
       </div>
     </footer>
   </div>
 </template>
 
 <script setup lang="ts">
+declare const __BUILD_ID__: string | undefined
 import { ref, reactive, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -480,11 +533,17 @@ import TaskManageView from './views/TaskManageView.vue'
 import AgentManageView from './views/AgentManageView.vue'
 import AccountPage from './views/AccountPage.vue'
 import OpenClawQuickstartPage from './views/OpenClawQuickstartPage.vue'
+import DashboardView from './views/DashboardView.vue'
+import LeaderboardView from './views/LeaderboardView.vue'
+import PlaybookOnboardingView from './views/PlaybookOnboardingView.vue'
+import AgentRentalView from './views/AgentRentalView.vue'
+import { getTemplateById } from './constants/taskTemplates'
 
 const route = useRoute()
 const _i18n = useI18n()
 const t = typeof _i18n.t === 'function' ? _i18n.t : safeT
 const auth = useAuthStore()
+const buildId = typeof __BUILD_ID__ !== 'undefined' ? String(__BUILD_ID__).slice(-8) : 'dev'
 const locale = ref<LocaleKey>('zh-CN')
 function onLocaleChange() {
   setLocale(locale.value)
@@ -529,6 +588,19 @@ const createStep = ref(1)
 const myCreatedTasks = ref<typeof tasks.value>([])
 const myCreatedTasksLoading = ref(false)
 
+const selectedTaskTemplateId = ref('none')
+function applyTaskTemplateHome() {
+  const tpl = getTemplateById(selectedTaskTemplateId.value)
+  if (tpl && tpl.id !== 'none') {
+    publishForm.category = tpl.category
+    publishForm.description = tpl.description
+    publishForm.requirements = tpl.requirements
+    publishForm.skills_text = tpl.skills_text
+    publishForm.location = tpl.location
+    publishForm.duration_estimate = tpl.duration_estimate
+  }
+}
+
 const publishForm = reactive({
   title: '',
   description: '',
@@ -545,8 +617,10 @@ const publishForm = reactive({
 const publishLoading = ref(false)
 const publishError = ref('')
 
-const candidates = ref<Array<{ id: number; name: string; description: string; agent_type: string; owner_name: string; points?: number }>>([])
+const candidates = ref<Array<{ id: number; type?: string; name: string; description: string; agent_type: string; owner_name: string; points?: number }>>([])
 const candidatesLoading = ref(false)
+const recentAgents = ref<Array<{ id: number; name: string; agent_type: string; owner_name: string }>>([])
+const recentAgentsLoading = ref(false)
 const myAgents = ref<Array<{ id: number; name: string; description: string; agent_type: string }>>([])
 const agentsLoading = ref(false)
 const agentForm = reactive({ name: '', description: '' })
@@ -567,7 +641,6 @@ const submitCompletionLoading = ref(false)
 const confirmLoading = ref<number | null>(null)
 const rejectLoading = ref<number | null>(null)
 
-const showHelpModal = ref(false)
 const SKILL_BANNER_KEY = 'clawjob_skill_banner_dismissed'
 const showSkillBanner = ref(false)
 const showAgentGuide = ref(false)
@@ -606,7 +679,6 @@ function onEscapeKey(e: KeyboardEvent) {
   if (showAuthModal.value) { showAuthModal.value = false; return }
   if (submitCompletionTask.value) { submitCompletionTask.value = null; return }
   if (subscribeTaskItem.value) { subscribeTaskItem.value = null; return }
-  if (showHelpModal.value) { showHelpModal.value = false }
 }
 const accountCredits = ref(0)
 
@@ -651,6 +723,19 @@ function formatCommentTimeHome(iso: string | null) {
   return iso.slice(0, 16).replace('T', ' ')
 }
 
+function formatTaskCreatedAt(iso: string | undefined) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  const now = new Date()
+  const diffMin = (now.getTime() - d.getTime()) / 60000
+  if (diffMin < 1) return t('task.justNow')
+  if (diffMin < 60) return t('task.minutesAgo', { n: Math.floor(diffMin) })
+  if (diffMin < 1440) return t('task.hoursAgo', { n: Math.floor(diffMin / 60) })
+  const diffDays = Math.floor(diffMin / 1440)
+  if (diffDays < 31) return (t('task.daysAgo') as string).replace('{n}', String(diffDays))
+  return iso.slice(0, 10)
+}
+
 function openHomeTaskDetail(task: api.TaskListItem) {
   homeTaskDetail.value = { ...task }
   homeTaskComments.value = []
@@ -686,11 +771,13 @@ function openCreateTaskModal() {
   publishError.value = ''
   createStep.value = 1
   showCreateTaskModal.value = true
+  loadCandidates()
 }
 
 function closeCreateTaskModal() {
   showCreateTaskModal.value = false
   publishError.value = ''
+  selectedTaskTemplateId.value = 'none'
 }
 
 function loadMyCreatedTasks() {
@@ -707,10 +794,6 @@ function loadMyCreatedTasks() {
 
 function doPublishFromModal() {
   doPublish()
-  if (!publishLoading.value) {
-    closeCreateTaskModal()
-    loadMyCreatedTasks()
-  }
 }
 
 function loadCandidates() {
@@ -721,6 +804,17 @@ function loadCandidates() {
     candidates.value = []
   }).finally(() => {
     candidatesLoading.value = false
+  })
+}
+
+function loadRecentAgents() {
+  recentAgentsLoading.value = true
+  api.fetchCandidates({ limit: 8, sort: 'recent' }).then((res) => {
+    recentAgents.value = (res.data.candidates || []).map((c: { id: number; name: string; agent_type: string; owner_name: string }) => ({ id: c.id, name: c.name, agent_type: c.agent_type, owner_name: c.owner_name }))
+  }).catch(() => {
+    recentAgents.value = []
+  }).finally(() => {
+    recentAgentsLoading.value = false
   })
 }
 
@@ -844,7 +938,8 @@ function doPublish() {
     loadTasks()
     loadMyCreatedTasks()
   }).catch((e) => {
-    publishError.value = e.response?.data?.detail || t('task.publishErrorGeneric')
+    const d = e.response?.data?.detail
+    publishError.value = Array.isArray(d) ? (d.map((x: { msg?: string }) => x?.msg || '').filter(Boolean).join('; ') || t('task.publishErrorGeneric')) : (typeof d === 'string' ? d : t('task.publishErrorGeneric'))
   }).finally(() => {
     publishLoading.value = false
   })
@@ -946,7 +1041,6 @@ function loadAccountMe() {
   }).catch(() => {})
 }
 
-const helpDownloadStepKeys = ['help.step1', 'help.step2', 'help.step3']
 
 onMounted(() => {
   // 延后到 onMounted 再拉取，避免首屏被阻塞或未挂载时请求导致异常
@@ -1010,6 +1104,7 @@ onMounted(() => {
   }
   loadTasks()
   loadCandidates()
+  loadRecentAgents()
   if (auth.isLoggedIn) {
     loadAccountMe()
     loadMyAgents()
@@ -1023,23 +1118,14 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* 仅保留品牌区竖排：Logo + Tagline 叠放 */
 .header-brand {
   display: flex;
   flex-direction: column;
   gap: 0;
-  text-decoration: none;
-  color: inherit;
   cursor: pointer;
 }
-.header-brand:hover { color: var(--text-primary); }
 .header-brand:hover .tagline { color: var(--text-primary); }
-.header-brand-logo { margin: 0; font-size: 1.25rem; font-weight: 700; }
-.tagline {
-  font-size: 0.8rem;
-  color: var(--text-secondary);
-  margin: 0.15rem 0 0 0;
-  font-weight: 400;
-}
 .header-eyebrow {
   font-size: 0.7rem;
   color: var(--text-secondary);
@@ -1048,671 +1134,12 @@ onUnmounted(() => {
   letter-spacing: 0.02em;
 }
 .btn-text {
-  background: transparent;
-  border: none;
-  color: var(--primary-color);
   font-size: 0.9rem;
   padding: 0.35rem 0.5rem;
-  cursor: pointer;
 }
-.btn-text:hover { text-decoration: underline; }
-.btn-text:focus-visible { outline: none; box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.3); border-radius: 4px; }
-.modal-help {
-  max-width: 520px;
-  max-height: 90vh;
-  overflow-y: auto;
-}
-.modal-help h3 { margin-bottom: 1rem; }
-.help-section { margin-bottom: 1.25rem; }
-.help-section h4 { font-size: 0.95rem; margin-bottom: 0.5rem; color: var(--text-secondary); }
-.help-list { margin: 0 0 0 1.25rem; padding: 0; font-size: 0.9rem; line-height: 1.5; color: var(--text-primary); }
-.help-list li { margin-bottom: 0.35rem; }
-.help-vars { list-style: none; margin-left: 0; }
-.help-vars code { background: var(--background-darker); padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.85rem; }
-.help-note { font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.5rem; }
-.help-code {
-  background: var(--background-darker);
-  padding: 0.75rem;
-  border-radius: 6px;
-  font-size: 0.85rem;
-  overflow-x: auto;
-  white-space: pre;
-  margin: 0.5rem 0 0 0;
-}
-.credits-badge {
-  margin-right: 0.75rem;
-  font-size: 0.9rem;
-  color: var(--text-secondary);
-}
-.reward-points {
-  color: var(--primary-color);
-}
-.task-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  align-items: center;
-  margin-top: 0.5rem;
-}
-.input-num {
-  min-width: 90px;
-  width: 90px;
-}
-.form-group.form-inline .input-num { flex-shrink: 0; }
-.publish-form .form-inline { margin-bottom: 0.5rem; }
-.publish-form .full-width { width: 100%; margin-top: 0.5rem; }
-.field-hint, .deadline-hint { margin-top: 0.35rem; font-size: 0.85rem; }
-.textarea { resize: vertical; min-height: 60px; }
-.app-container {
-  min-width: 0;
-  overflow-x: hidden;
-}
-.oauth-error-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.5rem 1rem;
-  background: var(--danger-color);
-  color: #fff;
-  font-size: 0.9rem;
-}
-.oauth-error-banner .btn { background: rgba(255,255,255,0.3); color: #fff; }
-.hero-section {
-  position: relative;
-  padding: 1.25rem 0 1.5rem;
-  margin-bottom: 1rem;
-}
-.hero-section.hero-home { padding: 1rem 0 1.25rem; }
-.hero-inner {
-  position: relative;
-  max-width: 48rem;
-  margin: 0 auto;
-  text-align: center;
-}
-.hero-home .hero-inner { max-width: 40rem; }
-.hero-title {
-  font-size: clamp(1.5rem, 3.5vw, 2rem);
-  font-weight: 700;
-  color: var(--text-primary);
-  margin-bottom: 0.4rem;
-  line-height: 1.25;
-}
-.hero-home .hero-title { margin-bottom: 0.35rem; }
-.hero-title-gradient {
-  background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-.hero-desc {
-  font-size: 0.95rem;
-  color: var(--text-secondary);
-  max-width: 36rem;
-  margin: 0 auto;
-  line-height: 1.55;
-}
-.hero-home .hero-desc { font-size: 0.9rem; max-width: 32rem; }
-
-/* 首页 · 区块间距与 RunPod 风格一致 */
-.apple-layout { max-width: 1120px; margin: 0 auto; }
-.home-wrap .section-title {
-  margin-top: 0;
-  margin-bottom: var(--space-5, 1.25rem);
-}
-.home-wrap #task-list.section-title {
-  margin-top: 0.5rem;
-  margin-bottom: var(--space-5);
-}
-.home-layout {
-  display: grid;
-  grid-template-columns: 1fr 200px;
-  gap: 2rem;
-  align-items: start;
-}
-.home-main { min-width: 0; }
-.home-toolbar {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  margin-bottom: 1.25rem;
-}
-.home-search { max-width: 320px; }
-.home-filters {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem 1rem;
-}
-.home-categories { display: flex; flex-wrap: wrap; gap: 0.35rem; }
-.filter-chip {
-  padding: 0.4rem 0.75rem;
-  border-radius: 999px;
-  border: 1px solid var(--border, #333);
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 0.85rem;
-  cursor: pointer;
-  transition: border-color 0.2s, background 0.2s, color 0.2s;
-}
-.filter-chip:hover { border-color: var(--primary-color); color: var(--text-primary); }
-.filter-chip.active { background: rgba(var(--primary-rgb, 99, 102, 241), 0.12); border-color: var(--primary-color); color: var(--primary-color); }
-.home-sort { width: auto; min-width: 120px; }
-.home-task-list { display: flex; flex-direction: column; gap: 1rem; }
-.home-sidebar { position: sticky; top: 5rem; }
-.home-publish-btn { width: 100%; }
-.home-my-created {
-  margin-top: 3rem;
-  padding-top: 2rem;
-  border-top: 1px solid var(--border-color);
-}
-.apple-section .section-title { font-size: 1.1rem; margin-bottom: 1.25rem; }
-.my-created-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem; }
-.task-card--compact { padding: 1rem; }
-.task-card--compact .task-card__title { font-size: 1rem; margin-bottom: 0.35rem; }
-.task-card--compact .task-card__meta { font-size: 0.8rem; margin-bottom: 0.5rem; }
-
-.modal--create-task { max-width: 520px; padding: var(--space-6, 1.5rem); }
-/* 创建任务弹窗 · Runpod/BotLearn 风格 */
-.modal--create-task { max-width: 560px; padding: var(--space-6, 1.5rem); border-radius: var(--radius-lg, 16px); }
-.modal--create-task .modal-title { font-size: 1.2rem; font-weight: 600; margin-bottom: var(--space-5, 1.25rem); letter-spacing: -0.01em; }
-.create-task-steps .create-step-tabs {
-  display: flex; gap: 0.25rem; margin-bottom: var(--space-6, 1.5rem);
-  padding: 0.25rem; background: var(--background-darker); border-radius: var(--radius-md); border: 1px solid var(--border-color);
-}
-.create-task-steps .step-tab {
-  flex: 1; padding: 0.6rem 0.75rem; border-radius: var(--radius-sm, 8px);
-  border: none; background: transparent; color: var(--text-secondary);
-  font-size: 0.875rem; font-weight: 500; cursor: pointer;
-  transition: background 0.2s, color 0.2s;
-}
-.create-task-steps .step-tab:hover { color: var(--text-primary); background: var(--card-background); }
-.create-task-steps .step-tab.active { background: var(--card-background); color: var(--primary-color); font-weight: 600; box-shadow: 0 1px 3px var(--shadow-color); }
-.create-task-steps .step-panel { padding: 0.25rem 0; }
-.create-task-steps .step-panel .form-group { margin-bottom: var(--space-5, 1.25rem); }
-.create-task-steps .step-panel .form-label { margin-bottom: 0.5rem; font-size: 0.9rem; font-weight: 500; color: var(--text-primary); }
-.create-task-steps .form-hint { font-size: 0.8125rem; color: var(--text-secondary); margin: 0.35rem 0 0; line-height: 1.45; }
-.create-task-steps .form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
-@media (max-width: 420px) { .create-task-steps .form-row-2 { grid-template-columns: 1fr; } }
-.create-task-steps .step-actions { display: flex; gap: 0.75rem; margin-top: var(--space-6, 1.5rem); flex-wrap: wrap; }
-.create-task-steps .textarea-input { min-height: 4.5rem; resize: vertical; padding: 0.65rem 0.85rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); }
-.create-task-steps .input { padding: 0.6rem 0.85rem; border-radius: var(--radius-sm); }
-
-@media (max-width: 900px) {
-  .home-layout { grid-template-columns: 1fr; }
-  .home-sidebar { position: static; }
-  .home-publish-btn { width: auto; }
-}
-@media (max-width: 600px) {
-  .main-content { padding: 0 1rem 1.5rem; }
-  .app-header { padding: 0.75rem 1rem; }
-  .header-content { flex-wrap: wrap; gap: 0.5rem; }
-  .header-nav { margin-left: 0; }
-}
-.home-aside {
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
-}
-.agent-guide-card {
-  border-left: 4px solid var(--primary-color);
-}
-.agent-guide-card:hover {
-  transform: none;
-}
-.agent-guide-title {
-  font-size: 1rem;
-  margin-bottom: 0.5rem;
-  color: var(--text-primary);
-}
-.agent-guide-intro {
-  font-size: 0.9rem;
-  color: var(--text-secondary);
-  margin-bottom: 0.75rem;
-}
-.agent-guide-skill {
-  font-size: 0.9rem;
-  color: var(--text-secondary);
-  margin-bottom: 0.5rem;
-}
-.agent-guide-link {
-  color: var(--primary-color);
-  text-decoration: none;
-}
-.agent-guide-link:hover {
-  text-decoration: underline;
-}
-.agent-guide-examples {
-  margin: 0.75rem 0;
-  padding: 0.6rem 0.75rem;
-  background: var(--background-darker);
-  border-radius: 6px;
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-}
-.agent-guide-example-title {
-  font-weight: 600;
-  margin-bottom: 0.4rem;
-  color: var(--text-primary);
-}
-.agent-guide-example {
-  margin: 0.25rem 0;
-  line-height: 1.45;
-}
-.agent-guide-steps {
-  margin: 0 0 0.75rem 1.2rem;
-  padding: 0;
-  font-size: 0.9rem;
-  color: var(--text-secondary);
-  line-height: 1.5;
-}
-.agent-guide-steps li { margin-bottom: 0.35rem; }
-.agent-guide-api {
-  font-size: 0.8rem;
-  color: var(--text-secondary);
-  background: var(--background-darker);
-  padding: 0.6rem 0.75rem;
-  border-radius: 6px;
-  word-break: break-all;
-}
-.agent-guide-commission {
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-  margin-top: 0.5rem;
-}
-.form-group {
-  margin-bottom: 0.75rem;
-}
-.form-group.form-inline {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  align-items: center;
-}
-.form-label {
-  display: block;
-  font-size: 0.9rem;
-  font-weight: 500;
-  color: var(--text-secondary);
-  margin-bottom: 0.35rem;
-}
-.form-group.form-inline .form-label { margin-bottom: 0; margin-right: 0.25rem; }
-.required { color: var(--danger-color); }
-.section-full {
-  margin-top: 2rem;
-  padding-top: 2rem;
-  border-top: 1px solid var(--border-color);
-}
-.section {
-  margin-bottom: 2rem;
-}
-.section-title {
-  font-size: 1.2rem;
-  margin-bottom: 0.75rem;
-  color: var(--text-primary);
-}
-.task-hall-section .section-title { margin-top: 0; }
-
-/* 发布任务区块：卡片加左侧强调线、内边距与表单间距 */
-.section-publish .section-title {
-  font-size: 1.15rem;
-  font-weight: 600;
-  margin-bottom: 0.85rem;
-}
-.publish-card {
-  border-radius: 12px;
-  overflow: hidden;
-  border: 1px solid var(--border-color);
-  background: var(--card-background);
-  border-left: 4px solid var(--primary-color);
-  box-shadow: 0 2px 12px var(--shadow-color);
-}
-.publish-card .card-content {
-  padding: 1.25rem 1.5rem;
-}
-.publish-form .form-group {
-  margin-bottom: 1rem;
-}
-.publish-form .form-group:last-of-type { margin-bottom: 0; }
-.publish-gate {
-  padding: 1rem 0;
-}
-.publish-gate .hint { margin-bottom: 0.25rem; }
-.section-desc { margin-top: -0.5rem; margin-bottom: 0.75rem; font-size: 0.9rem; }
-.candidates-section { margin-bottom: 1rem; }
-.candidates-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 0.75rem;
-}
-.candidate-card {
-  padding: 0.75rem;
-}
-.candidate-card .card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-  margin-bottom: 0.35rem;
-}
-.candidate-card .card-header strong { font-size: 0.95rem; }
-.candidate-owner-badge { font-size: 0.8rem; color: var(--text-secondary); }
-.candidate-desc { font-size: 0.85rem; color: var(--text-secondary); margin: 0; line-height: 1.4; }
-.candidates-checkboxes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem 1rem;
-  max-height: 120px;
-  overflow-y: auto;
-  padding: 0.5rem 0;
-}
-.candidate-checkbox {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  font-size: 0.9rem;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.candidate-checkbox input { margin: 0; }
-.candidate-checkbox .candidate-name { color: var(--text-primary); }
-.candidate-checkbox .candidate-points { margin-left: 0.35rem; font-size: 0.8rem; color: var(--secondary-color, #8b5cf6); }
-.candidate-checkbox .candidate-owner { color: var(--text-secondary); font-size: 0.85rem; }
-.invited-only-badge {
-  margin-left: 0.5rem;
-  font-size: 0.75rem;
-  padding: 0.15rem 0.4rem;
-  border-radius: 4px;
-  background: var(--border-color);
-  color: var(--text-secondary);
-}
-
-/* 智能体快捷发布说明：默认折叠 */
-.agent-guide-wrap {
-  margin-top: 1rem;
-}
-.agent-guide-trigger {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.9rem;
-  color: var(--primary-color);
-  background: transparent;
-  border: 1px dashed var(--border-color);
-  border-radius: 8px;
-  cursor: pointer;
-  transition: border-color 0.2s, background 0.2s;
-}
-.agent-guide-trigger:hover {
-  border-color: var(--primary-color);
-  background: rgba(var(--primary-rgb, 59, 130, 246), 0.06);
-}
-.agent-guide-trigger-icon {
-  font-size: 1.1rem;
-  line-height: 1;
-}
-.agent-guide-card {
-  margin-top: 0;
-}
-.agent-guide-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  margin-bottom: 0.75rem;
-}
-.agent-guide-title {
-  font-size: 1rem;
-  margin: 0;
-  color: var(--text-primary);
-}
-.agent-guide-collapse {
-  flex-shrink: 0;
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-}
-.agent-guide-intro,
-.agent-guide-skill,
-.agent-guide-api,
-.agent-guide-commission {
-  font-size: 0.9rem;
-  color: var(--text-secondary);
-  margin: 0 0 0.5rem;
-}
-.agent-guide-link {
-  color: var(--primary-color);
-  text-decoration: none;
-}
-.agent-guide-link:hover { text-decoration: underline; }
-.agent-guide-steps {
-  margin: 0.5rem 0 0.75rem;
-  padding-left: 1.25rem;
-  font-size: 0.9rem;
-  color: var(--text-secondary);
-}
-.agent-guide-steps li { margin-bottom: 0.25rem; }
-.agent-guide-examples {
-  margin: 0.5rem 0 0.75rem;
-}
-.agent-guide-example-title {
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin: 0 0 0.35rem;
-}
-.agent-guide-example {
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-  margin: 0 0 0.2rem;
-  font-family: var(--font-mono, monospace);
-}
-
-.publish-card .form-inline,
-.agent-form-card .form-inline {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  align-items: center;
-}
-.publish-form .form-group:last-of-type { margin-bottom: 0; }
-.input {
-  padding: 0.5rem 0.75rem;
-  border-radius: 8px;
-  border: 1px solid var(--border-color);
-  background: var(--background-dark);
-  color: var(--text-primary);
-  min-width: 160px;
-  width: 100%;
-  transition: border-color 0.2s, box-shadow 0.2s;
-}
-.input:focus {
+.btn-text:focus-visible {
   outline: none;
-  border-color: var(--primary-color);
-  box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.2);
-}
-.form-group .input { min-width: 0; }
-.task-list {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-.task-card .badge {
-  font-size: 0.75rem;
-  padding: 0.2rem 0.5rem;
+  box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.3);
   border-radius: 4px;
-  background: var(--border-color);
 }
-.task-card .badge.open { background: var(--success-color); }
-.task-card .badge.pending_verification { background: #e6a800; color: #1a1a1a; }
-.task-card .meta, .desc-small {
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-  margin-top: 0.5rem;
-}
-.task-card--structured { padding: 1rem 1.25rem; }
-.task-card--structured .task-card__top { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.35rem; }
-.task-card--structured .task-card__type { font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.02em; }
-.task-card--structured .task-card__reward { margin-left: auto; font-size: 0.95rem; font-weight: 600; color: var(--primary-color); }
-.task-card--structured .task-card__title { font-size: 1.05rem; margin: 0 0 0.4rem; font-weight: 600; line-height: 1.3; }
-.task-card--structured .task-card__desc { font-size: 0.9rem; color: var(--text-secondary); margin: 0 0 0.5rem; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.task-card--structured .task-card__tags,
-.task-card--structured .task-card__attrs { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.5rem; }
-.task-tag, .task-attr { display: inline-block; font-size: 0.75rem; padding: 0.2rem 0.5rem; border-radius: 999px; background: var(--card-background); color: var(--text-secondary); border: 1px solid var(--border-color); }
-.task-tag--location, .task-attr--location { border-color: rgba(34, 197, 94, 0.5); color: #16a34a; }
-.task-tag--duration, .task-attr--duration { border-color: rgba(59, 130, 246, 0.5); color: #2563eb; }
-.task-tag--skill, .task-attr--skill { border-color: rgba(168, 85, 247, 0.5); color: #7c3aed; }
-.task-card--structured .task-card__meta { font-size: 0.8rem; color: var(--text-secondary); margin: 0 0 0.5rem; }
-.task-card--structured .task-card__actions-wrap { padding: 0; margin-top: 0.25rem; border: none; }
-.task-card__category { font-size: 0.75rem; padding: 0.2rem 0.5rem; background: var(--surface-700, #333); border-radius: 4px; margin-right: 0.35rem; }
-.task-card__requirements-snippet { font-size: 0.8rem; color: var(--text-secondary); margin: 0 0 0.4rem; padding-left: 0.5rem; border-left: 2px solid var(--surface-700); line-height: 1.35; }
-.task-card__priority { font-size: 0.7rem; padding: 0.15rem 0.4rem; border-radius: 4px; text-transform: uppercase; }
-.task-card__priority.priority--high { background: rgba(234, 179, 8, 0.2); color: #eab308; }
-.task-card__priority.priority--critical { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
-.task-card__priority.priority--low { background: rgba(148, 163, 184, 0.2); color: #94a3b8; }
-.section-candidates-compact { margin-top: 0.5rem; }
-.section-title--small { font-size: 1rem; margin-bottom: 0.5rem; }
-.candidates-list-compact { display: flex; flex-wrap: wrap; gap: 0.4rem; }
-.candidate-chip { display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.8rem; padding: 0.25rem 0.5rem; border-radius: 6px; background: var(--card-background); border: 1px solid var(--border-color); color: var(--text-primary); }
-.candidate-chip-name { font-weight: 500; }
-.candidate-chip-owner { font-size: 0.75rem; color: var(--text-secondary); }
-.hint--small { font-size: 0.8rem; margin-top: 0.25rem; }
-.task-hall-main .section-title { margin-bottom: 0.75rem; }
-.agent-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 1rem;
-  margin-top: 1rem;
-}
-.agent-type {
-  font-size: 0.8rem;
-  color: var(--primary-color);
-  margin-left: 0.5rem;
-}
-.hint, .empty {
-  color: var(--text-secondary);
-  font-size: 0.9rem;
-}
-.publish-gate, .agent-gate {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  align-items: flex-start;
-}
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1rem;
-  padding: 2rem 1rem;
-  text-align: center;
-}
-.empty-state .empty { margin: 0; }
-.error-msg {
-  color: var(--danger-color);
-  font-size: 0.9rem;
-  margin-top: 0.5rem;
-}
-.btn-sm { padding: 0.35rem 0.75rem; font-size: 0.85rem; }
-/* Toast */
-.toast {
-  position: fixed;
-  bottom: 2rem;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 0.6rem 1.25rem;
-  background: var(--card-background);
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
-  font-size: 0.95rem;
-  color: var(--text-primary);
-  box-shadow: 0 4px 20px var(--shadow-color);
-  z-index: 200;
-}
-.toast-enter-active, .toast-leave-active { transition: opacity 0.25s ease, transform 0.25s ease; }
-.toast-enter-from, .toast-leave-to { opacity: 0; transform: translateX(-50%) translateY(10px); }
-
-.modal-help { max-width: 520px; }
-.modal-help .help-section { margin-bottom: var(--space-5, 1.25rem); }
-.modal-help .help-section:last-of-type { margin-bottom: 0; }
-.modal-help h4 { font-size: 1rem; font-weight: 600; margin: 0 0 0.5rem; color: var(--text-primary); }
-.modal-help .help-list { margin: 0 0 0.5rem 1rem; padding: 0; font-size: 0.9rem; color: var(--text-secondary); line-height: 1.5; }
-.modal-help .help-note { font-size: 0.85rem; color: var(--text-secondary); margin: 0 0 0.5rem; }
-.modal-help .help-code { background: var(--background-darker); padding: 0.75rem 1rem; border-radius: var(--radius-sm); font-size: 0.85rem; overflow-x: auto; white-space: pre-wrap; margin: 0.5rem 0; }
-.help-skill-link {
-  margin-top: 1rem;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
-}
-.help-skill-link .btn { display: inline-block; text-decoration: none; }
-.modal h3 { margin-bottom: var(--space-4, 1rem); }
-.tabs { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
-.tabs .active { border-color: var(--primary-color); color: var(--primary-color); }
-.header-actions .btn.active { border-color: var(--primary-color); color: var(--primary-color); }
-.form { display: flex; flex-direction: column; gap: 0.75rem; }
-.form .input { width: 100%; min-width: 0; }
-.agent-select-list { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1rem; }
-.btn.block { width: 100%; text-align: left; }
-.close-btn { margin-top: 1rem; }
-.verification-code-row {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-}
-.verification-code-row .input { flex: 1; min-width: 0; }
-.oauth-divider {
-  text-align: center;
-  color: var(--text-secondary);
-  font-size: 0.9rem;
-  margin: 0.75rem 0;
-}
-.btn-google {
-  display: block;
-  text-align: center;
-  padding: 0.5rem 1rem;
-  background: #fff;
-  color: #333;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  text-decoration: none;
-  font-size: 0.95rem;
-}
-.btn-google:hover {
-  background: #f5f5f5;
-  border-color: #ccc;
-}
-/* 服务端可能未配置时仍可点击，由后端返回错误提示 */
-.btn-google-unconfigured {
-  opacity: 0.85;
-}
-.google-config-hint {
-  margin-top: 0.5rem;
-  font-size: 0.85rem;
-}
-/* 首页任务详情+评论弹窗 */
-.modal--task-detail { max-width: 520px; max-height: 85vh; overflow-y: auto; }
-.task-detail-modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.5rem; }
-.task-detail-modal-title { margin: 0; font-size: 1.1rem; line-height: 1.35; flex: 1; }
-.task-detail-modal-meta { font-size: 0.85rem; color: var(--text-secondary); margin: 0 0 0.5rem; }
-.task-detail-modal-desc { font-size: 0.9rem; line-height: 1.5; margin: 0 0 1rem; white-space: pre-wrap; }
-.task-detail-modal-comments { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color, rgba(255,255,255,0.1)); }
-.task-detail-modal-comments .task-comments-title { font-size: 0.9rem; font-weight: 600; margin: 0 0 0.5rem; }
-.task-detail-modal-comments .task-comments-list { list-style: none; padding: 0; margin: 0 0 1rem; }
-.task-detail-modal-comments .task-comment-item { display: flex; gap: 0.75rem; padding: 0.75rem 0; border-bottom: 1px solid var(--border-color); align-items: flex-start; }
-.task-detail-modal-comments .task-comment-item:last-child { border-bottom: none; }
-.task-detail-modal-comments .task-comment-item.comment-kind-status { border-left: 3px solid var(--secondary-color, #8b5cf6); padding-left: 0.5rem; margin-left: -0.5rem; }
-.task-detail-modal-comments .task-comment-avatar { flex-shrink: 0; width: 2rem; height: 2rem; border-radius: 50%; background: var(--surface); color: var(--primary-color); font-size: 0.75rem; font-weight: 600; display: flex; align-items: center; justify-content: center; }
-.task-detail-modal-comments .task-comment-body { flex: 1; min-width: 0; }
-.task-detail-modal-comments .task-comment-header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.35rem 0.5rem; margin-bottom: 0.25rem; }
-.task-detail-modal-comments .task-comment-author { font-weight: 600; font-size: 0.9rem; color: var(--text-primary); }
-.task-detail-modal-comments .task-comment-by-user { font-size: 0.8rem; color: var(--text-secondary); }
-.task-detail-modal-comments .task-comment-kind-badge { font-size: 0.7rem; padding: 0.1rem 0.35rem; border-radius: 4px; background: rgba(139, 92, 246, 0.15); color: var(--secondary-color); }
-.task-detail-modal-comments .task-comment-time { font-size: 0.75rem; color: var(--muted); }
-.task-detail-modal-comments .task-comment-content { margin: 0; font-size: 0.9rem; line-height: 1.5; white-space: pre-wrap; word-break: break-word; color: var(--text-secondary); }
-.task-detail-modal-comments .task-comments-empty { font-size: 0.9rem; color: var(--muted); margin: 0 0 0.75rem; }
-.task-detail-modal-comments .task-comment-form { margin-top: 1rem; }
-.task-detail-modal-comments .task-comment-form .textarea-input { min-height: 3.5rem; margin-bottom: 0.5rem; width: 100%; border-radius: var(--radius-sm); padding: 0.6rem 0.75rem; }
-.task-card-comment-btn { margin-left: auto; }
 </style>
