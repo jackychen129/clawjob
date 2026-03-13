@@ -5,12 +5,20 @@
 import axios from 'axios'
 
 export function getApiBase(): string {
-  const fromEnv = import.meta.env.VITE_API_BASE_URL
-  if (fromEnv && String(fromEnv).trim()) return String(fromEnv).trim()
-  if (typeof window !== 'undefined' && window.location) {
-    const { protocol, hostname } = window.location
-    return `${protocol}//${hostname}:8000`
+  const fromEnv = (import.meta.env.VITE_API_BASE_URL && String(import.meta.env.VITE_API_BASE_URL).trim()) || ''
+  if (typeof window !== 'undefined' && window.location?.hostname) {
+    const host = window.location.hostname
+    const protocol = window.location.protocol
+    const isLocalhost = host === 'localhost' || host === '127.0.0.1'
+    const envPointsToLocalhost = !fromEnv || fromEnv.includes('localhost') || fromEnv.includes('127.0.0.1')
+    if (!isLocalhost && envPointsToLocalhost) {
+      if (host.startsWith('app.')) return `${protocol}//api.${host.slice(4)}`
+      return `${protocol}//${host}:8000`
+    }
+    if (!fromEnv && isLocalhost) return 'http://localhost:8000'
+    if (!fromEnv) return `${protocol}//${host}:8000`
   }
+  if (fromEnv) return fromEnv
   return 'http://localhost:8000'
 }
 
@@ -52,21 +60,31 @@ export function login(data: { username: string; password: string }) {
   return api.post('/auth/login', data)
 }
 
-// 公开统计（任务数、Agent 数，供首页/官网展示）
+// 公开统计（任务数、Agent 数、已完成、累计报酬，供首页/官网 Counters 与 Dashboard）
 export function fetchStats() {
-  return api.get<{ tasks_count: number; agents_count: number }>('/stats')
+  return api.get<{
+    tasks_count: number
+    agents_count: number
+    tasks_total?: number
+    tasks_completed?: number
+    rewards_paid?: number
+    agents_active?: number
+    agents_with_completions?: number
+  }>('/stats')
 }
 
-// 任务大厅（公开）：支持分类、搜索、排序
+// 任务大厅（公开）：支持分类、搜索、奖励区间、排序
 export function fetchTasks(params?: {
   skip?: number
   limit?: number
   status_filter?: string
   category_filter?: string
   q?: string
-  sort?: 'created_at_desc' | 'created_at_asc' | 'reward_desc' | 'comments_desc'
+  sort?: 'created_at_desc' | 'created_at_asc' | 'reward_desc' | 'comments_desc' | 'deadline_asc'
+  reward_min?: number
+  reward_max?: number
 }) {
-  return api.get('/tasks', { params })
+  return api.get<{ tasks: TaskListItem[]; total: number }>('/tasks', { params })
 }
 
 // 我创建的任务（需登录）
@@ -111,8 +129,8 @@ export interface TaskListItem {
   skills?: string[]
 }
 
-// 候选者列表（公开，供发布任务时选择指定接取者）
-export function fetchCandidates(params?: { skip?: number; limit?: number }) {
+// 候选者列表（公开，供发布任务时选择指定接取者）。sort=recent 为最近注册优先
+export function fetchCandidates(params?: { skip?: number; limit?: number; sort?: string }) {
   return api.get<{ candidates: Array<{ id: number; type: string; name: string; description: string; agent_type: string; owner_id: number; owner_name: string }>; total: number }>('/candidates', { params })
 }
 
@@ -181,9 +199,9 @@ export function confirmTask(taskId: number) {
   return api.post(`/tasks/${taskId}/confirm`)
 }
 
-// 发布者拒绝验收（接取者可重新提交）
-export function rejectTask(taskId: number) {
-  return api.post(`/tasks/${taskId}/reject`)
+// 发布者拒绝验收（必须填写拒绝理由，作为 RL 反馈；接取者可重新提交）
+export function rejectTask(taskId: number, data: { rejection_reason: string }) {
+  return api.post(`/tasks/${taskId}/reject`, data)
 }
 
 // 订阅任务（需登录）
@@ -204,6 +222,7 @@ export interface RegisterAgentData {
   types?: string[]
   capabilities?: AgentCapability[]
   status?: string
+  category?: 'skill' | 'mcp' | 'web' | 'api'
   avatar_url?: string
   profile_url?: string
   webhook_url?: string

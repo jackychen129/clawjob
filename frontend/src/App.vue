@@ -82,9 +82,23 @@
                   {{ t(opt.labelKey) }}
                 </button>
               </div>
+              <div class="home-reward-filters flex flex-wrap gap-2 items-center">
+                <span class="text-zinc-500 text-sm">{{ t('task.rewardRange') || '奖励区间' }}:</span>
+                <button
+                  v-for="opt in homeRewardRangeOptions"
+                  :key="opt.value"
+                  type="button"
+                  class="filter-chip text-sm"
+                  :class="{ active: homeRewardRange === opt.value }"
+                  @click="homeRewardRange = opt.value; loadTasks()"
+                >
+                  {{ t(opt.labelKey) }}
+                </button>
+              </div>
               <select v-model="homeSort" class="home-sort input" @change="loadTasks">
                 <option value="created_at_desc">{{ t('task.sortNewest') }}</option>
                 <option value="reward_desc">{{ t('task.sortReward') }}</option>
+                <option value="deadline_asc">{{ t('task.sortDeadline') || '即将截止' }}</option>
                 <option value="created_at_asc">{{ t('task.sortEarliest') }}</option>
                 <option value="comments_desc">{{ t('task.sortComments') }}</option>
               </select>
@@ -155,7 +169,7 @@
               </button>
               <template v-if="auth.isLoggedIn && task.owner_id === auth.userId && task.status === 'pending_verification'">
                 <button class="btn btn-primary btn-sm" :disabled="confirmLoading === task.id" @click="doConfirm(task.id)">{{ t('task.confirmPass') }}</button>
-                <button class="btn btn-secondary btn-sm" :disabled="rejectLoading === task.id" @click="doReject(task.id)">{{ t('task.reject') }}</button>
+                <button class="btn btn-secondary btn-sm" :disabled="rejectLoading === task.id" @click="openRejectModal(task.id)">{{ t('task.reject') }}</button>
               </template>
               <button
                 v-if="auth.isLoggedIn && task.owner_id === auth.userId && task.status === 'open' && !task.reward_points"
@@ -432,6 +446,30 @@
       </div>
     </div>
 
+    <!-- 拒绝验收弹窗（必须填写理由，作为 RL 反馈）-->
+    <div v-if="rejectTaskId" class="modal-mask" @click.self="rejectTaskId = null; rejectReason = ''">
+      <div class="modal">
+        <h3>{{ t('task.rejectTitle') || '拒绝验收' }}</h3>
+        <p class="hint">{{ t('task.rejectHint') || '请填写拒绝理由，以便接取者改进（将作为强化学习反馈）。' }}</p>
+        <div class="form">
+          <textarea v-model="rejectReason" class="input textarea" :placeholder="t('task.rejectReasonPlaceholder') || '例如：代码规范需改进、逻辑需更严密…'" rows="3" />
+          <div class="quick-reply-templates flex flex-wrap gap-2 mt-2">
+            <button
+              v-for="tpl in rejectQuickReplyTemplates"
+              :key="tpl"
+              type="button"
+              class="btn btn-text btn-sm border border-zinc-600 rounded-lg px-2 py-1 text-zinc-400 hover:text-white"
+              @click="rejectReason = (rejectReason ? rejectReason + '；' : '') + tpl"
+            >
+              {{ tpl }}
+            </button>
+          </div>
+          <button class="btn btn-primary mt-3" :disabled="rejectLoading === rejectTaskId || !rejectReason.trim()" @click="doRejectWithReason">{{ t('task.reject') }}</button>
+        </div>
+        <button class="btn btn-secondary close-btn" @click="rejectTaskId = null; rejectReason = ''">{{ t('common.cancel') }}</button>
+      </div>
+    </div>
+
     <!-- 首页任务详情 + 评论弹窗（BotLearn 风格：发布者/时间/结构化信息） -->
     <div v-if="homeTaskDetail" class="modal-mask" @click.self="closeHomeTaskDetail">
       <div class="modal modal--task-detail">
@@ -568,7 +606,23 @@ const tasks = ref<api.TaskListItem[]>([])
 const tasksLoading = ref(false)
 
 const homeCategoryFilter = ref('')
-const homeSort = ref<'created_at_desc' | 'reward_desc' | 'created_at_asc' | 'comments_desc'>('reward_desc')
+const homeSort = ref<'created_at_desc' | 'reward_desc' | 'created_at_asc' | 'comments_desc' | 'deadline_asc'>('reward_desc')
+const homeRewardRange = ref<string>('')
+const homeRewardRangeOptions = [
+  { value: '', labelKey: 'task.rewardRangeAll' },
+  { value: '0-50', labelKey: 'task.rewardRange0_50' },
+  { value: '50-500', labelKey: 'task.rewardRange50_500' },
+  { value: '500+', labelKey: 'task.rewardRange500' },
+]
+const rejectTaskId = ref<number | null>(null)
+const rejectReason = ref('')
+const rejectQuickReplyTemplates = [
+  '代码规范需改进',
+  '逻辑需更严密',
+  '请按需求补充输出',
+  '格式不符合要求',
+  '需要更详细的说明',
+]
 const homeSearchQuery = ref('')
 let homeSearchTimer: ReturnType<typeof setTimeout> | null = null
 const homeCategoryOptions = [
@@ -684,10 +738,13 @@ const accountCredits = ref(0)
 
 function loadTasks() {
   tasksLoading.value = true
-  const params: { skip?: number; limit?: number; category_filter?: string; sort?: string; q?: string } = { limit: 50 }
+  const params: { skip?: number; limit?: number; category_filter?: string; sort?: string; q?: string; reward_min?: number; reward_max?: number } = { limit: 50 }
   if (homeCategoryFilter.value) params.category_filter = homeCategoryFilter.value
   params.sort = homeSort.value
   if (homeSearchQuery.value.trim()) params.q = homeSearchQuery.value.trim()
+  if (homeRewardRange.value === '0-50') { params.reward_min = 0; params.reward_max = 50 }
+  else if (homeRewardRange.value === '50-500') { params.reward_min = 50; params.reward_max = 500 }
+  else if (homeRewardRange.value === '500+') { params.reward_min = 500 }
   api.fetchTasks(params).then((res) => {
     tasks.value = res.data.tasks || []
   }).catch(() => {
@@ -1025,10 +1082,18 @@ function doConfirm(taskId: number) {
     loadAccountMe()
   }).catch(() => {}).finally(() => { confirmLoading.value = null })
 }
-function doReject(taskId: number) {
+function openRejectModal(taskId: number) {
+  rejectTaskId.value = taskId
+  rejectReason.value = ''
+}
+function doRejectWithReason() {
+  if (!rejectTaskId.value || !rejectReason.value.trim()) return
+  const taskId = rejectTaskId.value
   rejectLoading.value = taskId
-  api.rejectTask(taskId).then(() => {
+  api.rejectTask(taskId, { rejection_reason: rejectReason.value.trim() }).then(() => {
     showSuccess(t('task.rejectSuccess'))
+    rejectTaskId.value = null
+    rejectReason.value = ''
     loadTasks()
   }).catch(() => {}).finally(() => { rejectLoading.value = null })
 }

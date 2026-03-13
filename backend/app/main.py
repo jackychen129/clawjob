@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
 from starlette.middleware.base import BaseHTTPMiddleware
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, text
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
@@ -24,6 +24,7 @@ from app.database.relational_db import (
     RelationalDB,
     get_db,
     init_db,
+    engine as db_engine,
     Task,
     Agent,
     TaskSubscription,
@@ -84,7 +85,7 @@ async def _lifespan(app: FastAPI):
 
 app = FastAPI(
     title="ClawJob API",
-    description="Agent 接取任务与强化能力平台：任务发布与接取、Agent 注册与订阅、可作为强化学习试验场，训练出的 Skill 可发布到平台 Skill 市场。",
+    description="任务发布与接取：注册 Agent、发布任务、订阅他人任务",
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
@@ -149,10 +150,26 @@ async def health_check():
 
 @app.get("/stats")
 def get_public_stats(db: Session = Depends(get_db)):
-    """公开统计：任务总数、Agent 总数（供首页与官网展示）。"""
+    """公开统计：任务总数、已完成数、活跃 Agent、累计发放报酬（供首页/官网 Counters 与 Dashboard）。"""
     tasks_count = db.query(Task).count()
+    tasks_completed = db.query(Task).filter(Task.status == "completed").count()
+    rewards_paid = db.query(func.coalesce(func.sum(Task.reward_points), 0)).filter(
+        Task.status == "completed", Task.reward_points.isnot(None)
+    ).scalar() or 0
     agents_count = db.query(Agent).count()
-    return {"tasks_count": tasks_count, "agents_count": agents_count}
+    agents_active = db.query(Agent).filter(Agent.is_active == True).count()
+    agents_with_completions = db.query(Task.agent_id).filter(
+        Task.status == "completed", Task.agent_id.isnot(None)
+    ).distinct().count()
+    return {
+        "tasks_count": tasks_count,
+        "agents_count": agents_count,
+        "tasks_total": tasks_count,
+        "tasks_completed": tasks_completed,
+        "rewards_paid": int(rewards_paid),
+        "agents_active": agents_active,
+        "agents_with_completions": agents_with_completions,
+    }
 
 # OpenClaw/Clawl 对齐：capability 项 { id?, name, category? }
 class CapabilityItem(BaseModel):
@@ -169,9 +186,23 @@ class RegisterAgentBody(BaseModel):
     types: Optional[List[str]] = None  # OpenClaw 多类型，如 ["assistant"], ["developer","security"]
     capabilities: Optional[List[CapabilityItem]] = None  # OpenClaw capabilities: [{ id, name, category }]
     status: Optional[str] = "active"  # active | inactive
+    category: Optional[str] = None  # 注册来源：skill | mcp | web | api（MCP/Skill 调用时自动带，免填）
     avatar_url: Optional[str] = None
     profile_url: Optional[str] = None
     webhook_url: Optional[str] = None  # 存活探测 GET + 接收消息 POST 的 URL
+
+
+def _ensure_agents_category_column() -> None:
+    """确保 agents 表存在 category 列（线上可能为旧库，init_db 未执行到或执行失败）。"""
+    try:
+        with db_engine.connect() as conn:
+            if db_engine.dialect.name == "postgresql":
+                conn.execute(text("ALTER TABLE agents ADD COLUMN IF NOT EXISTS category VARCHAR(32)"))
+            else:
+                conn.execute(text("ALTER TABLE agents ADD COLUMN category VARCHAR(32)"))
+            conn.commit()
+    except Exception:
+        pass
 
 
 def _norm_capabilities(caps: Optional[List[Any]]) -> list:
@@ -195,6 +226,7 @@ def register_agent(
     current_user: dict = Depends(get_current_user),
 ):
     """注册我的 Agent（需登录），用于接取/订阅他人任务。参数对齐 OpenClaw/Clawl agent。"""
+    _ensure_agents_category_column()
     uid = int(current_user["user_id"])
     primary_type = (body.agent_type or "general").strip() or "general"
     if body.types and len(body.types) > 0:
@@ -208,22 +240,50 @@ def register_agent(
     if body.webhook_url and body.webhook_url.strip():
         config["webhook_url"] = body.webhook_url.strip()
     is_active = (body.status or "active").strip().lower() != "inactive"
+    category = (body.category or "api").strip().lower() or "api"
+    if category not in ("skill", "mcp", "web", "api"):
+        category = "api"
     agent = Agent(
         name=body.name.strip(),
         description=(body.description or "").strip(),
         agent_type=primary_type,
+        category=category,
         owner_id=uid,
         capabilities=capabilities,
         config=config,
         is_active=is_active,
     )
     db.add(agent)
-    db.commit()
-    db.refresh(agent)
+    try:
+        db.commit()
+        db.refresh(agent)
+    except Exception as e:
+        db.rollback()
+        err_msg = str(e).lower()
+        # 线上若 agents 表尚无 category 列则插入会报错，补列后重试
+        if "category" in err_msg or "does not exist" in err_msg or "column" in err_msg:
+            _ensure_agents_category_column()
+            agent_retry = Agent(
+                name=body.name.strip(),
+                description=(body.description or "").strip(),
+                agent_type=primary_type,
+                category=category,
+                owner_id=uid,
+                capabilities=capabilities,
+                config=config,
+                is_active=is_active,
+            )
+            db.add(agent_retry)
+            db.commit()
+            db.refresh(agent_retry)
+            agent = agent_retry
+        else:
+            raise
     return {
         "id": agent.id,
         "name": agent.name,
         "agent_type": agent.agent_type,
+        "category": getattr(agent, "category", None) or "api",
         "capabilities": agent.capabilities or [],
         "status": "active" if agent.is_active else "inactive",
     }
@@ -234,36 +294,49 @@ def list_my_agents(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    """我注册的 Agent 列表（需登录），按积分（完成任务获得）降序"""
+    """我注册的 Agent 列表（需登录），按积分（完成任务获得）降序。线上容错：查询失败时补列并重试或返回空列表。"""
+    _ensure_agents_category_column()
     uid = int(current_user["user_id"])
-    points_subq = (
-        db.query(Task.agent_id, func.coalesce(func.sum(Task.reward_points), 0).label("points"))
-        .filter(Task.status == "completed", Task.agent_id.isnot(None))
-        .group_by(Task.agent_id)
-        .subquery()
-    )
-    rows = (
-        db.query(Agent, func.coalesce(points_subq.c.points, 0).label("points"))
-        .outerjoin(points_subq, Agent.id == points_subq.c.agent_id)
-        .filter(Agent.owner_id == uid)
-        .order_by(points_subq.c.points.desc().nullslast(), Agent.id.desc())
-        .all()
-    )
-    return {
-        "agents": [
-            {
-                "id": a.id,
-                "name": a.name,
-                "description": a.description or "",
-                "agent_type": a.agent_type or "general",
-                "capabilities": a.capabilities or [],
-                "status": "active" if a.is_active else "inactive",
-                "config": a.config or {},
-                "points": int(points),
-            }
-            for a, points in rows
-        ]
-    }
+
+    def _build_agent_item(a: Agent, points: int = 0) -> dict:
+        return {
+            "id": a.id,
+            "name": a.name,
+            "description": a.description or "",
+            "agent_type": a.agent_type or "general",
+            "category": getattr(a, "category", None) or "api",
+            "capabilities": a.capabilities or [],
+            "status": "active" if a.is_active else "inactive",
+            "config": a.config or {},
+            "points": int(points),
+        }
+
+    try:
+        points_subq = (
+            db.query(Task.agent_id, func.coalesce(func.sum(Task.reward_points), 0).label("points"))
+            .filter(Task.status == "completed", Task.agent_id.isnot(None))
+            .group_by(Task.agent_id)
+            .subquery()
+        )
+        rows = (
+            db.query(Agent, func.coalesce(points_subq.c.points, 0).label("points"))
+            .outerjoin(points_subq, Agent.id == points_subq.c.agent_id)
+            .filter(Agent.owner_id == uid)
+            .order_by(points_subq.c.points.desc().nullslast(), Agent.id.desc())
+            .all()
+        )
+        return {"agents": [_build_agent_item(a, points) for a, points in rows]}
+    except Exception as e:
+        db.rollback()
+        err_msg = str(e).lower()
+        if "column" in err_msg or "does not exist" in err_msg or "category" in err_msg:
+            _ensure_agents_category_column()
+        try:
+            agents = db.query(Agent).filter(Agent.owner_id == uid).order_by(Agent.id.desc()).all()
+            return {"agents": [_build_agent_item(a, 0) for a in agents]}
+        except Exception:
+            db.rollback()
+            return {"agents": []}
 
 
 def _get_my_agent(agent_id: int, db: Session, user_id: int) -> Optional[Agent]:
@@ -329,25 +402,27 @@ def agent_send_message(
 def list_candidates(
     skip: int = 0,
     limit: int = 100,
+    sort: str = "points",  # points | recent（最近注册优先）
     db: Session = Depends(get_db),
 ):
-    """候选者列表（公开）：已注册的 Agent 及所属用户，按积分降序，供发布任务时选择指定接取者"""
+    """候选者列表（公开）：已注册的 Agent 及所属用户。sort=points 按积分降序，sort=recent 按注册时间倒序。"""
     points_subq = (
         db.query(Task.agent_id, func.coalesce(func.sum(Task.reward_points), 0).label("points"))
         .filter(Task.status == "completed", Task.agent_id.isnot(None))
         .group_by(Task.agent_id)
         .subquery()
     )
-    rows = (
+    q = (
         db.query(Agent, User, func.coalesce(points_subq.c.points, 0).label("points"))
         .join(User, Agent.owner_id == User.id)
         .outerjoin(points_subq, Agent.id == points_subq.c.agent_id)
         .filter(Agent.is_active == True, User.is_active == True)
-        .order_by(points_subq.c.points.desc().nullslast(), Agent.id.desc())
-        .offset(skip)
-        .limit(limit)
-        .all()
     )
+    if (sort or "").strip().lower() == "recent":
+        q = q.order_by(Agent.id.desc())
+    else:
+        q = q.order_by(points_subq.c.points.desc().nullslast(), Agent.id.desc())
+    rows = q.offset(skip).limit(limit).all()
     out = []
     for a, owner, points in rows:
         cfg = a.config or {}
@@ -460,6 +535,10 @@ def _push_task_to_discord(task: Task, webhook_url: str, frontend_url: str) -> No
 
 class SubscribeTaskBody(BaseModel):
     agent_id: int
+
+
+class RejectCompletionBody(BaseModel):
+    rejection_reason: str  # 必填：作为 RL 惩罚信号，供接取者改进
 
 
 class SubmitCompletionBody(BaseModel):
@@ -636,9 +715,11 @@ def list_tasks_public(
     category_filter: str = None,
     q: str = None,
     sort: str = "created_at_desc",
+    reward_min: Optional[int] = None,
+    reward_max: Optional[int] = None,
     db: Session = Depends(get_db),
 ):
-    """任务大厅：公开列出所有任务（无需登录）；支持分类、关键词搜索、排序。"""
+    """任务大厅：公开列出所有任务（无需登录）；支持分类、关键词、奖励区间、排序。"""
     query = db.query(Task)
     if status_filter:
         query = query.filter(Task.status == status_filter)
@@ -648,6 +729,10 @@ def list_tasks_public(
         from sqlalchemy import or_
         term = f"%{q.strip()}%"
         query = query.filter(or_(Task.title.ilike(term), Task.description.ilike(term)))
+    if reward_min is not None:
+        query = query.filter(Task.reward_points >= reward_min)
+    if reward_max is not None:
+        query = query.filter(Task.reward_points <= reward_max)
     if sort == "comments_desc":
         query = db.query(Task, func.count(TaskComment.id).label("comment_count")).outerjoin(
             TaskComment, Task.id == TaskComment.task_id
@@ -660,7 +745,12 @@ def list_tasks_public(
             from sqlalchemy import or_
             term = f"%{q.strip()}%"
             query = query.filter(or_(Task.title.ilike(term), Task.description.ilike(term)))
+        if reward_min is not None:
+            query = query.filter(Task.reward_points >= reward_min)
+        if reward_max is not None:
+            query = query.filter(Task.reward_points <= reward_max)
         query = query.group_by(Task.id).order_by(func.count(TaskComment.id).desc().nullslast(), Task.created_at.desc())
+        total = query.count()
         rows = query.offset(skip).limit(limit).all()
         tasks_with_count = [(row[0], row[1]) for row in rows]
     else:
@@ -668,8 +758,11 @@ def list_tasks_public(
             query = query.order_by(Task.reward_points.desc().nullslast(), Task.created_at.desc())
         elif sort == "created_at_asc":
             query = query.order_by(Task.created_at.asc())
+        elif sort == "deadline_asc":
+            query = query.order_by(Task.verification_deadline_at.asc().nullslast(), Task.created_at.desc())
         else:
             query = query.order_by(Task.created_at.desc())
+        total = query.count()
         tasks = query.offset(skip).limit(limit).all()
         tasks_with_count = [(t, db.query(TaskComment).filter(TaskComment.task_id == t.id).count()) for t in tasks]
     out = []
@@ -701,7 +794,7 @@ def list_tasks_public(
             "created_at": t.created_at.isoformat() if t.created_at else None,
             **_task_extra(t),
         })
-    return {"tasks": out, "total": len(out)}
+    return {"tasks": out, "total": total}
 
 
 @app.get("/tasks/created-by-me")
@@ -967,10 +1060,11 @@ def confirm_task(
 @app.post("/tasks/{task_id}/reject")
 def reject_completion(
     task_id: int,
+    body: RejectCompletionBody,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    """发布者拒绝验收：任务回到可继续状态，接取者可重新提交完成。"""
+    """发布者拒绝验收：必须填写拒绝理由（作为 RL 惩罚信号）；任务回到可继续状态，接取者可重新提交完成。"""
     uid = int(current_user["user_id"])
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
@@ -979,9 +1073,14 @@ def reject_completion(
         raise HTTPException(status_code=403, detail="仅任务发布者可拒绝")
     if task.status != "pending_verification":
         raise HTTPException(status_code=400, detail="仅待验收任务可拒绝")
+    reason = (body.rejection_reason or "").strip()
+    if not reason:
+        raise HTTPException(status_code=400, detail="请填写拒绝理由，以便接取者改进（作为 RL 反馈）")
     task.status = "open"
     task.submitted_at = None
     task.verification_deadline_at = None
+    base = task.output_data if isinstance(task.output_data, dict) else {}
+    task.output_data = {**(base or {}), "rejection_reason": reason}
     db.commit()
     return {"message": "已拒绝，接取者可重新提交完成", "task_id": task_id}
 

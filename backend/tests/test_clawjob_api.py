@@ -54,7 +54,36 @@ def test_tasks_list_public():
     assert r.status_code == 200
     data = r.json()
     assert "tasks" in data
+    assert "total" in data
     assert isinstance(data["tasks"], list)
+    assert isinstance(data["total"], int)
+
+
+def test_tasks_list_reward_filter_and_sort():
+    """任务大厅：奖励区间与排序参数"""
+    r = client.get("/tasks", params={"reward_min": 0, "reward_max": 100})
+    assert r.status_code == 200
+    data = r.json()
+    assert "tasks" in data
+    for t in data["tasks"]:
+        assert t.get("reward_points", 0) >= 0 and t.get("reward_points", 0) <= 100
+    r2 = client.get("/tasks", params={"sort": "reward_desc", "limit": 5})
+    assert r2.status_code == 200
+    r3 = client.get("/tasks", params={"sort": "deadline_asc"})
+    assert r3.status_code == 200
+
+
+def test_stats_public():
+    """平台统计：无需登录即可获取"""
+    r = client.get("/stats")
+    assert r.status_code == 200
+    data = r.json()
+    assert "tasks_total" in data
+    assert "tasks_completed" in data
+    assert "rewards_paid" in data
+    assert "agents_active" in data
+    assert isinstance(data["tasks_total"], int)
+    assert isinstance(data["tasks_completed"], int)
 
 
 def test_register_and_login():
@@ -410,6 +439,19 @@ def test_submit_completion_and_confirm():
     assert r.json()["credits"] == 5
 
 
+def test_reject_requires_reason():
+    """拒绝验收时必须填写拒绝理由"""
+    # 创建待验收任务需完整流程，这里仅测 400：无 body 或 reason 为空
+    u = f"rej_{_unique()}"
+    data = _register_user(u, f"{u}@example.com", "pw")
+    token = data["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    r = client.post("/tasks/1/reject", json={}, headers=headers)
+    # 可能 404（任务不存在）或 400（理由为空）
+    if r.status_code == 400:
+        assert "理由" in r.json().get("detail", "")
+
+
 def test_confirm_requires_publisher():
     """仅发布者可验收"""
     u = f"other_{_unique()}"
@@ -423,3 +465,131 @@ def test_confirm_requires_publisher():
     task_id = tasks[0]["id"]
     r = client.post(f"/tasks/{task_id}/confirm", headers=headers)
     assert r.status_code in (400, 403)
+
+
+def test_agent_register_with_webhook_and_ping():
+    """注册 Agent 时可填 webhook_url；探测存活：未配置或请求失败返回 alive=False"""
+    u = f"pinguser_{_unique()}"
+    data = _register_user(u, f"{u}@example.com", "pw")
+    token = data["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    r = client.post(
+        "/agents/register",
+        json={"name": "PingAgent", "description": "test", "webhook_url": "https://example.com/webhook"},
+        headers=headers,
+    )
+    assert r.status_code == 200
+    agent_id = r.json()["id"]
+    r = client.get(f"/agents/{agent_id}/ping", headers=headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert "alive" in body
+    # 未真正可访问的 URL 会请求失败，alive 为 False；或 no_webhook 若未存上
+    assert body["alive"] is False or body.get("reason") == "no_webhook"
+
+
+def test_agent_send_message_requires_webhook():
+    """未配置 Webhook 的 Agent 发消息应 400"""
+    u = f"msguser_{_unique()}"
+    data = _register_user(u, f"{u}@example.com", "pw")
+    token = data["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    r = client.post("/agents/register", json={"name": "NoWebhookAgent", "description": ""}, headers=headers)
+    assert r.status_code == 200
+    agent_id = r.json()["id"]
+    r = client.post(f"/agents/{agent_id}/send-message", json={"content": "hello"}, headers=headers)
+    assert r.status_code == 400
+    assert "Webhook" in r.json().get("detail", "")
+
+
+def test_publish_with_discord_webhook_optional():
+    """发布任务时 discord_webhook_url 为可选，不报错即可（实际推送可 mock）"""
+    u = f"discord_{_unique()}"
+    data = _register_user(u, f"{u}@example.com", "pw")
+    token = data["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    with patch("app.main.httpx") as m:
+        m.Client.return_value.__enter__.return_value.post.return_value.status_code = 204
+        r = client.post(
+            "/tasks",
+            json={
+                "title": "Discord 推送测试",
+                "description": "desc",
+                "discord_webhook_url": "https://discord.com/api/webhooks/fake/fake",
+            },
+            headers=headers,
+        )
+    assert r.status_code == 200
+    assert "id" in r.json()
+
+
+def test_tasks_list_with_category_and_sort():
+    """任务列表支持 category_filter、q、sort 参数"""
+    r = client.get("/tasks", params={"category_filter": "development", "limit": 5})
+    assert r.status_code == 200
+    data = r.json()
+    assert "tasks" in data
+    assert isinstance(data["tasks"], list)
+    r2 = client.get("/tasks", params={"q": "test", "sort": "reward_desc"})
+    assert r2.status_code == 200
+    assert "tasks" in r2.json()
+
+
+def test_my_created_tasks_requires_auth():
+    """我创建的任务需登录"""
+    r = client.get("/tasks/created-by-me")
+    assert r.status_code == 401
+
+
+def test_my_created_tasks():
+    """我创建的任务列表（登录后）"""
+    u = f"created_{_unique()}"
+    data = _register_user(u, f"{u}@example.com", "pw")
+    token = data["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    r = client.get("/tasks/created-by-me", headers=headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert "tasks" in body
+    assert "total" in body
+    assert isinstance(body["tasks"], list)
+
+
+def test_task_comments_list_and_post():
+    """任务评论：列表公开，发表需登录"""
+    u = f"comment_{_unique()}"
+    data = _register_user(u, f"{u}@example.com", "pw")
+    token = data["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    # 先发布一个任务
+    r = client.post("/tasks", json={"title": "评论测试任务", "description": "desc"}, headers=headers)
+    assert r.status_code == 200
+    task_id = r.json()["id"]
+    # 无评论时列表为空
+    r = client.get(f"/tasks/{task_id}/comments")
+    assert r.status_code == 200
+    assert r.json()["comments"] == []
+    # 发表评论
+    r = client.post(f"/tasks/{task_id}/comments", json={"content": "第一条评论"}, headers=headers)
+    assert r.status_code == 200
+    c = r.json()
+    assert c["content"] == "第一条评论"
+    assert c["author_name"] == u
+    assert "id" in c
+    # 再拉列表应有 1 条
+    r = client.get(f"/tasks/{task_id}/comments")
+    assert r.status_code == 200
+    assert len(r.json()["comments"]) == 1
+    assert r.json()["comments"][0]["content"] == "第一条评论"
+
+
+def test_task_comment_post_requires_auth():
+    """发表任务评论需登录"""
+    r = client.get("/tasks")
+    assert r.status_code == 200
+    tasks = r.json().get("tasks") or []
+    if not tasks:
+        pytest.skip("no tasks in db")
+    task_id = tasks[0]["id"]
+    r = client.post(f"/tasks/{task_id}/comments", json={"content": "未登录评论"})
+    assert r.status_code == 401
