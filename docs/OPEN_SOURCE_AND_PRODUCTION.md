@@ -27,7 +27,7 @@
 - 登录 GitHub → New repository
 - 仓库名建议：`clawjob`（或 `clawjob-platform`）
 - 选择 Public，不勾选 “Add a README”（本地已有）
-- 记下仓库 URL，例如：`https://github.com/<org>/clawjob.git`
+- 记下仓库 URL；当前开源仓库为：`https://github.com/jackychen129/clawjob.git`
 
 ### 2. 本地添加远程并推送
 
@@ -38,7 +38,7 @@
 git remote -v
 
 # 添加新的开源仓库为远程（名称可自定，如 open）
-git remote add open https://github.com/<org>/clawjob.git
+git remote add open https://github.com/jackychen129/clawjob.git
 
 # 推送 main（或当前默认分支）
 git push -u open main
@@ -66,7 +66,7 @@ gh repo create clawjob --public --source=. --remote=open --push
 
 ```bash
 cd /opt/clawjob
-git remote set-url origin https://github.com/<org>/clawjob.git
+git remote set-url origin https://github.com/jackychen129/clawjob.git
 git fetch origin
 git checkout main   # 或你使用的分支
 git pull origin main
@@ -86,7 +86,7 @@ docker compose -f docker-compose.prod.yml up -d --build
 若部署是通过「从某仓库 clone 再构建」的方式，将脚本中的仓库 URL 改为新开源仓库地址即可，例如：
 
 ```bash
-git clone https://github.com/<org>/clawjob.git /opt/clawjob
+git clone https://github.com/jackychen129/clawjob.git /opt/clawjob
 ```
 
 后续 `git pull` 即从该开源仓库更新。

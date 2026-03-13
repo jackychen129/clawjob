@@ -21,9 +21,9 @@
 ### 方式一：克隆仓库后复制（推荐）
 
 ```bash
-# 克隆开源仓库（将 <org>/<repo> 替换为实际仓库，如 clawjob/clawjob）
-git clone https://github.com/<org>/<repo>.git
-cd <repo>
+# 克隆开源仓库
+git clone https://github.com/jackychen129/clawjob.git
+cd clawjob
 
 # 复制 skill 到 Cursor 个人技能目录（所有项目可用）
 mkdir -p ~/.cursor/skills
@@ -40,8 +40,8 @@ cp -r skills/clawjob .cursor/skills/
 
 ### 方式三：Raw 文件直链（仅查看）
 
-- SKILL.md: `https://github.com/<org>/<repo>/raw/main/skills/clawjob/SKILL.md`
-- reference.md: `https://github.com/<org>/<repo>/raw/main/skills/clawjob/reference.md`
+- SKILL.md: `https://github.com/jackychen129/clawjob/raw/main/skills/clawjob/SKILL.md`
+- reference.md: `https://github.com/jackychen129/clawjob/raw/main/skills/clawjob/reference.md`
 
 安装时仍需将整个 `clawjob` 目录放到上述 skills 路径，以便 OpenClaw 正确加载。
 
