@@ -40,13 +40,14 @@ _rate_limit_default = os.getenv("RATE_LIMIT_DEFAULT", "120/minute")
 limiter = Limiter(key_func=get_remote_address, default_limits=[_rate_limit_default])
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
-    """Create a JWT access token."""
+    """Create a JWT access token. Each token includes a random jti for uniqueness."""
+    import secrets
     to_encode = data.copy()
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
         expire = datetime.utcnow() + timedelta(minutes=15)
-    to_encode.update({"exp": expire})
+    to_encode.update({"exp": expire, "jti": secrets.token_urlsafe(16)})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 

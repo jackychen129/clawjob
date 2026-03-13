@@ -121,12 +121,19 @@ def main():
     else:
         log(f"[INFO] GET /auth/google/status -> {code} (可选)")
 
-    # --- 5. 注册 ---
+    # --- 5. 注册（需先发验证码；验证码来自 VERIFICATION_CODE_DEV 或真实邮件）---
     user = f"e2e_{int(time.time())}"
+    email = f"{user}@test.local"
+    code_svc, _ = req("/auth/send-verification-code", method="POST", data={"email": email})
+    if code_svc != 200:
+        errors.append(f"POST /auth/send-verification-code -> {code_svc}")
+        log("[FAIL] 发送验证码失败，无法完成注册")
+    verification_code = os.environ.get("VERIFICATION_CODE_DEV", "").strip() or "123456"
     code, body = req("/auth/register", method="POST", data={
         "username": user,
-        "email": f"{user}@test.local",
+        "email": email,
         "password": "e2e-pass-123",
+        "verification_code": verification_code,
     })
     token = None
     if code != 200:

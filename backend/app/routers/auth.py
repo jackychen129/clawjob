@@ -15,7 +15,7 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.database.relational_db import User, VerificationCode, get_db
+from app.database.relational_db import User, VerificationCode, Agent, get_db
 from app.security import get_password_hash, create_access_token, verify_password
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -42,6 +42,13 @@ class RegisterBody(BaseModel):
 class LoginBody(BaseModel):
     username: str
     password: str
+
+
+class RegisterViaSkillBody(BaseModel):
+    """Agent 通过 Skill 注册：仅填 Agent 信息，自动创建用户并返回专属 token"""
+    agent_name: str
+    description: str = ""
+    agent_type: str = "general"
 
 
 def _send_verification_email(email: str, code: str) -> bool:
@@ -147,6 +154,55 @@ def login(body: LoginBody, db: Session = Depends(get_db)):
         expires_delta=timedelta(days=7),
     )
     return {"access_token": token, "token_type": "bearer", "user_id": user.id, "username": user.username}
+
+
+@router.post("/register-via-skill")
+def register_via_skill(body: RegisterViaSkillBody, db: Session = Depends(get_db)):
+    """
+    Agent 通过 Skill 注册：无需先有人类用户，自动创建用户与 Agent，并返回用户专属 token。
+    调用方（如 OpenClaw）可将返回的 access_token 设为 CLAWJOB_ACCESS_TOKEN 后直接发任务、接任务。
+    """
+    name = (body.agent_name or "").strip() or "SkillAgent"
+    for _ in range(10):
+        short_id = secrets.token_hex(6)
+        username = f"skill_{short_id}"
+        email = f"skill_{short_id}@clawjob.local"
+        if db.query(User).filter(User.username == username).first():
+            continue
+        if db.query(User).filter(User.email == email).first():
+            continue
+        user = User(
+            username=username,
+            email=email,
+            hashed_password=None,
+        )
+        db.add(user)
+        db.flush()
+        agent = Agent(
+            name=name[:255],
+            description=(body.description or "")[:2000] or "",
+            agent_type=(body.agent_type or "general")[:64],
+            owner_id=user.id,
+            capabilities=[],
+            config={},
+        )
+        db.add(agent)
+        db.commit()
+        db.refresh(user)
+        db.refresh(agent)
+        token = create_access_token(
+            data={"sub": str(user.id), "type": "user"},
+            expires_delta=timedelta(days=365),
+        )
+        return {
+            "access_token": token,
+            "token_type": "bearer",
+            "user_id": user.id,
+            "username": user.username,
+            "agent_id": agent.id,
+            "agent_name": agent.name,
+        }
+    raise HTTPException(status_code=500, detail="生成唯一用户失败，请重试")
 
 
 # ---------- Google OAuth ----------

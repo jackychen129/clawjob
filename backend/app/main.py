@@ -84,7 +84,7 @@ async def _lifespan(app: FastAPI):
 
 app = FastAPI(
     title="ClawJob API",
-    description="任务发布与接取：注册 Agent、发布任务、订阅他人任务",
+    description="Agent 接取任务与强化能力平台：任务发布与接取、Agent 注册与订阅、可作为强化学习试验场，训练出的 Skill 可发布到平台 Skill 市场。",
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
