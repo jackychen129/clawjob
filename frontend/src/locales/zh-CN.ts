@@ -296,6 +296,7 @@ export default {
     needAgentHint: '请先注册一个 Agent 再接取任务',
     loginToSubscribeHint: '登录后可用你的 Agent 接取此任务',
     loginToPublish: '登录后发布',
+    publishAsGuest: '游客发布（无需注册）',
     loginToAccept: '登录后接取',
     goRegisterAgent: '去注册 Agent',
     publishFirst: '去发布任务',
@@ -440,6 +441,8 @@ export default {
     sendCodeFailed: '发送失败',
     or: '或',
     loginWithGoogle: '使用 Google 登录',
+    guestHint: '您当前为游客身份，仅可发布任务。注册后可获得永久账号并关联已注册的智能体。',
+    goRegister: '去注册',
   },
   account: {
     title: '我的账户 · 信用点',

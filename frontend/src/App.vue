@@ -44,6 +44,10 @@
       <span>{{ t('common.oauthErrorPrefix') }} {{ t('oauthError.' + oauthError.split(':')[0], t('oauthError.unknown')) }}{{ oauthError.includes(':') ? ' ' + oauthError.split(':').slice(1).join(':') : '' }}</span>
       <button type="button" class="btn btn-sm" @click="oauthError = ''">{{ t('common.dismiss') }}</button>
     </div>
+    <div v-if="auth.isLoggedIn && auth.isGuestUser" class="guest-hint-banner" role="status">
+      <span>{{ t('auth.guestHint') }}</span>
+      <button type="button" class="btn btn-primary btn-sm" @click="showAuthModal = true; authTab = 'register'">{{ t('auth.goRegister') }}</button>
+    </div>
     <main class="main-content relative z-0 px-6 sm:px-8 md:px-12 max-w-7xl mx-auto w-full flex-1 py-8 md:py-12" :key="route.path">
       <SkillPage v-if="route.path === '/skill'" />
       <DocsPage v-else-if="route.path === '/docs'" />
@@ -297,8 +301,11 @@
         <h3 class="modal-title">{{ t('task.publish') }}</h3>
         <div v-if="!auth.isLoggedIn" class="publish-gate">
           <p class="hint">{{ t('task.publishHint') }}</p>
-          <button type="button" class="btn btn-primary" @click="showCreateTaskModal = false; showAuthModal = true">{{ t('task.loginToPublish') }}</button>
-          <button type="button" class="btn btn-secondary" @click="closeCreateTaskModal">{{ t('common.cancel') }}</button>
+          <div class="publish-gate-actions">
+            <button type="button" class="btn btn-primary" @click="showCreateTaskModal = false; showAuthModal = true">{{ t('task.loginToPublish') }}</button>
+            <button type="button" class="btn btn-secondary" :disabled="guestTokenLoading" @click="doGuestPublish">{{ t('task.publishAsGuest') }}</button>
+            <button type="button" class="btn btn-text" @click="closeCreateTaskModal">{{ t('common.cancel') }}</button>
+          </div>
         </div>
         <div v-else class="create-task-steps">
           <div v-if="draftExists" class="draft-bar">
@@ -625,6 +632,7 @@ const skillRepoUrl = (import.meta as any).env?.VITE_SKILL_REPO_URL || 'https://g
 const showAuthModal = ref(false)
 const authTab = ref<'login' | 'register'>('login')
 const authLoading = ref(false)
+const guestTokenLoading = ref(false)
 const authError = ref('')
 const oauthError = ref('')
 const loginForm = reactive({ username: '', password: '' })
@@ -965,6 +973,24 @@ function openCreateTaskModal() {
   loadCandidates()
 }
 
+async function doGuestPublish() {
+  guestTokenLoading.value = true
+  try {
+    const res = await api.getGuestToken()
+    auth.setUser(
+      res.data.access_token,
+      res.data.username,
+      res.data.user_id,
+      true
+    )
+    loadAccountMe()
+  } catch (e: any) {
+    showSuccess(e?.response?.data?.detail || t('common.loadError'), 'error')
+  } finally {
+    guestTokenLoading.value = false
+  }
+}
+
 function closeCreateTaskModal() {
   showCreateTaskModal.value = false
   publishError.value = ''
@@ -1252,6 +1278,7 @@ function loadAccountMe() {
   api.getAccountMe().then((res) => {
     if (res.data.user_id != null) auth.setUserId(res.data.user_id)
     accountCredits.value = res.data.credits ?? 0
+    if (res.data.is_guest === true) auth.setIsGuest(true)
   }).catch(() => {})
 }
 
@@ -1491,4 +1518,19 @@ onUnmounted(() => {
   color: var(--text-secondary);
   margin-right: 0.25rem;
 }
+
+/* 游客提示条：建议注册并关联智能体 */
+.guest-hint-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding: 0.75rem 1rem;
+  background: rgba(var(--primary-rgb), 0.12);
+  border-bottom: 1px solid rgba(var(--primary-rgb), 0.25);
+  color: var(--text-primary);
+  font-size: 0.9375rem;
+}
+.guest-hint-banner span { flex: 1; min-width: 0; }
 </style>

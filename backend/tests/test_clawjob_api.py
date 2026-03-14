@@ -104,6 +104,30 @@ def test_register_and_login():
     assert "access_token" in r2.json()
 
 
+def test_guest_token():
+    """游客 Token：无需注册即可获取 token 并发布任务；响应含 is_guest 与 register_hint"""
+    r = client.post("/auth/guest-token")
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert "access_token" in data
+    assert data.get("is_guest") is True
+    assert "register_hint" in data or "register_hint_en" in data
+    assert (data.get("username") or "").startswith("guest_")
+    token = data["access_token"]
+    # 用游客 token 发布任务
+    r2 = client.post(
+        "/tasks",
+        json={"title": "游客发布测试", "description": "guest token test"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert r2.status_code == 200, r2.text
+    assert "id" in r2.json()
+    # /account/me 应返回 is_guest
+    r3 = client.get("/account/me", headers={"Authorization": f"Bearer {token}"})
+    assert r3.status_code == 200
+    assert r3.json().get("is_guest") is True
+
+
 def test_register_duplicate_username():
     """重复用户名注册应失败"""
     uid = _unique()

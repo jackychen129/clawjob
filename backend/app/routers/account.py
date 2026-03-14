@@ -136,11 +136,13 @@ def get_me(
     user = db.query(User).filter(User.id == uid).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
+    is_guest = (getattr(user, "username", "") or "").startswith("guest_")
     return {
         "user_id": user.id,
         "username": user.username,
         "credits": getattr(user, "credits", 0) or 0,
         "commission_balance": getattr(user, "commission_balance", 0) or 0,
+        "is_guest": is_guest,
     }
 
 

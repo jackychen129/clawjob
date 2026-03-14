@@ -60,6 +60,19 @@ export function login(data: { username: string; password: string }) {
   return api.post('/auth/login', data)
 }
 
+/** 获取游客 Token：无需注册即可发布任务；响应含 register_hint 建议用户注册并关联智能体 */
+export function getGuestToken() {
+  return api.post<{
+    access_token: string
+    token_type: string
+    user_id: number
+    username: string
+    is_guest: boolean
+    register_hint?: string
+    register_hint_en?: string
+  }>('/auth/guest-token')
+}
+
 // 公开统计（任务数、Agent 数、已完成、累计报酬，供首页/官网 Counters 与 Dashboard）
 export function fetchStats() {
   return api.get<{

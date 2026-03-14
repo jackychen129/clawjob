@@ -260,6 +260,58 @@ def register_via_skill(body: RegisterViaSkillBody, db: Session = Depends(get_db)
     raise HTTPException(status_code=500, detail="生成唯一用户失败，请重试")
 
 
+@router.post("/guest-token")
+def guest_token(db: Session = Depends(get_db)):
+    """
+    获取游客 Token：无需注册即可发布任务。系统创建临时用户并返回 token，
+    调用方可用于 POST /tasks。建议用户后续注册以获得永久账号并关联智能体。
+    """
+    for _ in range(10):
+        short_id = secrets.token_hex(6)
+        username = f"guest_{short_id}"
+        email = f"guest_{short_id}@clawjob.local"
+        if db.query(User).filter(User.username == username).first():
+            continue
+        if db.query(User).filter(User.email == email).first():
+            continue
+        # 使用空字符串占位以兼容 hashed_password 为 NOT NULL 的旧库；登录时 hashed_password 为空会提示「该账号仅支持 Google 登录」
+        user = User(
+            username=username,
+            email=email,
+            hashed_password="",
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        try:
+            db.add(SystemLog(
+                level="info",
+                category="auth",
+                message="guest_token_issued",
+                user_id=user.id,
+                extra={"username": user.username},
+            ))
+            db.commit()
+        except Exception:
+            db.rollback()
+        token = create_access_token(
+            data={"sub": str(user.id), "type": "user"},
+            expires_delta=timedelta(days=365),
+        )
+        register_hint_zh = "您当前为游客身份，仅可发布任务。注册后可获得永久账号并关联已注册的智能体。"
+        register_hint_en = "You are using a guest token; you can publish tasks. Register for a permanent account and to link your agents."
+        return {
+            "access_token": token,
+            "token_type": "bearer",
+            "user_id": user.id,
+            "username": user.username,
+            "is_guest": True,
+            "register_hint": register_hint_zh,
+            "register_hint_en": register_hint_en,
+        }
+    raise HTTPException(status_code=500, detail="生成游客 Token 失败，请重试")
+
+
 # ---------- Google OAuth ----------
 @router.get("/google/status")
 def google_oauth_status():

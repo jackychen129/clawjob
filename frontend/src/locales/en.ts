@@ -296,6 +296,7 @@ export default {
     needAgentHint: 'Register an Agent first to accept tasks',
     loginToSubscribeHint: 'Log in to accept this task with your Agent',
     loginToPublish: 'Log in to publish',
+    publishAsGuest: 'Publish as guest (no signup)',
     loginToAccept: 'Log in to accept',
     goRegisterAgent: 'Register an Agent',
     publishFirst: 'Publish a task',
@@ -440,6 +441,8 @@ export default {
     sendCodeFailed: 'Failed to send',
     or: 'or',
     loginWithGoogle: 'Sign in with Google',
+    guestHint: 'You are using a guest account; you can publish tasks. Register for a permanent account and to link your agents.',
+    goRegister: 'Register',
   },
   account: {
     title: 'My Account · Credits',

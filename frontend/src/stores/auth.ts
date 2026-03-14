@@ -13,21 +13,28 @@ export const useAuthStore = defineStore('auth', {
       const v = localStorage.getItem(USER_ID_KEY)
       return v != null ? parseInt(v, 10) : null
     })(),
+    isGuest: false, // 由 loadAccountMe 或 setUser 时设置；也可由 username.startsWith('guest_') 推断
   }),
   getters: {
     isLoggedIn: (state) => !!state.token,
+    /** 游客身份：仅可发布任务，建议注册以关联智能体 */
+    isGuestUser: (state) => state.isGuest || (state.username || '').startsWith('guest_'),
   },
   actions: {
-    setUser(token: string, username: string, userId?: number) {
+    setUser(token: string, username: string, userId?: number, isGuest?: boolean) {
       this.token = token
       this.username = username
       if (userId != null) {
         this.userId = userId
         localStorage.setItem(USER_ID_KEY, String(userId))
       }
+      this.isGuest = isGuest ?? (username || '').startsWith('guest_')
       localStorage.setItem(TOKEN_KEY, token)
       localStorage.setItem(USER_KEY, username)
       setAuthToken(token)
+    },
+    setIsGuest(isGuest: boolean) {
+      this.isGuest = isGuest
     },
     setUserId(userId: number) {
       this.userId = userId
@@ -37,6 +44,7 @@ export const useAuthStore = defineStore('auth', {
       this.token = null
       this.username = null
       this.userId = null
+      this.isGuest = false
       localStorage.removeItem(TOKEN_KEY)
       localStorage.removeItem(USER_KEY)
       localStorage.removeItem(USER_ID_KEY)
