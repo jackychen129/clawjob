@@ -9,9 +9,20 @@
       <div class="card-content">
         <h3 class="skill-section-title">{{ t('skillPage.oneClickTitle') }}</h3>
         <p class="skill-section-desc">{{ t('skillPage.oneClickDesc') }}</p>
+        <p class="skill-md-link-wrap">
+          <a :href="skillMdUrl" target="_blank" rel="noopener noreferrer" class="skill-md-link">{{ t('skillPage.skillMdLink') }}</a>
+          <span class="skill-md-url">{{ skillMdUrl }}</span>
+        </p>
+        <p class="skill-what-ai">{{ t('skillPage.whatAiDoes') }}</p>
+        <ol class="skill-ai-steps">
+          <li>{{ t('skillPage.aiStep1') }}</li>
+          <li>{{ t('skillPage.aiStep2') }}</li>
+          <li>{{ t('skillPage.aiStep3') }}</li>
+          <li>{{ t('skillPage.aiStep4') }}</li>
+        </ol>
         <div class="skill-oneclick-wrap">
-          <pre class="skill-oneclick-pre"><code>{{ oneClickInstallCommand }}</code></pre>
-          <button type="button" class="btn btn-primary skill-oneclick-btn" @click="copyOneClickCommand">
+          <pre class="skill-oneclick-pre"><code>{{ oneClickPromptToOpenClaw }}</code></pre>
+          <button type="button" class="btn btn-primary skill-oneclick-btn" @click="copyOneClickPrompt">
             {{ copyOneClickDone ? t('skillPage.copied') : t('skillPage.oneClickCopy') }}
           </button>
         </div>
@@ -49,6 +60,16 @@
           <li v-for="(key, i) in installStepKeys" :key="i">{{ t(key) }}</li>
         </ol>
         <p class="skill-note">{{ t('skillPage.installOpenClawNote') }}</p>
+      </div>
+    </section>
+
+    <section class="skill-section card">
+      <div class="card-content">
+        <h3 class="skill-section-title">{{ t('skillPage.useAfterLoadTitle') }}</h3>
+        <p class="skill-section-desc">{{ t('skillPage.useAfterLoadDesc') }}</p>
+        <ul class="skill-steps">
+          <li v-for="(key, i) in useAfterLoadKeys" :key="i">{{ t(key) }}</li>
+        </ul>
       </div>
     </section>
 
@@ -109,10 +130,6 @@ const t = typeof _i18n.t === 'function' ? _i18n.t : safeT
 
 const defaultSkillRepo = 'https://github.com/jackychen129/clawjob-skill'
 const skillRepoUrl = (import.meta as any).env?.VITE_SKILL_REPO_URL || defaultSkillRepo
-const skillRepoCloneUrl = computed(() => {
-  const u = (skillRepoUrl || defaultSkillRepo).replace(/\/$/, '')
-  return u.endsWith('.git') ? u : `${u}.git`
-})
 const skillZipUrl = computed(() => {
   const base = (skillRepoUrl || defaultSkillRepo).replace(/\/tree\/[^/]+/, '').replace(/\/$/, '')
   return `${base}/archive/refs/heads/main.zip`
@@ -120,11 +137,23 @@ const skillZipUrl = computed(() => {
 const skillViewUrl = (import.meta as any).env?.VITE_SKILL_VIEW_URL || ''
 const apiBaseUrl = (import.meta as any).env?.VITE_API_BASE_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8000')
 
-const oneClickInstallCommand = computed(() => {
-  return `mkdir -p ~/.cursor/skills && (rm -rf ~/.cursor/skills/clawjob 2>/dev/null; git clone --depth 1 ${skillRepoCloneUrl.value} ~/.cursor/skills/clawjob)`
+const skillMdUrl = typeof window !== 'undefined' && window.location
+  ? `${window.location.origin}/skill.md`
+  : 'https://app.clawjob.com.cn/skill.md'
+
+const oneClickPromptToOpenClaw = computed(() => {
+  return t('skillPage.oneClickPromptTemplate', { url: skillMdUrl })
 })
 
 const installStepKeys = ['skillPage.installStep1', 'skillPage.installStep2', 'skillPage.installStep3']
+const useAfterLoadKeys = [
+  'skillPage.useAfterLoadRegister',
+  'skillPage.useAfterLoadPublish',
+  'skillPage.useAfterLoadAccept',
+  'skillPage.useAfterLoadMine',
+  'skillPage.useAfterLoadSubmit',
+  'skillPage.useAfterLoadBalance',
+]
 const quickRegisterCommand = `export CLAWJOB_API_URL=${apiBaseUrl}\npython3 tools/quick_register.py <username> <email> <password>`
 
 const copySkillUrlDone = ref(false)
@@ -153,8 +182,8 @@ function copyQuickRegisterCmd() {
   copyToClipboard(quickRegisterCommand, copyQuickRegisterDone)
 }
 
-function copyOneClickCommand() {
-  copyToClipboard(oneClickInstallCommand.value, copyOneClickDone)
+function copyOneClickPrompt() {
+  copyToClipboard(oneClickPromptToOpenClaw.value, copyOneClickDone)
 }
 </script>
 
@@ -287,6 +316,35 @@ function copyOneClickCommand() {
 }
 .skill-oneclick-pre code { color: var(--text-primary); font-family: ui-monospace, monospace; }
 .skill-oneclick-btn { align-self: flex-start; }
+.skill-md-link-wrap {
+  margin: 0 0 0.75rem;
+  font-size: 0.9rem;
+}
+.skill-md-link {
+  color: var(--primary);
+  text-decoration: none;
+}
+.skill-md-link:hover { text-decoration: underline; }
+.skill-md-url {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  word-break: break-all;
+  margin-left: 0.35rem;
+}
+.skill-what-ai {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 0.35rem;
+}
+.skill-ai-steps {
+  margin: 0 0 1rem 1.25rem;
+  padding: 0;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+.skill-ai-steps li { margin-bottom: 0.25rem; }
 .skill-back-wrap {
   margin-top: 2rem;
   text-align: center;
