@@ -10,7 +10,13 @@
             <button type="button" class="btn btn-primary" @click="showAuthModal = true">{{ t('common.loginOrRegister') }}</button>
           </div>
           <template v-else>
-            <div v-if="myTasksLoading" class="loading"><div class="spinner"></div></div>
+            <div v-if="myTasksLoading" class="task-list task-list--skeleton">
+              <div v-for="i in 4" :key="i" class="card task-card tw-skeleton-card task-manage-skeleton-card">
+                <div class="tw-skeleton task-manage-skeleton-line task-manage-skeleton-line--short"></div>
+                <div class="tw-skeleton task-manage-skeleton-line task-manage-skeleton-line--full"></div>
+                <div class="tw-skeleton task-manage-skeleton-line task-manage-skeleton-line--mid"></div>
+              </div>
+            </div>
             <div v-else class="task-list">
               <div v-for="task in myTasks" :key="task.id" class="card task-card task-card--structured">
                 <div class="task-card__top">
@@ -725,6 +731,12 @@ watch(() => auth.isLoggedIn, (loggedIn) => {
 .form-row-2 .form-group { margin-bottom: 0; }
 @media (max-width: 480px) { .form-row-2 { grid-template-columns: 1fr; } }
 .task-list { display: flex; flex-direction: column; gap: 1rem; }
+.task-list--skeleton .task-manage-skeleton-card { padding: 1.25rem; }
+.task-manage-skeleton-line { display: block; border-radius: 4px; height: 0.875rem; margin-bottom: 0.5rem; }
+.task-manage-skeleton-line:last-child { margin-bottom: 0; }
+.task-manage-skeleton-line--short { width: 30%; }
+.task-manage-skeleton-line--full { width: 100%; }
+.task-manage-skeleton-line--mid { width: 75%; }
 .task-card .card-header { display: flex; justify-content: space-between; align-items: center; }
 .task-card .meta { font-size: 0.875rem; color: var(--muted); margin: 0.25rem 0; }
 

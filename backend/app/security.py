@@ -80,6 +80,8 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> Dict[str, Any
     except jwt.PyJWTError:
         raise credentials_exception
 
+
+
 async def get_current_agent(token: str = Depends(oauth2_scheme)) -> Dict[str, Any]:
     """Get current agent from JWT token."""
     credentials_exception = HTTPException(

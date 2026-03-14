@@ -132,4 +132,37 @@
 
 ---
 
+## 11. 样式实现说明（当前做法）
+
+以下说明当前两端的样式是如何落地的，便于后续改版或交接。
+
+### 应用端 (clawjob / app.clawjob.com.cn) — Vue + runpod-theme.css
+
+- **唯一全局样式文件**：`frontend/src/styles/runpod-theme.css`。入口在 `main.ts` 中在 Element Plus 之后引入，保证覆盖优先级。
+- **设计 token**：在 `:root` 中定义 CSS 变量（如 `--primary-color`、`--brand-600`、`--card-background`、`--border-color`、`--text-primary`、`--text-secondary`、`--radius-sm/md/lg` 等），与设计体系中的色值、圆角一致。全站统一用这些变量，配色不变时只改此处即可。
+- **布局与区块**：`.app-container`、`.app-header`、`.main-content`、`.card`、`.card-content`、`.page-title`、`.hero-block` 等均在 runpod-theme 中统一定义；内页（Dashboard、Leaderboard、TaskManage 等）仅做局部 scoped 覆盖或补充。
+- **登录/注册弹窗**：所有使用「登录/注册」的页面（App.vue、AgentManageView、TaskManageView）共用同一套类名与样式，避免分散定义：
+  - 弹窗容器：`.modal-mask`、`.modal`（背景、圆角、阴影、轻微品牌色描边）。
+  - Tab 切换：`.modal .tabs`、`.tabs .btn.active`。
+  - 表单：`.modal .form`（纵向 flex、统一 gap）、`.form-inline`、`.verification-code-row`（验证码行）。
+  - 按钮与链接：`.btn-google`、`.btn-google-unconfigured`、`.oauth-divider`（「或」分隔线）、`.error-msg`、`.hint`、`.modal .close-btn`。
+  - 输入框：全局 `.input` 已在 runpod-theme 中定义（圆角、边框、focus 环）；`textarea.input` / `.textarea` 统一最小高度与 resize。
+- **骨架屏**：`.tw-skeleton-card`、`.tw-skeleton` 及 `@keyframes skeleton-shine` 在 runpod-theme 末尾定义；Dashboard 指标区、实时动态、Leaderboard 表格、任务管理列表、首页任务列表在 loading 时使用这些类，减少布局跳动。
+- **字体**：`index.html` 中通过 Google Fonts 引入 Inter；body 使用 `font-family: 'Inter', ...`，与设计体系中的「无衬线」一致。
+
+### 官网 (clawjob-website) — React + Tailwind + index.css
+
+- **Tailwind 配置**：`tailwind.config.js` 中扩展了 `colors`（含 `brand`、`surface`）、`boxShadow`（`glow`、`glow-sm`、`glow-lg`）、`animation`/`keyframes`（`fade-in`、`slide-up`、`pulse-soft`），以及 `fontFamily.sans`（Inter、Geist）。配色与设计体系一致，未改主色。
+- **全局样式**：`src/index.css` 中 `@layer base` 定义 HSL 变量（`--background`、`--primary`、`--card`、`--border` 等），对应深色背景 + 品牌绿；并增加 `@layer utilities` 下的 `.border-gradient`、`.glass`、`.glass-card`，用于渐变边框与磨砂玻璃卡片（按需使用）。
+- **组件**：`src/components/ui/` 下为 Shadcn 风格的 Button、Card、Input、Badge；主按钮与卡片悬停增加了 `shadow-glow-sm`，与「高级感、微妙发光」一致。新页面或区块优先用这些组件 + Tailwind 工具类，避免手写大段 CSS。
+- **字体**：`index.html` 中引入 Inter、Geist；Tailwind 的 `sans` 以 Inter 为首选。
+- **多语言与文案**：官网通过 i18n 中英切换；样式不随语言变化，仅布局考虑长文案折行与 RTL 预留（当前未做 RTL）。
+
+### 两端对齐要点
+
+- **主色**：均为绿色系（#22c55e / brand-600），未使用电光蓝/紫，保持「黑绿」高级感。
+- **圆角**：按钮/输入约 8～12px，卡片约 12～16px，与设计体系一致。
+- **加载与空状态**：应用端用骨架屏 + 少量 spinner；官网以内容为主，加载态可后续用 Skeleton 组件扩展。
+- **可访问性**：焦点环（`:focus-visible`）在 runpod-theme 的 `.btn`、`.input` 及官网 Button/Input 中均有保留。
+
 以上规范同时适用于 **clawjob** 与 **clawjob-website**；新增页面或组件时请按此统一视觉与布局。

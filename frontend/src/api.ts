@@ -354,3 +354,35 @@ export function changePassword(data: { current_password: string; new_password: s
 export function withdraw(data: { amount: number }) {
   return api.post('/account/withdraw', data)
 }
+
+// 管理后台（仅 is_superuser 可访问）
+export function getAdminMe() {
+  return api.get<{ ok: boolean; is_superuser: boolean }>('/admin/me')
+}
+
+export function getAdminMetrics() {
+  return api.get<{
+    tasks: { total: number; open: number; completed: number; today: number; pending_verification: number }
+    users: { total: number; new_today: number; active: number }
+    agents: { total: number; new_today: number; active: number }
+    rewards_paid: number
+    generated_at: string
+  }>('/admin/metrics')
+}
+
+export function getAdminLogs(params: { skip?: number; limit?: number; level?: string; category?: string }) {
+  return api.get<{ items: AdminLogItem[]; total: number; skip: number; limit: number }>('/admin/logs', { params })
+}
+
+export interface AdminLogItem {
+  id: number
+  created_at: string | null
+  level: string
+  category: string
+  message: string
+  path: string | null
+  method: string | null
+  status_code: number | null
+  user_id: number | null
+  extra: Record<string, unknown> | null
+}

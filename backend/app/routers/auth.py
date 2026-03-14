@@ -1,6 +1,7 @@
 """
 ClawJob - 注册与登录（含 Google OAuth、邮箱验证码注册）
 """
+import logging
 import os
 import secrets
 import smtplib
@@ -9,13 +10,15 @@ from email.utils import formataddr
 from urllib.parse import urlencode, quote
 from datetime import datetime, timedelta
 
+logger = logging.getLogger(__name__)
+
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.database.relational_db import User, VerificationCode, Agent, get_db
+from app.database.relational_db import User, VerificationCode, Agent, SystemLog, get_db
 from app.security import get_password_hash, create_access_token, verify_password
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -51,15 +54,16 @@ class RegisterViaSkillBody(BaseModel):
     agent_type: str = "general"
 
 
-def _send_verification_email(email: str, code: str) -> bool:
-    """发送验证码邮件；未配置 SMTP 时返回 False（开发环境可用验证码表或固定码）"""
+def _send_verification_email(email: str, code: str) -> str:
+    """发送验证码邮件。返回 'ok' | 'not_configured' | 'failed'。"""
     host = os.getenv("SMTP_HOST", "").strip()
     port = int(os.getenv("SMTP_PORT", "0") or "0")
     user_smtp = os.getenv("SMTP_USER", "").strip()
     password = os.getenv("SMTP_PASSWORD", "").strip()
     from_addr = os.getenv("SMTP_FROM", user_smtp or "noreply@clawjob.com").strip()
     if not host or not port or not user_smtp or not password:
-        return False
+        logger.warning("SMTP not configured: SMTP_HOST/SMTP_PORT/SMTP_USER/SMTP_PASSWORD required for verification emails")
+        return "not_configured"
     subject = os.getenv("EMAIL_VERIFICATION_SUBJECT", "ClawJob 注册验证码")
     body = f"您的验证码是：{code}，5 分钟内有效。如非本人操作请忽略。"
     msg = MIMEText(body, "plain", "utf-8")
@@ -67,13 +71,20 @@ def _send_verification_email(email: str, code: str) -> bool:
     msg["From"] = formataddr(("ClawJob", from_addr))
     msg["To"] = email
     try:
-        with smtplib.SMTP(host, port, timeout=10) as s:
-            s.starttls()
-            s.login(user_smtp, password)
-            s.sendmail(from_addr, [email], msg.as_string())
-        return True
-    except Exception:
-        return False
+        if port == 465:
+            with smtplib.SMTP_SSL(host, port, timeout=10) as s:
+                s.login(user_smtp, password)
+                s.sendmail(from_addr, [email], msg.as_string())
+        else:
+            with smtplib.SMTP(host, port, timeout=10) as s:
+                s.starttls()
+                s.login(user_smtp, password)
+                s.sendmail(from_addr, [email], msg.as_string())
+        logger.info("Verification email sent to %s", email)
+        return "ok"
+    except Exception as e:
+        logger.exception("Failed to send verification email to %s: %s", email, e)
+        return "failed"
 
 
 @router.post("/send-verification-code")
@@ -94,9 +105,20 @@ def send_verification_code(body: SendVerificationCodeBody, db: Session = Depends
     db.query(VerificationCode).filter(VerificationCode.email == email).delete()
     db.add(VerificationCode(email=email, code=code, expires_at=expires_at))
     db.commit()
-    if not dev_code:
-        _send_verification_email(email, code)
-    return {"message": "验证码已发送，请查收邮件（未配置邮件服务时请使用开发环境验证码）"}
+    if dev_code:
+        return {"message": "验证码已生成（开发环境），请使用配置的固定验证码", "email_sent": False}
+    send_result = _send_verification_email(email, code)
+    if send_result == "failed":
+        raise HTTPException(
+            status_code=503,
+            detail="邮件发送失败，请检查邮箱地址或稍后重试；若持续失败请联系管理员检查 SMTP 配置。",
+        )
+    if send_result == "not_configured":
+        return {
+            "message": "验证码已生成，但当前未配置邮件服务，无法发送到邮箱。请联系管理员配置 SMTP，或使用开发环境验证码。",
+            "email_sent": False,
+        }
+    return {"message": "验证码已发送，请查收邮件", "email_sent": True}
 
 
 @router.post("/register")
@@ -130,6 +152,17 @@ def register(body: RegisterBody, db: Session = Depends(get_db)):
     db.add(user)
     db.commit()
     db.refresh(user)
+    try:
+        db.add(SystemLog(
+            level="info",
+            category="auth",
+            message="user_registered",
+            user_id=user.id,
+            extra={"username": user.username, "email": email},
+        ))
+        db.commit()
+    except Exception:
+        db.rollback()
     db.delete(row)
     db.commit()
     token = create_access_token(
@@ -153,6 +186,17 @@ def login(body: LoginBody, db: Session = Depends(get_db)):
         data={"sub": str(user.id), "type": "user"},
         expires_delta=timedelta(days=7),
     )
+    try:
+        db.add(SystemLog(
+            level="info",
+            category="auth",
+            message="user_login",
+            user_id=user.id,
+            extra={"username": user.username},
+        ))
+        db.commit()
+    except Exception:
+        db.rollback()
     return {"access_token": token, "token_type": "bearer", "user_id": user.id, "username": user.username}
 
 
@@ -190,6 +234,17 @@ def register_via_skill(body: RegisterViaSkillBody, db: Session = Depends(get_db)
         db.commit()
         db.refresh(user)
         db.refresh(agent)
+        try:
+            db.add(SystemLog(
+                level="info",
+                category="auth",
+                message="user_registered_via_skill",
+                user_id=user.id,
+                extra={"username": user.username, "agent_id": agent.id, "agent_name": agent.name},
+            ))
+            db.commit()
+        except Exception:
+            db.rollback()
         token = create_access_token(
             data={"sub": str(user.id), "type": "user"},
             expires_delta=timedelta(days=365),

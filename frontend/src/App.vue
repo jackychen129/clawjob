@@ -20,6 +20,7 @@
           <router-link to="/playbook" class="nav-link" :class="{ active: route.path === '/playbook' }">{{ t('nav.playbook') || 'Playbook' }}</router-link>
           <router-link to="/rental" class="nav-link" :class="{ active: route.path === '/rental' }">{{ t('nav.rental') || '租赁' }}</router-link>
           <router-link to="/skill" class="nav-link" :class="{ active: route.path === '/skill' }">{{ t('common.skill') }}</router-link>
+          <router-link v-if="isAdmin" to="/admin" class="nav-link" :class="{ active: route.path === '/admin' }">{{ t('admin.title') || '管理后台' }}</router-link>
         </nav>
         <div class="header-actions">
           <select v-model="locale" class="locale-select" @change="onLocaleChange">
@@ -55,6 +56,7 @@
       <TaskManageView v-else-if="route.path === '/tasks'" @success="showSuccess" />
       <AgentManageView v-else-if="route.path === '/agents'" />
       <AccountPage v-else-if="route.path === '/account'" @credits-updated="loadAccountMe" />
+      <AdminView v-else-if="route.path === '/admin'" />
       <template v-else>
       <div class="home-wrap apple-layout">
         <h2 id="task-list" class="section-title">{{ t('common.openTasks') }}</h2>
@@ -103,14 +105,14 @@
               </select>
             </div>
           </div>
-          <div v-if="tasksLoading" class="task-list home-task-list space-y-4">
-            <div v-for="i in 4" :key="i" class="tw-skeleton-card p-6">
-              <div class="tw-skeleton w-3/4 h-5"></div>
-              <div class="tw-skeleton h-4"></div>
-              <div class="tw-skeleton h-4 w-1/2"></div>
+          <div v-if="tasksLoading && tasks.length === 0" class="task-list home-task-list home-task-list--skeleton">
+            <div v-for="i in 6" :key="i" class="card tw-skeleton-card home-task-skeleton-card">
+              <div class="tw-skeleton home-task-skeleton-line home-task-skeleton-line--title"></div>
+              <div class="tw-skeleton home-task-skeleton-line home-task-skeleton-line--desc"></div>
+              <div class="tw-skeleton home-task-skeleton-line home-task-skeleton-line--meta"></div>
             </div>
           </div>
-          <div v-else class="task-list home-task-list grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
+          <div v-else class="task-list home-task-list home-task-list--grid">
           <div
             v-for="task in tasks"
             :key="task.id"
@@ -188,6 +190,11 @@
             <div class="tw-empty-state__icon" aria-hidden="true">📋</div>
             <p class="tw-empty-state__text">{{ t('task.emptyTasks') }}</p>
             <button type="button" class="btn btn-secondary mt-2" @click="showCreateTaskModal = true">{{ t('task.publishFirst') }}</button>
+          </div>
+          <div v-if="tasks.length && homeHasMore" class="home-load-more">
+            <button type="button" class="btn btn-secondary" :disabled="tasksLoadingMore" @click="loadMoreTasks">
+              {{ tasksLoadingMore ? (t('task.loadingMore') || '加载中…') : (t('task.loadMore') || '加载更多') }}
+            </button>
           </div>
           </div>
         </main>
@@ -294,6 +301,11 @@
           <button type="button" class="btn btn-secondary" @click="closeCreateTaskModal">{{ t('common.cancel') }}</button>
         </div>
         <div v-else class="create-task-steps">
+          <div v-if="draftExists" class="draft-bar">
+            <span class="draft-bar__text">{{ t('task.draftExists') || '您有未完成的草稿' }}</span>
+            <button type="button" class="btn btn-secondary btn-sm" @click="loadDraft(); showSuccess(t('task.draftRestored') || '已恢复草稿')">{{ t('task.draftRestore') || '从草稿恢复' }}</button>
+            <button type="button" class="btn btn-text btn-sm" @click="clearDraft()">{{ t('task.draftDiscard') || '丢弃草稿' }}</button>
+          </div>
           <div class="create-step-tabs">
             <button type="button" class="step-tab" :class="{ active: createStep === 1 }" @click="createStep = 1">1. {{ t('taskManage.stepTaskInfo') || '任务信息' }}</button>
             <button type="button" class="step-tab" :class="{ active: createStep === 2 }" @click="createStep = 2">2. {{ t('taskManage.stepReward') || '奖励与回调' }}</button>
@@ -354,7 +366,10 @@
               <label class="form-label">{{ t('task.skills') }}</label>
               <input v-model="publishForm.skills_text" class="input" type="text" :placeholder="t('task.skillsPlaceholder')" />
             </div>
-            <button type="button" class="btn btn-primary" @click="createStep = 2">{{ t('common.next') }}</button>
+            <div class="step-actions">
+              <button type="button" class="btn btn-text" @click="saveDraft">{{ t('task.draftSave') || '保存草稿' }}</button>
+              <button type="button" class="btn btn-primary" @click="createStep = 2">{{ t('common.next') }}</button>
+            </div>
           </div>
           <div v-show="createStep === 2" class="step-panel">
             <div class="form-group form-inline">
@@ -369,6 +384,7 @@
               </div>
             </template>
             <div class="step-actions">
+              <button type="button" class="btn btn-text" @click="saveDraft">{{ t('task.draftSave') || '保存草稿' }}</button>
               <button type="button" class="btn btn-secondary" @click="createStep = 1">{{ t('common.prev') }}</button>
               <button type="button" class="btn btn-primary" @click="createStep = 3">{{ t('common.next') }}</button>
             </div>
@@ -402,6 +418,7 @@
             <p class="hint">{{ t('task.balanceHint', { n: accountCredits }) }}</p>
             <p v-if="publishError" class="error-msg" role="alert">{{ publishError }}</p>
             <div class="step-actions">
+              <button type="button" class="btn btn-text" @click="saveDraft">{{ t('task.draftSave') || '保存草稿' }}</button>
               <button type="button" class="btn btn-secondary" @click="createStep = 2">{{ t('common.prev') }}</button>
               <button type="button" class="btn btn-primary" :disabled="publishLoading" @click="doPublishFromModal">{{ publishLoading ? t('task.publishBtnLoading') : t('task.publishBtn') }}</button>
             </div>
@@ -588,6 +605,7 @@ import DashboardView from './views/DashboardView.vue'
 import LeaderboardView from './views/LeaderboardView.vue'
 import PlaybookOnboardingView from './views/PlaybookOnboardingView.vue'
 import AgentRentalView from './views/AgentRentalView.vue'
+import AdminView from './views/AdminView.vue'
 import { getTemplateById } from './constants/taskTemplates'
 
 const route = useRoute()
@@ -615,8 +633,18 @@ const sendCodeLoading = ref(false)
 const sendCodeCountdown = ref(0)
 let sendCodeTimer: ReturnType<typeof setInterval> | null = null
 
+const isAdmin = ref(false)
+function refreshAdminFlag() {
+  if (!auth.isLoggedIn) { isAdmin.value = false; return }
+  api.getAdminMe().then(() => { isAdmin.value = true }).catch(() => { isAdmin.value = false })
+}
+
 const tasks = ref<api.TaskListItem[]>([])
 const tasksLoading = ref(false)
+const tasksLoadingMore = ref(false)
+const homeTaskPageSize = 20
+const homeHasMore = ref(true)
+const homeTasksTotal = ref(0)
 
 const homeCategoryFilter = ref('')
 const homeSort = ref<'created_at_desc' | 'reward_desc' | 'created_at_asc' | 'comments_desc' | 'deadline_asc'>('reward_desc')
@@ -710,6 +738,75 @@ const submitCompletionLoading = ref(false)
 const confirmLoading = ref<number | null>(null)
 const rejectLoading = ref<number | null>(null)
 
+const PUBLISH_DRAFT_KEY = 'clawjob_publish_draft'
+const draftExists = ref(false)
+
+function getDraft(): Record<string, unknown> | null {
+  try {
+    const raw = localStorage.getItem(PUBLISH_DRAFT_KEY)
+    return raw ? (JSON.parse(raw) as Record<string, unknown>) : null
+  } catch {
+    return null
+  }
+}
+function hasDraft(): boolean {
+  return !!getDraft()
+}
+function saveDraft() {
+  const payload = {
+    title: publishForm.title,
+    description: publishForm.description,
+    reward_points: publishForm.reward_points,
+    completion_webhook_url: publishForm.completion_webhook_url,
+    discord_webhook_url: publishForm.discord_webhook_url,
+    category: publishForm.category,
+    requirements: publishForm.requirements,
+    location: publishForm.location,
+    duration_estimate: publishForm.duration_estimate,
+    skills_text: publishForm.skills_text,
+    invited_agent_ids: publishForm.invited_agent_ids,
+  }
+  try {
+    localStorage.setItem(PUBLISH_DRAFT_KEY, JSON.stringify(payload))
+    draftExists.value = true
+    showSuccess(t('task.draftSaved') || '草稿已保存')
+  } catch (_) {
+    showSuccess(t('task.draftSaveFailed') || '草稿保存失败')
+  }
+}
+function loadDraft() {
+  const d = getDraft()
+  if (!d) return
+  if (typeof d.title === 'string') publishForm.title = d.title
+  if (typeof d.description === 'string') publishForm.description = d.description
+  if (typeof d.reward_points === 'number') publishForm.reward_points = d.reward_points
+  if (typeof d.completion_webhook_url === 'string') publishForm.completion_webhook_url = d.completion_webhook_url
+  if (typeof d.discord_webhook_url === 'string') publishForm.discord_webhook_url = d.discord_webhook_url
+  if (typeof d.category === 'string') publishForm.category = d.category
+  if (typeof d.requirements === 'string') publishForm.requirements = d.requirements
+  if (typeof d.location === 'string') publishForm.location = d.location
+  if (typeof d.duration_estimate === 'string') publishForm.duration_estimate = d.duration_estimate
+  if (typeof d.skills_text === 'string') publishForm.skills_text = d.skills_text
+  if (Array.isArray(d.invited_agent_ids)) publishForm.invited_agent_ids = d.invited_agent_ids.map(Number).filter(Boolean)
+}
+function clearDraft() {
+  try {
+    localStorage.removeItem(PUBLISH_DRAFT_KEY)
+  } catch (_) {}
+  draftExists.value = false
+  publishForm.title = ''
+  publishForm.description = ''
+  publishForm.reward_points = 0
+  publishForm.completion_webhook_url = ''
+  publishForm.discord_webhook_url = ''
+  publishForm.category = ''
+  publishForm.requirements = ''
+  publishForm.location = ''
+  publishForm.duration_estimate = ''
+  publishForm.skills_text = ''
+  publishForm.invited_agent_ids = []
+}
+
 const SKILL_BANNER_KEY = 'clawjob_skill_banner_dismissed'
 const showSkillBanner = ref(false)
 const showAgentGuide = ref(false)
@@ -751,22 +848,43 @@ function onEscapeKey(e: KeyboardEvent) {
 }
 const accountCredits = ref(0)
 
-function loadTasks() {
-  tasksLoading.value = true
-  const params: { skip?: number; limit?: number; category_filter?: string; sort?: string; q?: string; reward_min?: number; reward_max?: number } = { limit: 50 }
+function loadTasks(reset = true) {
+  if (reset) {
+    tasksLoading.value = true
+    tasks.value = []
+  }
+  const params: { skip?: number; limit?: number; category_filter?: string; sort?: string; q?: string; reward_min?: number; reward_max?: number } = {
+    limit: homeTaskPageSize,
+    skip: reset ? 0 : tasks.value.length,
+  }
   if (homeCategoryFilter.value) params.category_filter = homeCategoryFilter.value
   params.sort = homeSort.value
   if (homeSearchQuery.value.trim()) params.q = homeSearchQuery.value.trim()
   if (homeRewardRange.value === '0-50') { params.reward_min = 0; params.reward_max = 50 }
   else if (homeRewardRange.value === '50-500') { params.reward_min = 50; params.reward_max = 500 }
   else if (homeRewardRange.value === '500+') { params.reward_min = 500 }
-  api.fetchTasks(params).then((res) => {
-    tasks.value = res.data.tasks || []
-  }).catch(() => {
-    tasks.value = []
-  }).finally(() => {
-    tasksLoading.value = false
-  })
+  const doRequest = reset
+    ? api.fetchTasks(params).then((res) => {
+        tasks.value = res.data.tasks || []
+        homeTasksTotal.value = res.data.total ?? 0
+        homeHasMore.value = (res.data.tasks?.length ?? 0) < (res.data.total ?? 0)
+      }).catch(() => { tasks.value = []; homeHasMore.value = false })
+    : api.fetchTasks(params).then((res) => {
+        const list = res.data.tasks || []
+        tasks.value = [...tasks.value, ...list]
+        homeHasMore.value = tasks.value.length < (res.data.total ?? 0)
+      }).catch(() => {})
+  if (reset) {
+    doRequest.finally(() => { tasksLoading.value = false })
+  } else {
+    tasksLoadingMore.value = true
+    doRequest.finally(() => { tasksLoadingMore.value = false })
+  }
+}
+
+function loadMoreTasks() {
+  if (tasksLoadingMore.value || !homeHasMore.value) return
+  loadTasks(false)
 }
 
 function loadStats() {
@@ -843,6 +961,7 @@ function openCreateTaskModal() {
   publishError.value = ''
   createStep.value = 1
   showCreateTaskModal.value = true
+  draftExists.value = hasDraft()
   loadCandidates()
 }
 
@@ -919,6 +1038,7 @@ function doLogin() {
   authLoading.value = true
   api.login(loginForm).then((res) => {
     auth.setUser(res.data.access_token, res.data.username, res.data.user_id)
+    refreshAdminFlag()
     showAuthModal.value = false
     loadAccountMe()
     loadMyAgents()
@@ -969,6 +1089,7 @@ function doRegister() {
     verification_code: registerForm.verification_code,
   }).then((res) => {
     auth.setUser(res.data.access_token, res.data.username, res.data.user_id)
+    refreshAdminFlag()
     showAuthModal.value = false
     loadAccountMe()
     loadMyAgents()
@@ -1005,6 +1126,7 @@ function doPublish() {
     duration_estimate: (publishForm.duration_estimate || '').trim() || undefined,
     skills,
   }).then(() => {
+    clearDraft()
     publishForm.title = ''
     publishForm.description = ''
     publishForm.reward_points = 0
@@ -1201,6 +1323,7 @@ onMounted(() => {
     loadAccountMe()
     loadMyAgents()
     loadMyCreatedTasks()
+    refreshAdminFlag()
   }
 })
 
@@ -1249,4 +1372,61 @@ onUnmounted(() => {
   margin-right: 0.5rem;
 }
 .task-card__batch-check input { margin: 0; }
+
+/* 首页任务列表：网格与骨架屏（不依赖 Tailwind） */
+.home-task-list--grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+  align-items: stretch;
+}
+@media (min-width: 640px) {
+  .home-task-list--grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (min-width: 1024px) {
+  .home-task-list--grid { grid-template-columns: repeat(3, 1fr); }
+}
+.home-task-list--skeleton {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+}
+@media (min-width: 640px) {
+  .home-task-list--skeleton { grid-template-columns: repeat(2, 1fr); }
+}
+@media (min-width: 1024px) {
+  .home-task-list--skeleton { grid-template-columns: repeat(3, 1fr); }
+}
+.home-task-skeleton-card {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.home-task-skeleton-line { display: block; }
+.home-task-skeleton-line--title { width: 75%; height: 1.25rem; }
+.home-task-skeleton-line--desc { width: 100%; height: 1rem; }
+.home-task-skeleton-line--meta { width: 50%; height: 0.875rem; }
+.home-load-more {
+  margin-top: 1.5rem;
+  text-align: center;
+  grid-column: 1 / -1;
+}
+
+.draft-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding: 0.5rem 0;
+  margin-bottom: 0.5rem;
+  border-radius: var(--radius-sm);
+  background: rgba(var(--primary-rgb), 0.08);
+  border: 1px solid rgba(var(--primary-rgb), 0.2);
+}
+.draft-bar__text {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin-right: 0.25rem;
+}
 </style>

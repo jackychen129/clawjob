@@ -13,6 +13,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from typing import Optional, List, Any
 import os
+import time
 import httpx
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -25,11 +26,13 @@ from app.database.relational_db import (
     get_db,
     init_db,
     engine as db_engine,
+    SessionLocal,
     Task,
     Agent,
     TaskSubscription,
     TaskComment,
     User,
+    SystemLog,
     CreditTransaction,
     PlatformClearingAccount,
     PlatformCommissionRecord,
@@ -60,6 +63,37 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # API 场景下 CSP 放宽，避免影响 /docs
         csp = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self'"
         response.headers["Content-Security-Policy"] = csp
+        return response
+
+
+class RequestLoggingMiddleware(BaseHTTPMiddleware):
+    """记录每次 API 请求到 system_logs 表，便于监控与审计。"""
+    async def dispatch(self, request, call_next):
+        start = time.perf_counter()
+        response = await call_next(request)
+        duration_ms = (time.perf_counter() - start) * 1000
+        path = request.scope.get("path") or ""
+        method = request.method or ""
+        status = response.status_code
+        level = "error" if status >= 500 else ("warning" if status >= 400 else "info")
+        try:
+            db = SessionLocal()
+            try:
+                log = SystemLog(
+                    level=level,
+                    category="request",
+                    message=f"{method} {path} {status} {duration_ms:.0f}ms",
+                    path=path[:512] if path else None,
+                    method=method[:16] if method else None,
+                    status_code=status,
+                    extra={"duration_ms": round(duration_ms, 2)},
+                )
+                db.add(log)
+                db.commit()
+            finally:
+                db.close()
+        except Exception:
+            pass
         return response
 
 
@@ -108,6 +142,11 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 app.include_router(auth.router)
 app.include_router(account.router)
+# 管理后台：指标与日志（仅 is_superuser 可访问）
+from app.routers import admin as admin_router_module
+from app.database.relational_db import get_db as _get_db
+_admin_super_dep = admin_router_module.get_superuser_dep(get_current_user, _get_db)
+app.include_router(admin_router_module.router, prefix="/admin", dependencies=[Depends(_admin_super_dep)])
 
 # 限流：全局默认在 security.limiter 的 default_limits 中配置
 app.state.limiter = limiter
@@ -116,6 +155,8 @@ app.add_middleware(SlowAPIMiddleware)
 
 # 安全头中间件（先添加，响应时最后执行）
 app.add_middleware(SecurityHeadersMiddleware)
+# 请求审计日志（记录到 system_logs）
+app.add_middleware(RequestLoggingMiddleware)
 
 # CORS configuration（生产环境通过 CORS_ORIGINS 限制来源，逗号分隔；空则同源）
 _cors_origins = os.getenv("CORS_ORIGINS", "").strip()
@@ -366,6 +407,17 @@ def register_agent(
     try:
         db.commit()
         db.refresh(agent)
+        try:
+            db.add(SystemLog(
+                level="info",
+                category="agent",
+                message="agent_registered",
+                user_id=uid,
+                extra={"agent_id": agent.id, "agent_name": agent.name, "category": category},
+            ))
+            db.commit()
+        except Exception:
+            db.rollback()
     except Exception as e:
         db.rollback()
         err_msg = str(e).lower()
@@ -386,6 +438,17 @@ def register_agent(
             db.commit()
             db.refresh(agent_retry)
             agent = agent_retry
+            try:
+                db.add(SystemLog(
+                    level="info",
+                    category="agent",
+                    message="agent_registered",
+                    user_id=uid,
+                    extra={"agent_id": agent.id, "agent_name": agent.name, "category": category, "note": "retry_after_schema_fix"},
+                ))
+                db.commit()
+            except Exception:
+                db.rollback()
         else:
             raise
     return {
@@ -1011,6 +1074,17 @@ def publish_task(
     db.add(task)
     db.commit()
     db.refresh(task)
+    try:
+        db.add(SystemLog(
+            level="info",
+            category="task",
+            message="task_published",
+            user_id=uid,
+            extra={"task_id": task.id, "reward_points": reward_points, "category": category},
+        ))
+        db.commit()
+    except Exception:
+        db.rollback()
     if reward_points > 0:
         user.credits = (getattr(user, "credits", 0) or 0) - reward_points
         tx = CreditTransaction(

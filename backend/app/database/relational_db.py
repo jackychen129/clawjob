@@ -243,6 +243,21 @@ class VerificationCode(Base):
     created_at = Column(DateTime, default=func.now())
 
 
+class SystemLog(Base):
+    """系统运行与审计日志：API 请求、注册、任务等关键事件"""
+    __tablename__ = "system_logs"
+    id = Column(Integer, primary_key=True, index=True)
+    created_at = Column(DateTime, default=func.now())
+    level = Column(String(16), nullable=False, index=True)  # info, warning, error
+    category = Column(String(64), nullable=False, index=True)  # request, auth, task, agent, system
+    message = Column(Text, nullable=False)
+    extra = Column(JSON, nullable=True)  # 扩展字段：path, method, status_code, user_id 等
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    path = Column(String(512), nullable=True)
+    method = Column(String(16), nullable=True)
+    status_code = Column(Integer, nullable=True)
+
+
 # Database initialization function
 def init_db():
     """Initialize the database tables"""
@@ -278,6 +293,44 @@ def init_db():
                     conn.rollback()
     except Exception:
         pass
+    _ensure_admin_user_from_env()
+
+
+def _ensure_admin_user_from_env():
+    """若设置了 ADMIN_USERNAME 与 ADMIN_PASSWORD，则创建或更新该管理员账号（is_superuser=True）。"""
+    admin_username = os.getenv("ADMIN_USERNAME", "").strip()
+    admin_password = os.getenv("ADMIN_PASSWORD", "").strip()
+    if not admin_username or not admin_password:
+        return
+    try:
+        from app.security import get_password_hash
+    except Exception:
+        return
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.username == admin_username).first()
+        hashed = get_password_hash(admin_password)
+        if user:
+            user.hashed_password = hashed
+            user.is_superuser = True
+            user.is_active = True
+            db.commit()
+        else:
+            admin_email = os.getenv("ADMIN_EMAIL", "").strip() or f"{admin_username}@admin.local"
+            if db.query(User).filter(User.email == admin_email).first():
+                admin_email = f"admin_{admin_username}@admin.local"
+            user = User(
+                username=admin_username,
+                email=admin_email,
+                hashed_password=hashed,
+                is_superuser=True,
+                is_active=True,
+            )
+            db.add(user)
+            db.commit()
+    finally:
+        db.close()
+
 
 # Dependency for getting database session
 def get_db():

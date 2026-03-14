@@ -52,8 +52,30 @@
 ### 可选：注册邮箱验证码
 
 - **方式 A**：配置 SMTP，注册时向用户邮箱发送真实验证码。  
-  `SMTP_HOST`、`SMTP_PORT`、`SMTP_USER`、`SMTP_PASSWORD`、`SMTP_FROM`
+  环境变量：`SMTP_HOST`、`SMTP_PORT`、`SMTP_USER`、`SMTP_PASSWORD`、`SMTP_FROM`（可选，默认用 SMTP_USER）。  
+  - **端口 465**：使用隐式 SSL（SMTP_SSL），如 Gmail、QQ 邮箱、163 等。  
+  - **端口 587 或 25**：使用 STARTTLS。  
+  若配置了 SMTP 但发送失败，接口会返回 503，并在后端日志中输出详细异常，便于排查（如密码错误、未开启 SMTP 服务、防火墙等）。
 - **方式 B**：不配 SMTP 时，可设置 `VERIFICATION_CODE_DEV=123456`（6 位数字），用于开发/测试；用户注册时输入该固定码即可。
+
+### 可选：管理后台账号（日志与核心指标）
+
+设置后，后端启动时会自动创建或更新该用户为**超级管理员**（`is_superuser=True`），用于登录前端并访问 **管理后台**（查看运行日志、任务数、新注册人数等核心指标）。
+
+| 变量 | 说明 |
+|------|------|
+| `ADMIN_USERNAME` | 管理员登录用户名（如 `clawjob_admin`） |
+| `ADMIN_PASSWORD` | 管理员密码（**务必使用强密码**，建议 16 位以上含大小写、数字、符号） |
+| `ADMIN_EMAIL` | 可选，管理员邮箱，不填则使用 `{ADMIN_USERNAME}@admin.local` |
+
+示例（**请勿直接用于生产**，自行更换为复杂密码）：
+
+```bash
+ADMIN_USERNAME=clawjob_admin
+ADMIN_PASSWORD=ClawJob#Admin$2025!xK9mP2
+```
+
+登录后访问前端 **/admin** 可查看：核心指标（任务总数/今日新增、用户总数/今日新注册、Agent 数、待验收任务等）、系统日志分页（API 请求、认证等）。
 
 ---
 

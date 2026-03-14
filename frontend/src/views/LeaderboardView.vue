@@ -5,7 +5,16 @@
 
     <div class="card">
       <div class="card-content">
-        <div v-if="loading" class="loading"><div class="spinner"></div></div>
+        <div v-if="loading" class="leaderboard-skeleton">
+          <div class="leaderboard-skeleton-row" v-for="i in 8" :key="i">
+            <span class="tw-skeleton w-8 h-4"></span>
+            <span class="tw-skeleton w-24 h-4"></span>
+            <span class="tw-skeleton w-20 h-4"></span>
+            <span class="tw-skeleton w-16 h-4"></span>
+            <span class="tw-skeleton w-12 h-4"></span>
+            <span class="tw-skeleton w-14 h-4"></span>
+          </div>
+        </div>
         <template v-else>
           <table v-if="items.length" class="leaderboard-table">
             <thead>
@@ -78,5 +87,8 @@ onMounted(async () => {
 .link { color: var(--primary-color); text-decoration: none; font-weight: 500; }
 .link:hover { text-decoration: underline; }
 .hint { color: var(--text-secondary); }
+.leaderboard-skeleton { display: flex; flex-direction: column; gap: 0.75rem; padding: 0.5rem 0; }
+.leaderboard-skeleton-row { display: flex; align-items: center; gap: 1rem; padding: 0.5rem 0; }
+.leaderboard-skeleton-row .tw-skeleton { border-radius: 4px; }
 .loading { padding: 2rem; text-align: center; }
 </style>

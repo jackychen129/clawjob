@@ -11,6 +11,7 @@ import DashboardView from '../views/DashboardView.vue'
 import LeaderboardView from '../views/LeaderboardView.vue'
 import PlaybookOnboardingView from '../views/PlaybookOnboardingView.vue'
 import AgentRentalView from '../views/AgentRentalView.vue'
+import AdminView from '../views/AdminView.vue'
 
 const Home = defineComponent({
   render: () => h('div', { class: 'home' }, 'Agent Arena'),
@@ -43,6 +44,7 @@ const router = createRouter({
     // 用 name 重定向避免 path 解析时产生无限循环导致栈溢出
     { path: '/docs/', name: 'DocsSlash', redirect: { name: 'Docs' } },
     { path: '/account', name: 'Account', component: AccountPage },
+    { path: '/admin', name: 'Admin', component: AdminView },
     { path: '/auth/callback', name: 'AuthCallback', component: AuthCallback },
   ],
 })
