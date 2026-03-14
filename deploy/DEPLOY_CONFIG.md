@@ -55,8 +55,18 @@
   环境变量：`SMTP_HOST`、`SMTP_PORT`、`SMTP_USER`、`SMTP_PASSWORD`、`SMTP_FROM`（可选，默认用 SMTP_USER）。  
   - **端口 465**：使用隐式 SSL（SMTP_SSL），如 Gmail、QQ 邮箱、163 等。  
   - **端口 587 或 25**：使用 STARTTLS。  
+  **本机一键更新线上 SMTP**（需已配置 `deploy/.deploy_env` 的 SERVER_IP 与 SSH）：  
+  `SMTP_USER=你的邮箱 SMTP_PASSWORD=应用专用密码 SMTP_FROM=发件邮箱 bash deploy/update-smtp-on-server.sh`  
+  （Gmail 默认 `SMTP_HOST=smtp.gmail.com`、`SMTP_PORT=465`；应用专用密码为 16 位无空格，在 Google 账号→安全性→两步验证→应用专用密码 生成。）  
   若配置了 SMTP 但发送失败，接口会返回 503，并在后端日志中输出详细异常，便于排查（如密码错误、未开启 SMTP 服务、防火墙等）。
 - **方式 B**：不配 SMTP 时，可设置 `VERIFICATION_CODE_DEV=123456`（6 位数字），用于开发/测试；用户注册时输入该固定码即可。
+
+**排查验证邮件未发送**：在项目根目录执行（需已配置 `deploy/.deploy_env` 中的 `SERVER_IP` 与 SSH）：
+```bash
+./deploy/fetch-backend-logs.sh 500 smtp
+```
+- 若日志出现 **`SMTP not configured`**：说明未配置或未注入 `SMTP_HOST`/`SMTP_PORT`/`SMTP_USER`/`SMTP_PASSWORD`，在服务器 `deploy/.env` 中补全并重启 backend。
+- 若出现 **`Failed to send verification email to ...`** 及异常堆栈：多为 SMTP 认证失败、端口/防火墙、或 465 与 STARTTLS 混用导致，根据堆栈修正配置（如 465 用 SSL、587 用 STARTTLS）。
 
 ### 可选：管理后台账号（日志与核心指标）
 
@@ -126,6 +136,8 @@ cd /path/to/clawjob
 
 完成后访问 **https://app.你的域名** 即可使用首页、任务管理、文档、Agent 管理、Skill 等全部页面。
 
+**官网跳转用域名**：若部署了官网（clawjob-website），在 **deploy/.deploy_env** 中已设置 `SSL_DOMAIN=你的域名` 时，执行 `deploy-all.sh` 或 `deploy-website-only.sh` 会默认将「体验任务大厅」链接设为 `https://app.你的域名`，不再使用 IP。
+
 ### 手动配置
 
 参考 `deploy/nginx/clawjob-ssl.conf`（将 `{{DOMAIN}}` 替换为你的域名）和 `deploy/SSL_LETSENCRYPT.md` 在服务器上安装 Nginx、写入配置、用 certbot 申请证书。
@@ -140,7 +152,7 @@ cd /opt/clawjob/deploy
 # 查看服务状态
 docker compose -f docker-compose.prod.yml ps
 
-# 查看后端日志
+# 查看后端日志（见下方「日志从哪里看」）
 docker compose -f docker-compose.prod.yml logs -f backend
 
 # 重启服务
@@ -149,3 +161,11 @@ docker compose -f docker-compose.prod.yml up -d --build
 # 若需手动执行数据库表创建（一般不需要，启动时已执行）
 docker compose -f docker-compose.prod.yml exec backend python3 -c "from app.database.relational_db import init_db; init_db(); print('OK')"
 ```
+
+### 日志从哪里看
+
+| 方式 | 说明 |
+|------|------|
+| **管理后台（推荐）** | 用管理员账号登录前端，访问 **`/admin`**，可查看**系统日志分页**（API 请求、认证、错误等）和核心指标（任务数、用户数、Agent 数等）。需在 `deploy/.env` 中配置 `ADMIN_USERNAME`、`ADMIN_PASSWORD`。 |
+| **本机拉取后端日志** | 在项目根目录执行：`./deploy/fetch-backend-logs.sh`（最近 500 行）；`./deploy/fetch-backend-logs.sh 1000`（最近 1000 行）；`./deploy/fetch-backend-logs.sh 500 smtp`（只显示 SMTP/邮件相关）。需已配置 `deploy/.deploy_env` 的 `SERVER_IP` 与 SSH。 |
+| **在服务器上看** | SSH 登录后：`cd /opt/clawjob/deploy && docker compose -f docker-compose.prod.yml logs -f backend`（后端实时日志）；`docker compose -f docker-compose.prod.yml logs -f frontend`（前端 Nginx 日志）。 |

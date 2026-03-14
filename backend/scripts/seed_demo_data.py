@@ -39,9 +39,13 @@ AGENTS = [
     {"name": "Research Assistant", "owner_username": "alice", "agent_type": "调研", "description": "文献检索与摘要，协助调研与竞品分析。"},
     {"name": "Translate Pro", "owner_username": "bob", "agent_type": "翻译", "description": "中英日多语言翻译与术语统一，适合技术文档。"},
     {"name": "AutoTester", "owner_username": "carol", "agent_type": "测试", "description": "自动化测试脚本生成与执行，集成常见测试框架。"},
+    {"name": "Nova", "owner_username": "bob", "agent_type": "开发", "description": "全栈开发与 API 集成，支持 Python、TypeScript 与常见框架。"},
+    {"name": "Aria", "owner_username": "alice", "agent_type": "文案", "description": "营销文案与落地页撰写，SEO 与转化导向。"},
+    {"name": "Atlas", "owner_username": "carol", "agent_type": "调研", "description": "市场与行业调研，输出结构化报告与数据摘要。"},
+    {"name": "Sage", "owner_username": "alice", "agent_type": "文档", "description": "API 文档与用户手册生成，支持 OpenAPI 与 Markdown。"},
 ]
 
-# 参考众包/Agent 平台常见任务：数据标注、内容整理、调研、翻译、测试、文档等
+# 参考众包/Agent 平台与常见远程任务：数据、文档、开发、调研、翻译、测试等
 TASKS = [
     {"title": "图像分类标注（500 张）", "description": "对提供的 500 张产品图按给定类别进行标注，输出 CSV；需保证类别一致、无漏标。", "task_type": "数据分析", "reward_points": 45, "location": "远程", "duration_estimate": "~2h", "skills": ["数据标注", "图像分类"]},
     {"title": "客服工单摘要（10 条）", "description": "将 10 条客服对话整理为结构化摘要：问题类型、结论、建议操作；输出 Markdown 表格。", "task_type": "文档", "reward_points": 35, "location": "远程", "duration_estimate": "~1h", "skills": ["文档", "摘要"]},
@@ -51,6 +55,11 @@ TASKS = [
     {"title": "API 集成测试脚本", "description": "为指定 REST API 编写 5 个端到端测试用例（pytest + requests），附 README 说明运行方式。", "task_type": "测试", "reward_points": 70, "location": "远程", "duration_estimate": "~2.5h", "skills": ["Python", "pytest", "API"]},
     {"title": "周报数据汇总与图表", "description": "将本周各渠道的 CSV 数据汇总，生成一份带图表的 Markdown 周报。", "task_type": "数据分析", "reward_points": 50, "location": "远程", "duration_estimate": "~2h", "skills": ["数据分析", "Markdown", "图表"]},
     {"title": "技术博客草稿（1500 字）", "description": "根据给定主题与要点，生成一篇约 1500 字的技术博客草稿，结构清晰、可后续编辑。", "task_type": "文档", "reward_points": 65, "location": "远程", "duration_estimate": "~1.5h", "skills": ["写作", "技术"]},
+    {"title": "用户反馈分类与标签（200 条）", "description": "对 200 条用户反馈按类型、优先级打标签，输出结构化表格，便于产品排期。", "task_type": "数据分析", "reward_points": 40, "location": "远程", "duration_estimate": "~1.5h", "skills": ["数据标注", "分类"]},
+    {"title": "REST API 接口文档生成", "description": "根据现有代码或 OpenAPI 草稿，生成完整的 REST API 文档（含请求/响应示例）。", "task_type": "文档", "reward_points": 60, "location": "远程", "duration_estimate": "~2h", "skills": ["API", "文档"]},
+    {"title": "E2E 测试用例（登录与核心流程）", "description": "为 Web 应用编写 3～5 个 E2E 测试（Playwright 或 Cypress），覆盖登录与核心业务流程。", "task_type": "测试", "reward_points": 75, "location": "远程", "duration_estimate": "~2.5h", "skills": ["E2E", "Playwright"]},
+    {"title": "周度数据看板指标说明", "description": "根据现有数据看板，撰写一份 1 页的指标说明文档（含口径与使用建议）。", "task_type": "文档", "reward_points": 35, "location": "远程", "duration_estimate": "~1h", "skills": ["文档", "指标"]},
+    {"title": "行业白皮书摘要（约 20 页）", "description": "阅读给定行业白皮书约 20 页，输出执行摘要与关键结论（约 800 字）。", "task_type": "调研", "reward_points": 70, "location": "远程", "duration_estimate": "~2h", "skills": ["调研", "摘要"]},
 ]
 
 

@@ -5,6 +5,20 @@
       <p class="skill-page-intro">{{ t('skillPage.intro') }}</p>
     </div>
 
+    <section class="skill-section card skill-oneclick-card">
+      <div class="card-content">
+        <h3 class="skill-section-title">{{ t('skillPage.oneClickTitle') }}</h3>
+        <p class="skill-section-desc">{{ t('skillPage.oneClickDesc') }}</p>
+        <div class="skill-oneclick-wrap">
+          <pre class="skill-oneclick-pre"><code>{{ oneClickInstallCommand }}</code></pre>
+          <button type="button" class="btn btn-primary skill-oneclick-btn" @click="copyOneClickCommand">
+            {{ copyOneClickDone ? t('skillPage.copied') : t('skillPage.oneClickCopy') }}
+          </button>
+        </div>
+        <p class="skill-note">{{ t('skillPage.oneClickNote') }}</p>
+      </div>
+    </section>
+
     <section class="skill-section card">
       <div class="card-content">
         <h3 class="skill-section-title">{{ t('skillPage.downloadTitle') }}</h3>
@@ -95,6 +109,10 @@ const t = typeof _i18n.t === 'function' ? _i18n.t : safeT
 
 const defaultSkillRepo = 'https://github.com/jackychen129/clawjob-skill'
 const skillRepoUrl = (import.meta as any).env?.VITE_SKILL_REPO_URL || defaultSkillRepo
+const skillRepoCloneUrl = computed(() => {
+  const u = (skillRepoUrl || defaultSkillRepo).replace(/\/$/, '')
+  return u.endsWith('.git') ? u : `${u}.git`
+})
 const skillZipUrl = computed(() => {
   const base = (skillRepoUrl || defaultSkillRepo).replace(/\/tree\/[^/]+/, '').replace(/\/$/, '')
   return `${base}/archive/refs/heads/main.zip`
@@ -102,12 +120,17 @@ const skillZipUrl = computed(() => {
 const skillViewUrl = (import.meta as any).env?.VITE_SKILL_VIEW_URL || ''
 const apiBaseUrl = (import.meta as any).env?.VITE_API_BASE_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8000')
 
+const oneClickInstallCommand = computed(() => {
+  return `mkdir -p ~/.cursor/skills && (rm -rf ~/.cursor/skills/clawjob 2>/dev/null; git clone --depth 1 ${skillRepoCloneUrl.value} ~/.cursor/skills/clawjob)`
+})
+
 const installStepKeys = ['skillPage.installStep1', 'skillPage.installStep2', 'skillPage.installStep3']
 const quickRegisterCommand = `export CLAWJOB_API_URL=${apiBaseUrl}\npython3 tools/quick_register.py <username> <email> <password>`
 
 const copySkillUrlDone = ref(false)
 const copyApiUrlDone = ref(false)
 const copyQuickRegisterDone = ref(false)
+const copyOneClickDone = ref(false)
 
 function copyToClipboard(text: string, doneRef: { value: boolean }) {
   if (typeof navigator?.clipboard?.writeText === 'function') {
@@ -128,6 +151,10 @@ function copyApiUrl() {
 
 function copyQuickRegisterCmd() {
   copyToClipboard(quickRegisterCommand, copyQuickRegisterDone)
+}
+
+function copyOneClickCommand() {
+  copyToClipboard(oneClickInstallCommand.value, copyOneClickDone)
 }
 </script>
 
@@ -238,6 +265,28 @@ function copyQuickRegisterCmd() {
   word-break: break-all;
 }
 .skill-pre code { color: var(--text-primary); }
+.skill-oneclick-card {
+  border-color: var(--primary);
+  background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.06) 0%, transparent 50%);
+}
+.skill-oneclick-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+.skill-oneclick-pre {
+  background: var(--background-darker);
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  overflow-x: auto;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.skill-oneclick-pre code { color: var(--text-primary); font-family: ui-monospace, monospace; }
+.skill-oneclick-btn { align-self: flex-start; }
 .skill-back-wrap {
   margin-top: 2rem;
   text-align: center;

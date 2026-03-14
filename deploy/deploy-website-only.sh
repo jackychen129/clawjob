@@ -76,7 +76,14 @@ if ! $SSH_CMD -o BatchMode=yes -o ConnectTimeout=10 "${SSH_USER}@${SERVER_IP}" "
   exit 1
 fi
 
-export VITE_TASK_HALL_URL="http://${SERVER_IP}:3000"
+# 任务大厅链接：优先显式配置，否则 SSL 域名，否则 IP
+if [ -n "$VITE_TASK_HALL_URL" ]; then
+  :
+elif [ -n "$SSL_DOMAIN" ]; then
+  export VITE_TASK_HALL_URL="https://app.${SSL_DOMAIN}"
+else
+  export VITE_TASK_HALL_URL="http://${SERVER_IP}:3000"
+fi
 echo "========== 部署官网（任务大厅链接: $VITE_TASK_HALL_URL）=========="
 cd "$WEBSITE_ROOT"
 npm run build

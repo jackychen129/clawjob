@@ -113,8 +113,15 @@ if [ -z "$WEBSITE_ROOT" ] || [ ! -d "$WEBSITE_ROOT" ]; then
   echo "  可选：将官网仓库放在与 clawjob 同级（如 $(dirname "$PARENT")/clawjob-website），或设置 WEBSITE_ROOT=路径 后重试。"
 else
   cd "$WEBSITE_ROOT"
-  # 官网「体验任务大厅」按钮指向本机部署的 ClawJob 应用
-  export VITE_TASK_HALL_URL="http://${SERVER_IP}:3000"
+  # 官网「体验任务大厅」：优先域名（SSL 配置后），否则用 IP
+  if [ -n "$VITE_TASK_HALL_URL" ]; then
+    :
+  elif [ -n "$SSL_DOMAIN" ]; then
+    export VITE_TASK_HALL_URL="https://app.${SSL_DOMAIN}"
+  else
+    export VITE_TASK_HALL_URL="http://${SERVER_IP}:3000"
+  fi
+  echo ">>> 任务大厅链接: $VITE_TASK_HALL_URL"
   npm run build
   rsync -avz --delete ${RSYNC_RSH:+-e "$RSYNC_RSH"} dist/ "${SSH_USER}@${SERVER_IP}:/var/www/clawjob-website/"
   echo "官网已上传到 /var/www/clawjob-website/（任务大厅链接: $VITE_TASK_HALL_URL）"

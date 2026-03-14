@@ -18,12 +18,12 @@
               </div>
             </div>
             <div v-else class="task-list">
-              <div v-for="task in myTasks" :key="task.id" class="card task-card task-card--structured">
+              <div v-for="task in myTasks" :key="task.id" class="card task-card task-card--structured task-manage-card">
                 <div class="task-card__top">
                   <span v-if="task.category" class="task-card__category">{{ taskCategoryLabel(task.category) }}</span>
                   <span v-if="task.task_type" class="task-card__type">{{ task.task_type }}</span>
                   <span class="badge" :class="task.status">{{ t('status.' + task.status) || task.status }}</span>
-                  <span v-if="task.reward_points" class="task-card__reward">{{ t('task.reward', { n: task.reward_points }) }}</span>
+                  <span v-if="task.reward_points" class="task-card__reward mono">{{ t('task.reward', { n: task.reward_points }) }}</span>
                 </div>
                 <h3 class="task-card__title">{{ task.title }}</h3>
                 <p class="task-card__desc">{{ (task.description || t('common.noDescription')).slice(0, 120) }}{{ (task.description || '').length > 120 ? '…' : '' }}</p>
@@ -740,26 +740,26 @@ watch(() => auth.isLoggedIn, (loggedIn) => {
 .task-card .card-header { display: flex; justify-content: space-between; align-items: center; }
 .task-card .meta { font-size: 0.875rem; color: var(--muted); margin: 0.25rem 0; }
 
-/* 结构化任务卡片（BotLearn 风格：圆角、阴影、hover） */
-.task-card--structured {
-  padding: 1.25rem 1.5rem;
+/* 结构化任务卡片（与首页/website 一致：8px 栅格、typography、.mono） */
+.task-card--structured.task-manage-card {
+  padding: 24px;
   border-radius: 12px;
   border: 1px solid var(--border-color, rgba(255,255,255,0.08));
   background: var(--card-background, var(--card-bg));
   box-shadow: 0 1px 3px rgba(0,0,0,0.06);
   transition: box-shadow 0.2s, border-color 0.2s;
 }
-.task-card--structured:hover {
+.task-card--structured.task-manage-card:hover {
   box-shadow: 0 4px 12px rgba(0,0,0,0.1);
   border-color: var(--border-color, rgba(255,255,255,0.12));
 }
-.task-card--structured .task-card__top { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.4rem; }
-.task-card--structured .task-card__type { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.02em; }
-.task-card--structured .task-card__reward { margin-left: auto; font-size: 0.95rem; font-weight: 600; color: var(--primary, #6366f1); }
-.task-card--structured .task-card__title { font-size: 1.05rem; margin: 0 0 0.4rem; font-weight: 600; line-height: 1.3; }
-.task-card--structured .task-card__desc { font-size: 0.9rem; color: var(--muted); margin: 0 0 0.5rem; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.task-card--structured .task-card__tags,
-.task-card--structured .task-card__attrs { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.5rem; }
+.task-card--structured.task-manage-card .task-card__top { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.task-card--structured.task-manage-card .task-card__type { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.02em; }
+.task-card--structured.task-manage-card .task-card__reward { margin-left: auto; font-size: 0.9rem; font-weight: 600; color: var(--primary, #6366f1); }
+.task-card--structured.task-manage-card .task-card__title { font-size: 1rem; margin: 0 0 8px; font-weight: 600; line-height: 1.35; }
+.task-card--structured.task-manage-card .task-card__desc { font-size: 0.875rem; color: var(--text-secondary, var(--muted)); margin: 0 0 8px; line-height: 1.55; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.task-card--structured.task-manage-card .task-card__tags,
+.task-card--structured.task-manage-card .task-card__attrs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; font-size: 0.8125rem; }
 .task-tag { display: inline-block; font-size: 0.75rem; padding: 0.2rem 0.5rem; border-radius: 999px; background: var(--surface, rgba(255,255,255,0.06)); color: var(--text-secondary, #94a3b8); border: 1px solid var(--border, rgba(255,255,255,0.1)); }
 .task-tag--location { border-color: rgba(34, 197, 94, 0.4); color: #86efac; }
 .task-tag--duration { border-color: rgba(59, 130, 246, 0.4); color: #93c5fd; }
@@ -782,8 +782,8 @@ watch(() => auth.isLoggedIn, (loggedIn) => {
 .task-card__priority.priority--critical { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
 .task-card__priority.priority--low { background: rgba(148, 163, 184, 0.2); color: #94a3b8; }
 .task-tag--skill { border-color: rgba(168, 85, 247, 0.4); color: #e9d5ff; }
-.task-card--structured .task-card__meta { font-size: 0.8rem; color: var(--muted); margin: 0 0 0.5rem; }
-.task-card--structured .task-card__actions-wrap { padding: 0; margin-top: 0.25rem; border: none; }
+.task-card--structured.task-manage-card .task-card__meta { font-size: 0.8125rem; line-height: 1.5; color: var(--text-secondary, var(--muted)); margin: 0 0 12px; }
+.task-card--structured.task-manage-card .task-card__actions-wrap { padding: 0; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-muted, var(--border-color)); }
 
 .task-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; }
 .empty-state { text-align: center; padding: 2rem; color: var(--muted); }

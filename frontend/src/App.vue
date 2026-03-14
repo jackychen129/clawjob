@@ -116,7 +116,7 @@
           <div
             v-for="task in tasks"
             :key="task.id"
-            class="card tw-card task-card task-card--structured p-6 h-full min-w-0 task-card--hover"
+            class="card tw-card task-card task-card--structured home-task-card h-full min-w-0 task-card--hover"
             :data-task-id="task.id"
             :data-task-status="task.status"
             :data-task-location="task.location || ''"
@@ -129,24 +129,24 @@
               <span v-if="task.task_type" class="task-card__type" data-attr="task_type">{{ task.task_type }}</span>
               <span v-if="task.priority && task.priority !== 'medium'" class="task-card__priority" :class="'priority--' + task.priority">{{ task.priority }}</span>
               <span class="badge" :class="task.status">{{ t('status.' + task.status) || task.status }}</span>
-              <span v-if="task.reward_points" class="task-card__reward" data-attr="reward">{{ t('task.reward', { n: task.reward_points }) }}</span>
+              <span v-if="task.reward_points" class="task-card__reward mono" data-attr="reward">{{ t('task.reward', { n: task.reward_points }) }}</span>
             </div>
-            <h3 class="task-card__title truncate min-w-0">{{ task.title }}</h3>
-            <p class="task-card__desc line-clamp-2 min-w-0 break-words">{{ (task.description || t('common.noDescription')).slice(0, 150) }}{{ (task.description || '').length > 150 ? '…' : '' }}</p>
-            <p v-if="task.requirements" class="task-card__requirements-snippet">{{ (task.requirements || '').replace(/\s+/g, ' ').slice(0, 80) }}{{ (task.requirements || '').length > 80 ? '…' : '' }}</p>
-            <div class="task-card__attrs" role="list" aria-label="Task attributes">
+            <h3 class="task-card__title home-task-card__title">{{ task.title }}</h3>
+            <p class="task-card__desc home-task-card__desc">{{ (task.description || t('common.noDescription')).slice(0, 150) }}{{ (task.description || '').length > 150 ? '…' : '' }}</p>
+            <p v-if="task.requirements" class="task-card__requirements-snippet home-task-card__requirements">{{ (task.requirements || '').replace(/\s+/g, ' ').slice(0, 80) }}{{ (task.requirements || '').length > 80 ? '…' : '' }}</p>
+            <div class="task-card__attrs home-task-card__attrs" role="list" aria-label="Task attributes">
               <span v-if="task.location" class="task-attr task-attr--location" data-attr="location" role="listitem">{{ task.location }}</span>
               <span v-if="task.duration_estimate" class="task-attr task-attr--duration" data-attr="duration_estimate" role="listitem">{{ task.duration_estimate }}</span>
               <span v-for="s in getTaskSkills(task)" :key="s" class="task-attr task-attr--skill" data-attr="skill" role="listitem">{{ s }}</span>
             </div>
-            <p class="task-card__meta">
+            <p class="task-card__meta home-task-card__meta">
               <span class="task-publisher-row">
                 <span class="task-publisher-avatar" aria-hidden="true">{{ (task.publisher_name || '?').charAt(0).toUpperCase() }}</span>
                 <span>{{ task.publisher_name }}</span>
               </span>
-              <span v-if="task.created_at" class="task-created-at"> · {{ formatTaskCreatedAt(task.created_at) }}</span>
-              <span> · {{ task.subscription_count }}{{ t('task.subscribers') }}</span>
-              <span v-if="task.comment_count != null"> · 💬 {{ task.comment_count }}{{ t('task.commentCountLabel') }}</span>
+              <span v-if="task.created_at" class="task-created-at mono"> · {{ formatTaskCreatedAt(task.created_at) }}</span>
+              <span> · <span class="mono">{{ task.subscription_count }}</span>{{ t('task.subscribers') }}</span>
+              <span v-if="task.comment_count != null"> · 💬 <span class="mono">{{ task.comment_count }}</span>{{ t('task.commentCountLabel') }}</span>
               <span v-if="task.invited_agent_ids && task.invited_agent_ids.length" class="invited-only-badge"> · {{ t('task.invitedOnly') }}</span>
             </p>
             <p v-if="task.status === 'pending_verification' && task.verification_deadline_at" class="hint deadline-hint">{{ t('task.deadlineHint', { date: formatDeadline(task.verification_deadline_at) }) }}</p>
@@ -1411,6 +1411,68 @@ onUnmounted(() => {
   margin-top: 1.5rem;
   text-align: center;
   grid-column: 1 / -1;
+}
+
+/* 首页任务卡片：Linear 质感（8px 栅格、typography、meta .mono） */
+.home-task-list--grid .home-task-card {
+  padding: 24px; /* 8px 栅格 */
+}
+.home-task-list--grid .home-task-card .task-card__top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.home-task-list--grid .home-task-card .home-task-card__title {
+  font-weight: 600;
+  font-size: 1rem;
+  line-height: 1.35;
+  margin: 0 0 8px 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.home-task-list--grid .home-task-card .home-task-card__desc {
+  font-size: 0.875rem;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  margin: 0 0 8px 0;
+  min-width: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+.home-task-list--grid .home-task-card .home-task-card__requirements {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--text-tertiary, var(--text-secondary));
+  margin: 0 0 12px 0;
+}
+.home-task-list--grid .home-task-card .home-task-card__attrs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+.home-task-list--grid .home-task-card .home-task-card__attrs .task-attr {
+  font-variant-numeric: tabular-nums;
+}
+.home-task-list--grid .home-task-card .home-task-card__meta {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  margin: 0;
+}
+.home-task-list--grid .home-task-card .task-card__actions-wrap {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-muted);
 }
 
 .draft-bar {
