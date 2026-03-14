@@ -150,8 +150,9 @@ async def health_check():
 
 @app.get("/stats")
 def get_public_stats(db: Session = Depends(get_db)):
-    """公开统计：任务总数、已完成数、活跃 Agent、累计发放报酬（供首页/官网 Counters 与 Dashboard）。"""
+    """公开统计：任务总数、开放数、已完成数、活跃 Agent、累计发放报酬（供首页/官网 Counters 与 Dashboard）。"""
     tasks_count = db.query(Task).count()
+    tasks_open = db.query(Task).filter(Task.status == "open").count()
     tasks_completed = db.query(Task).filter(Task.status == "completed").count()
     rewards_paid = db.query(func.coalesce(func.sum(Task.reward_points), 0)).filter(
         Task.status == "completed", Task.reward_points.isnot(None)
@@ -163,6 +164,7 @@ def get_public_stats(db: Session = Depends(get_db)):
     ).distinct().count()
     return {
         "tasks_count": tasks_count,
+        "tasks_open": tasks_open,
         "agents_count": agents_count,
         "tasks_total": tasks_count,
         "tasks_completed": tasks_completed,
@@ -170,6 +172,113 @@ def get_public_stats(db: Session = Depends(get_db)):
         "agents_active": agents_active,
         "agents_with_completions": agents_with_completions,
     }
+
+
+@app.get("/activity")
+def get_activity(limit: int = 50, db: Session = Depends(get_db)):
+    """实时动态流：最近任务发布、任务完成、Agent 注册。用于 Dashboard Live Feed。"""
+    events = []
+    # 最近完成的任务（带 Agent 名、奖励）
+    completed = (
+        db.query(Task, Agent, User)
+        .outerjoin(Agent, Task.agent_id == Agent.id)
+        .join(User, Task.owner_id == User.id)
+        .filter(Task.status == "completed")
+        .order_by(Task.completed_at.desc().nullslast(), Task.updated_at.desc())
+        .limit(limit)
+    ).all()
+    for t, a, owner in completed:
+        at = (t.completed_at or t.updated_at or t.created_at) or datetime.utcnow()
+        events.append({
+            "type": "task_completed",
+            "at": at.isoformat() if hasattr(at, "isoformat") else str(at),
+            "task_id": t.id,
+            "task_title": (t.title or "")[:80],
+            "reward_points": getattr(t, "reward_points", 0) or 0,
+            "agent_name": a.name if a else None,
+            "publisher_name": owner.username if owner else None,
+        })
+    # 最近发布的任务（open）
+    created = (
+        db.query(Task, User)
+        .join(User, Task.owner_id == User.id)
+        .filter(Task.status == "open")
+        .order_by(Task.created_at.desc())
+        .limit(limit)
+    ).all()
+    for t, owner in created:
+        events.append({
+            "type": "task_created",
+            "at": (t.created_at or datetime.utcnow()).isoformat(),
+            "task_id": t.id,
+            "task_title": (t.title or "")[:80],
+            "publisher_name": owner.username if owner else None,
+        })
+    # 最近注册的 Agent
+    agents = db.query(Agent, User).join(User, Agent.owner_id == User.id).order_by(Agent.created_at.desc()).limit(limit).all()
+    for a, owner in agents:
+        events.append({
+            "type": "agent_registered",
+            "at": (a.created_at or datetime.utcnow()).isoformat(),
+            "agent_id": a.id,
+            "agent_name": a.name,
+            "owner_name": owner.username if owner else None,
+        })
+    events.sort(key=lambda e: e["at"], reverse=True)
+    return {"events": events[:limit]}
+
+
+@app.get("/leaderboard")
+def get_leaderboard(skip: int = 0, limit: int = 50, db: Session = Depends(get_db)):
+    """Agent 声誉排行榜：Earned、完成任务数、成功率。shadow=1 时仅返回新星（注册不久、任务数少但成功率高的 Agent）。"""
+    # 每个 Agent 的完成数、总赚取、参与任务数（用于成功率）
+    from sqlalchemy import case
+    completed_subq = (
+        db.query(
+            Task.agent_id,
+            func.count(Task.id).label("completed_count"),
+            func.coalesce(func.sum(Task.reward_points), 0).label("earned"),
+        )
+        .filter(Task.status == "completed", Task.agent_id.isnot(None))
+        .group_by(Task.agent_id)
+    ).subquery()
+    total_subq = (
+        db.query(Task.agent_id, func.count(Task.id).label("total_count"))
+        .filter(Task.agent_id.isnot(None))
+        .group_by(Task.agent_id)
+    ).subquery()
+    q = (
+        db.query(
+            Agent,
+            User,
+            func.coalesce(completed_subq.c.completed_count, 0).label("completed_count"),
+            func.coalesce(completed_subq.c.earned, 0).label("earned"),
+            func.coalesce(total_subq.c.total_count, 0).label("total_count"),
+        )
+        .join(User, Agent.owner_id == User.id)
+        .outerjoin(completed_subq, Agent.id == completed_subq.c.agent_id)
+        .outerjoin(total_subq, Agent.id == total_subq.c.agent_id)
+        .filter(Agent.is_active == True, User.is_active == True)
+    )
+    rows = q.order_by(completed_subq.c.earned.desc().nullslast(), Agent.id.desc()).offset(skip).limit(limit).all()
+    out = []
+    for i, (a, owner, completed_count, earned, total_count) in enumerate(rows):
+        total_count = total_count or 0
+        completed_count = completed_count or 0
+        success_rate = (completed_count / total_count * 100) if total_count else 0
+        out.append({
+            "rank": skip + i + 1,
+            "agent_id": a.id,
+            "agent_name": a.name,
+            "owner_name": owner.username if owner else "",
+            "earned": int(earned),
+            "tasks_completed": int(completed_count),
+            "tasks_total": int(total_count),
+            "success_rate": round(success_rate, 1),
+            "certified": False,  # 预留：Playbook 验证后为 True
+        })
+    return {"items": out, "total": len(out)}
+
 
 # OpenClaw/Clawl 对齐：capability 项 { id?, name, category? }
 class CapabilityItem(BaseModel):
@@ -1083,6 +1192,46 @@ def reject_completion(
     task.output_data = {**(base or {}), "rejection_reason": reason}
     db.commit()
     return {"message": "已拒绝，接取者可重新提交完成", "task_id": task_id}
+
+
+class BatchConfirmBody(BaseModel):
+    task_ids: List[int]
+
+
+@app.post("/tasks/batch-confirm")
+def batch_confirm_tasks(
+    body: BatchConfirmBody,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """批量验收通过：仅任务发布者可调用，对多个待验收任务执行验收。"""
+    uid = int(current_user["user_id"])
+    task_ids = list(set(body.task_ids or []))[:50]
+    results = []
+    for task_id in task_ids:
+        task = db.query(Task).filter(Task.id == task_id, Task.owner_id == uid).first()
+        if not task:
+            results.append({"task_id": task_id, "ok": False, "reason": "not_found_or_forbidden"})
+            continue
+        _maybe_auto_confirm(task, db)
+        db.refresh(task)
+        if task.status == "completed":
+            results.append({"task_id": task_id, "ok": True, "message": "already_completed"})
+            continue
+        if task.status != "pending_verification" and not (task.status == "open" and (getattr(task, "reward_points", 0) or 0) == 0):
+            results.append({"task_id": task_id, "ok": False, "reason": "not_pending_verification"})
+            continue
+        try:
+            _pay_task_reward(task, db) if task.status == "pending_verification" else None
+            if task.status == "open" and (getattr(task, "reward_points", 0) or 0) == 0:
+                task.status = "completed"
+                task.completed_at = datetime.utcnow()
+            db.commit()
+            results.append({"task_id": task_id, "ok": True})
+        except Exception as e:
+            db.rollback()
+            results.append({"task_id": task_id, "ok": False, "reason": str(e)})
+    return {"results": results}
 
 
 @app.get("/tasks/{task_id}")

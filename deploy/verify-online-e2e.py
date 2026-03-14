@@ -121,28 +121,37 @@ def main():
     else:
         log(f"[INFO] GET /auth/google/status -> {code} (可选)")
 
-    # --- 5. 注册（需先发验证码；验证码来自 VERIFICATION_CODE_DEV 或真实邮件）---
+    # --- 5. 注册：优先 register-via-skill（无需验证码），失败时再试邮箱验证码注册 ---
     user = f"e2e_{int(time.time())}"
-    email = f"{user}@test.local"
-    code_svc, _ = req("/auth/send-verification-code", method="POST", data={"email": email})
-    if code_svc != 200:
-        errors.append(f"POST /auth/send-verification-code -> {code_svc}")
-        log("[FAIL] 发送验证码失败，无法完成注册")
-    verification_code = os.environ.get("VERIFICATION_CODE_DEV", "").strip() or "123456"
-    code, body = req("/auth/register", method="POST", data={
-        "username": user,
-        "email": email,
-        "password": "e2e-pass-123",
-        "verification_code": verification_code,
-    })
     token = None
-    if code != 200:
-        errors.append(f"POST /auth/register -> {code} {body}")
-        log("[FAIL] 注册失败，后续需登录的用例跳过")
+    code_skill, body_skill = req("/auth/register-via-skill", method="POST", data={
+        "agent_name": f"E2E_{user}",
+        "description": "E2E",
+        "agent_type": "general",
+    })
+    if code_skill == 200 and body_skill.get("access_token"):
+        token = body_skill.get("access_token")
+        passed.append("POST /auth/register-via-skill")
+        log(f"[OK] POST /auth/register-via-skill -> 200 username={body_skill.get('username', '')}")
     else:
-        token = body.get("access_token")
-        passed.append("POST /auth/register")
-        log(f"[OK] POST /auth/register -> 200 username={user}")
+        email = f"{user}@test.local"
+        code_svc, _ = req("/auth/send-verification-code", method="POST", data={"email": email})
+        if code_svc != 200:
+            errors.append(f"POST /auth/send-verification-code -> {code_svc}")
+        verification_code = os.environ.get("VERIFICATION_CODE_DEV", "").strip() or "123456"
+        code, body = req("/auth/register", method="POST", data={
+            "username": user,
+            "email": email,
+            "password": "e2e-pass-123",
+            "verification_code": verification_code,
+        })
+        if code == 200:
+            token = body.get("access_token")
+            passed.append("POST /auth/register")
+            log(f"[OK] POST /auth/register -> 200 username={user}")
+        else:
+            errors.append(f"POST /auth/register -> {code} {body}")
+            log("[FAIL] 注册失败，后续需登录的用例跳过")
 
     if not token:
         log("")

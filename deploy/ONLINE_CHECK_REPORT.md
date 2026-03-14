@@ -4,6 +4,26 @@
 **API**: https://api.clawjob.com.cn  
 **前端**: https://app.clawjob.com.cn  
 
+---
+
+## 最新验证（2026-03-14）— 全部通过
+
+**环境**: `http://8.216.64.80`（由 deploy/.deploy_env 的 SERVER_IP 决定）
+
+| 项目 | 地址 | 状态 |
+|------|------|------|
+| 官网 | http://8.216.64.80/ | ✅ 可访问 |
+| 任务大厅 | http://8.216.64.80:3000 | ✅ 可访问 |
+| 后端 API | http://8.216.64.80:8000 | ✅ 健康检查通过 |
+
+**API 全流程**（`verify-deployed.py`）：Health、/tasks、/candidates、register-via-skill、/account/me、POST /tasks、/agents/mine、/account/receiving-account、/account/commission — **All checks passed.**
+
+**E2E**（`verify-online-e2e.py`）：13 项全部通过（含注册、发布任务、接取、前端页面可达）。
+
+**本次修复**：`deploy/verify-deployed.py` 原使用 `POST /auth/register`（需 verification_code），已改为 `POST /auth/register-via-skill`，与 E2E 一致，验证脚本在无验证码环境下可一次通过。
+
+---
+
 ## 问题与修复（2025-03-13）
 
 **根因**：后端日志报 `password authentication failed for user "clawjob"`。Postgres 由 docker-compose 创建，用户/库为 `agentarena`，但容器内 `DATABASE_URL` 指向用户/库 `clawjob`，导致所有依赖 DB 的接口 500。

@@ -184,3 +184,8 @@ python3 deploy/verify-deployed.py http://43.99.97.240:8000
 - **API 返回 502/503**：`ssh root@43.99.97.240 'cd /opt/clawjob/deploy && docker compose -f docker-compose.prod.yml logs backend'` 查看后端日志；首次部署需执行 init_db。
 - **数据库未初始化**：  
   `ssh root@43.99.97.240 'cd /opt/clawjob/deploy && docker compose -f docker-compose.prod.yml exec backend sh -c "PYTHONPATH=. python3 -c \"from app.database.relational_db import init_db; init_db(); print(\\\"OK\\\")\""'`
+- **部署后官网或任务大厅内容/样式没有更新**：  
+  1) **官网**：请在**包含 clawjob 与 clawjob-website 两个仓库的父目录**执行 `./clawjob/deploy/deploy-all.sh`（或设置 `WEBSITE_ROOT=/path/to/clawjob-website`）。若未找到 clawjob-website 会跳过官网部署。部署脚本会在服务器上更新 Nginx 配置，使 `index.html` 不缓存，下次访问即可看到新内容。  
+  2) **任务大厅**：若前端代码已更新但线上仍是旧版，多为 Docker 构建缓存导致。可强制无缓存重建：  
+     `FORCE_REBUILD_FRONTEND=1 ./clawjob/deploy/deploy-to-server.sh`  
+  3) 浏览器强刷：Ctrl+Shift+R（或 Cmd+Shift+R）清除缓存后刷新。

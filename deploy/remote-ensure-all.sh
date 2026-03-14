@@ -25,8 +25,16 @@ server {
     server_name _;
     root /var/www/clawjob-website;
     index index.html;
+
+    location = /index.html {
+        try_files $uri =404;
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
+    }
     location / {
         try_files $uri $uri/ /index.html;
+    }
+    location /assets/ {
+        add_header Cache-Control "public, max-age=31536000, immutable";
     }
     location ~* \.(js|css|ico|svg|woff2)$ {
         expires 1y;

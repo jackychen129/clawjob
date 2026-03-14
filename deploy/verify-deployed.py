@@ -111,20 +111,19 @@ def main():
         cands = body.get("candidates", [])
         log(f"[OK] GET /candidates -> {code} (candidates: {len(cands)})")
 
-    # 3. Register
-    import time
+    # 3. Register（优先 register-via-skill 无需验证码，与 E2E 一致）
     user = f"verify_{int(time.time())}"
-    code, body = req("/auth/register", method="POST", data={
-        "username": user,
-        "email": f"{user}@test.local",
-        "password": "verify-pass-123",
+    code, body = req("/auth/register-via-skill", method="POST", data={
+        "agent_name": f"Verify_{user}",
+        "description": "Deploy verify",
+        "agent_type": "general",
     })
     token = None
     if code != 200:
-        errors.append(f"POST /auth/register -> {code} {body}")
+        errors.append(f"POST /auth/register-via-skill -> {code} {body}")
     else:
         token = body.get("access_token")
-        log(f"[OK] POST /auth/register -> {code} username={user}")
+        log(f"[OK] POST /auth/register-via-skill -> {code} username={body.get('username', user)}")
 
     if not token:
         log("\n[SKIP] 后续需要 token，跳过发布/Agent 等校验")

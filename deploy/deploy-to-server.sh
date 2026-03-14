@@ -83,7 +83,7 @@ if ! ssh-keygen -F "$SERVER_IP" &>/dev/null 2>&1; then
 fi
 
 echo ">>> 目标: ${SSH_USER}@${SERVER_IP}:${REMOTE_DIR}"
-echo ">>> 同步代码（排除 node_modules、.git、__pycache__、frontend/dist）..."
+echo ">>> 同步代码（排除 node_modules、.git、__pycache__、frontend/dist；保留服务器 deploy/.env）..."
 rsync -avz --delete \
   --exclude 'node_modules' \
   --exclude '.git' \
@@ -91,12 +91,15 @@ rsync -avz --delete \
   --exclude 'frontend/dist' \
   --exclude 'backend/.pytest_cache' \
   --exclude '*.pyc' \
+  --exclude 'deploy/.env' \
   ${RSYNC_RSH:+-e "$RSYNC_RSH"} \
   "$REPO_ROOT/" "${SSH_USER}@${SERVER_IP}:${REMOTE_DIR}/"
 
 echo ">>> 在服务器上检查 .env 并启动 Docker..."
+# 传递 FORCE_REBUILD_FRONTEND=1 可强制无缓存重建前端（解决任务大厅样式/内容未更新）
+export FORCE_REBUILD_FRONTEND="${FORCE_REBUILD_FRONTEND:-0}"
 # 将 SERVER_IP 注入到远程脚本（用于修补 .env）
-$SSH_CMD "${SSH_USER}@${SERVER_IP}" "set -e
+$SSH_CMD "${SSH_USER}@${SERVER_IP}" "export FORCE_REBUILD_FRONTEND='${FORCE_REBUILD_FRONTEND}'; set -e
   cd ${REMOTE_DIR}/deploy
   if [ ! -f .env ]; then
     cp .env.example .env
@@ -111,6 +114,8 @@ $SSH_CMD "${SSH_USER}@${SERVER_IP}" "set -e
   grep -q '^VITE_API_BASE_URL=' .env && sed -i.bak \"s|^VITE_API_BASE_URL=.*|VITE_API_BASE_URL=http://\$SIP:8000|\" .env || echo \"VITE_API_BASE_URL=http://\$SIP:8000\" >> .env
   grep -q '^CORS_ORIGINS=' .env && sed -i.bak \"s|^CORS_ORIGINS=.*|CORS_ORIGINS=http://\$SIP:3000|\" .env || echo \"CORS_ORIGINS=http://\$SIP:3000\" >> .env
   grep -q '^FRONTEND_URL=' .env && sed -i.bak \"s|^FRONTEND_URL=.*|FRONTEND_URL=http://\$SIP:3000|\" .env || echo \"FRONTEND_URL=http://\$SIP:3000\" >> .env
+  grep -q '^VITE_SKILL_VIEW_URL=' .env && sed -i.bak \"s|^VITE_SKILL_VIEW_URL=.*|VITE_SKILL_VIEW_URL=http://\$SIP/skill|\" .env || echo \"VITE_SKILL_VIEW_URL=http://\$SIP/skill\" >> .env
+  if [ \"\$FORCE_REBUILD_FRONTEND\" = \"1\" ]; then echo '强制重建前端镜像（无缓存）...'; docker compose -f docker-compose.prod.yml --env-file .env build --no-cache frontend; fi
   echo '启动 Docker Compose（已按 SERVER_IP 修补 VITE_API_BASE_URL / CORS_ORIGINS）...'
   docker compose -f docker-compose.prod.yml --env-file .env up -d --build
   echo ''

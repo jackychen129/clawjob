@@ -19,7 +19,6 @@
           <router-link to="/agents" class="nav-link" :class="{ active: route.path === '/agents' }">{{ t('nav.agentManage') || 'Agent 管理' }}</router-link>
           <router-link to="/playbook" class="nav-link" :class="{ active: route.path === '/playbook' }">{{ t('nav.playbook') || 'Playbook' }}</router-link>
           <router-link to="/rental" class="nav-link" :class="{ active: route.path === '/rental' }">{{ t('nav.rental') || '租赁' }}</router-link>
-          <router-link to="/docs" class="nav-link" :class="{ active: route.path === '/docs' }">{{ t('common.docs') }}</router-link>
           <router-link to="/skill" class="nav-link" :class="{ active: route.path === '/skill' }">{{ t('common.skill') }}</router-link>
         </nav>
         <div class="header-actions">
@@ -115,7 +114,7 @@
           <div
             v-for="task in tasks"
             :key="task.id"
-            class="card tw-card task-card task-card--structured p-6 h-full min-w-0 hover:border-purple-500/50 hover:bg-white/[0.02]"
+            class="card tw-card task-card task-card--structured p-6 h-full min-w-0 task-card--hover"
             :data-task-id="task.id"
             :data-task-status="task.status"
             :data-task-location="task.location || ''"
@@ -188,7 +187,7 @@
           <div v-if="!tasks.length && !tasksLoading" class="tw-empty-state empty-state">
             <div class="tw-empty-state__icon" aria-hidden="true">📋</div>
             <p class="tw-empty-state__text">{{ t('task.emptyTasks') }}</p>
-            <button type="button" class="tw-btn mt-2 border border-purple-500/50 text-purple-400 hover:bg-purple-500/10" @click="showCreateTaskModal = true">{{ t('task.publishFirst') }}</button>
+            <button type="button" class="btn btn-secondary mt-2" @click="showCreateTaskModal = true">{{ t('task.publishFirst') }}</button>
           </div>
           </div>
         </main>
@@ -217,7 +216,18 @@
 
       <!-- 我当前创建的任务（登录后显示） -->
       <section v-if="auth.isLoggedIn" class="home-my-created section apple-section">
-        <h2 class="section-title">{{ t('task.myCreatedTasks') }}</h2>
+        <div class="section-head">
+          <h2 class="section-title">{{ t('task.myCreatedTasks') }}</h2>
+          <button
+            v-if="batchConfirmSelected.length"
+            type="button"
+            class="btn btn-primary btn-sm"
+            :disabled="batchConfirmLoading"
+            @click="doBatchConfirm"
+          >
+            {{ t('task.batchConfirm') || '批量验收' }} ({{ batchConfirmSelected.length }})
+          </button>
+        </div>
         <div v-if="myCreatedTasksLoading" class="loading"><div class="spinner"></div></div>
         <div v-else class="my-created-list">
           <div
@@ -225,6 +235,9 @@
             :key="task.id"
             class="card tw-card task-card task-card--compact p-5"
           >
+            <label v-if="task.status === 'pending_verification'" class="task-card__batch-check">
+              <input v-model="batchConfirmSelected" type="checkbox" :value="task.id" />
+            </label>
             <div class="task-card__top">
               <span v-if="task.category" class="task-card__category">{{ taskCategoryLabel(task.category) }}</span>
               <span class="badge" :class="task.status">{{ t('status.' + task.status) || task.status }}</span>
@@ -244,7 +257,7 @@
         <div v-if="!auth.isLoggedIn" class="card tw-card p-6">
           <div class="card-content agent-gate">
             <p class="hint text-zinc-400">{{ t('agent.registerHint') }}</p>
-            <button type="button" class="tw-btn tw-btn-primary" @click="showAuthModal = true">{{ t('agent.loginToRegister') }}</button>
+            <button type="button" class="btn btn-primary" @click="showAuthModal = true">{{ t('agent.loginToRegister') }}</button>
           </div>
         </div>
         <div v-else>
@@ -589,7 +602,7 @@ function onLocaleChange() {
 const googleLoginUrl = computed(() => api.getGoogleLoginUrl())
 const googleOAuthConfigured = ref(true) // 在请求 /auth/google/status 前先显示按钮，避免闪烁
 const googleConfigError = ref('') // 未配置时后端返回的提示，用于在弹窗内展示
-const skillRepoUrl = (import.meta as any).env?.VITE_SKILL_REPO_URL || 'https://github.com/clawjob/clawjob/tree/main/skills/clawjob'
+const skillRepoUrl = (import.meta as any).env?.VITE_SKILL_REPO_URL || 'https://github.com/jackychen129/clawjob-skill'
 
 const showAuthModal = ref(false)
 const authTab = ref<'login' | 'register'>('login')
@@ -641,6 +654,8 @@ const showCreateTaskModal = ref(false)
 const createStep = ref(1)
 const myCreatedTasks = ref<typeof tasks.value>([])
 const myCreatedTasksLoading = ref(false)
+const batchConfirmSelected = ref<number[]>([])
+const batchConfirmLoading = ref(false)
 
 const selectedTaskTemplateId = ref('none')
 function applyTaskTemplateHome() {
@@ -846,6 +861,18 @@ function loadMyCreatedTasks() {
     myCreatedTasks.value = []
   }).finally(() => {
     myCreatedTasksLoading.value = false
+  })
+}
+
+function doBatchConfirm() {
+  const ids = batchConfirmSelected.value.slice()
+  if (!ids.length) return
+  batchConfirmLoading.value = true
+  api.batchConfirmTasks(ids).then(() => {
+    batchConfirmSelected.value = []
+    loadMyCreatedTasks()
+  }).finally(() => {
+    batchConfirmLoading.value = false
   })
 }
 
@@ -1207,4 +1234,19 @@ onUnmounted(() => {
   box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.3);
   border-radius: 4px;
 }
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+.section-head .section-title { margin-bottom: 0; }
+.task-card__batch-check {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 0.5rem;
+}
+.task-card__batch-check input { margin: 0; }
 </style>

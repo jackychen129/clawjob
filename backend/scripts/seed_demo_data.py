@@ -41,15 +41,16 @@ AGENTS = [
     {"name": "AutoTester", "owner_username": "carol", "agent_type": "测试", "description": "自动化测试脚本生成与执行，集成常见测试框架。"},
 ]
 
+# 参考众包/Agent 平台常见任务：数据标注、内容整理、调研、翻译、测试、文档等
 TASKS = [
+    {"title": "图像分类标注（500 张）", "description": "对提供的 500 张产品图按给定类别进行标注，输出 CSV；需保证类别一致、无漏标。", "task_type": "数据分析", "reward_points": 45, "location": "远程", "duration_estimate": "~2h", "skills": ["数据标注", "图像分类"]},
+    {"title": "客服工单摘要（10 条）", "description": "将 10 条客服对话整理为结构化摘要：问题类型、结论、建议操作；输出 Markdown 表格。", "task_type": "文档", "reward_points": 35, "location": "远程", "duration_estimate": "~1h", "skills": ["文档", "摘要"]},
+    {"title": "登录模块单元测试", "description": "为现有登录 API 编写单元测试，覆盖正常登录、错误密码、过期 token 等至少 5 个用例。", "task_type": "开发", "reward_points": 80, "location": "远程", "duration_estimate": "~2h", "skills": ["测试", "API"]},
+    {"title": "竞品功能与定价对比（3 款）", "description": "选取 3 款同类 SaaS 产品，整理核心功能与定价方案，输出对比表与简要结论。", "task_type": "调研", "reward_points": 95, "location": "远程", "duration_estimate": "~3h", "skills": ["调研", "竞品分析"]},
+    {"title": "产品页文案中译英", "description": "将一段中文产品介绍（约 800 字）翻译为英文，保持语气与卖点一致，适合海外落地页。", "task_type": "翻译", "reward_points": 55, "location": "远程", "duration_estimate": "~1.5h", "skills": ["翻译", "文案"]},
+    {"title": "API 集成测试脚本", "description": "为指定 REST API 编写 5 个端到端测试用例（pytest + requests），附 README 说明运行方式。", "task_type": "测试", "reward_points": 70, "location": "远程", "duration_estimate": "~2.5h", "skills": ["Python", "pytest", "API"]},
     {"title": "周报数据汇总与图表", "description": "将本周各渠道的 CSV 数据汇总，生成一份带图表的 Markdown 周报。", "task_type": "数据分析", "reward_points": 50, "location": "远程", "duration_estimate": "~2h", "skills": ["数据分析", "Markdown", "图表"]},
-    {"title": "项目 README 与贡献指南", "description": "为当前仓库生成 README.md 和 CONTRIBUTING.md，需包含安装、运行与提交流程。", "task_type": "文档", "reward_points": 80, "location": "远程", "duration_estimate": "~1h", "skills": ["文档", "Git"]},
-    {"title": "PR 代码审查与注释", "description": "对指定 PR 的变更进行代码审查，输出审查意见与改进建议（Markdown）。", "task_type": "开发", "reward_points": 100, "location": "远程", "duration_estimate": "~3h", "skills": ["代码审查", "Git"]},
-    {"title": "竞品功能对比调研", "description": "调研 3 个同类产品的核心功能与定价，输出一份对比表格与结论。", "task_type": "调研", "reward_points": 120, "location": "远程", "duration_estimate": "~4h", "skills": ["调研", "竞品分析"]},
-    {"title": "API 文档中英双语", "description": "将现有 API 文档翻译为英文，并统一术语表。", "task_type": "翻译", "reward_points": 60, "location": "远程", "duration_estimate": "~2h", "skills": ["翻译", "技术写作"]},
-    {"title": "单元测试覆盖率提升", "description": "为指定模块补充单元测试，覆盖率提升至 80% 以上。", "task_type": "测试", "reward_points": 90, "location": "远程", "duration_estimate": "~3h", "skills": ["测试", "Python"]},
-    {"title": "用户行为漏斗分析", "description": "基于埋点数据生成漏斗分析报表，并给出 2–3 条优化建议。", "task_type": "数据分析", "reward_points": 150, "location": "远程", "duration_estimate": "~5h", "skills": ["数据分析", "SQL"]},
-    {"title": "技术博客草稿生成", "description": "根据给定主题与要点，生成一篇 1500 字左右的技术博客草稿。", "task_type": "文档", "reward_points": 70, "location": "远程", "duration_estimate": "~1.5h", "skills": ["写作", "技术"]},
+    {"title": "技术博客草稿（1500 字）", "description": "根据给定主题与要点，生成一篇约 1500 字的技术博客草稿，结构清晰、可后续编辑。", "task_type": "文档", "reward_points": 65, "location": "远程", "duration_estimate": "~1.5h", "skills": ["写作", "技术"]},
 ]
 
 

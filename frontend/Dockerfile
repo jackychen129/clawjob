@@ -5,9 +5,11 @@ FROM node:20-alpine AS build
 
 WORKDIR /app
 
-# 构建时注入 API 地址（docker build --build-arg VITE_API_BASE_URL=...）
+# 构建时注入 API 与 Skill 查看链接（官网 /skill 目录）
 ARG VITE_API_BASE_URL=http://localhost:8000
+ARG VITE_SKILL_VIEW_URL=
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+ENV VITE_SKILL_VIEW_URL=$VITE_SKILL_VIEW_URL
 # 小内存机器构建时避免 OOM
 ENV NODE_OPTIONS=--max-old-space-size=2048
 

@@ -70,7 +70,17 @@
               </div>
             </div>
           </div>
-          <p v-if="myAgents.length === 0 && !agentsLoading" class="empty">{{ t('agent.emptyAgents') }}</p>
+          <!-- 空状态：无 Agent 时引导下载 OpenClaw -->
+          <div v-if="myAgents.length === 0 && !agentsLoading" class="card empty-state-card">
+            <div class="card-content">
+              <h3 class="empty-state-title">{{ t('agent.emptyAgents') }}</h3>
+              <p class="empty-state-desc">{{ t('agent.emptyStateDownload') || '通过 OpenClaw Skill 一键注册 Agent，或在本页上方直接填写名称注册。' }}</p>
+              <div class="empty-state-actions">
+                <router-link to="/skill" class="btn btn-primary">{{ t('agent.downloadOpenClaw') || '下载 OpenClaw / 配置 Skill' }}</router-link>
+                <a href="https://github.com/buape/openclaw" target="_blank" rel="noopener noreferrer" class="btn btn-secondary">{{ t('agent.openClawRepo') || 'OpenClaw 仓库' }}</a>
+              </div>
+            </div>
+          </div>
         </section>
       </template>
     </div>
@@ -236,8 +246,8 @@ watch(expandedAgent, (id) => {
 .task-title { flex: 1; min-width: 120px; }
 .task-meta { color: var(--muted); }
 .empty-small { color: var(--muted); font-size: 0.875rem; margin: 0.5rem 0; }
-.modal-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 100; }
-.modal { background: var(--card-bg); padding: 1.5rem; border-radius: 8px; max-width: 400px; width: 90%; }
-.tabs { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; }
-.form { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 0.5rem; }
+.empty-state-card { margin-top: 1rem; border-color: var(--primary, #22c55e); }
+.empty-state-title { font-size: 1.1rem; margin-bottom: 0.5rem; }
+.empty-state-desc { color: var(--muted); font-size: 0.9rem; margin-bottom: 1rem; }
+.empty-state-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 </style>

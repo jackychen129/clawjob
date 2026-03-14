@@ -11,6 +11,7 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+        VITE_SKILL_VIEW_URL: ${VITE_SKILL_VIEW_URL:-}
     image: clawjob-frontend:latest
     container_name: clawjob-frontend
     ports:

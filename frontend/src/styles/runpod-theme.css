@@ -4,6 +4,11 @@
   --primary: #22c55e;
   --primary-rgb: 34, 197, 94;
   --secondary-color: #4ade80;
+  --brand-400: #4ade80;
+  --brand-500: #22c55e;
+  --brand-600: #16a34a;
+  --el-text-color-secondary: var(--text-secondary);
+  --el-text-color-primary: var(--text-primary);
   --success-color: #22c55e;
   --warning-color: #eab308;
   --danger-color: #ef4444;
@@ -234,15 +239,76 @@ a.btn {
   padding: 0.35rem 0.75rem;
   font-size: var(--font-caption, 0.8125rem);
 }
+.btn-text {
+  background: transparent;
+  color: var(--text-secondary);
+}
+.btn-text:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.06);
+}
+.btn-text:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.15);
+}
 
-/* Main Content · RunPod/BotLearn：导航与内容明显分离，留白充足 */
+/* Main Content · 留白充足、最大宽度统一 */
 .main-content {
   flex: 1;
-  padding: 2.5rem 1.5rem 3rem;
+  padding: 2rem 1rem 3rem;
   max-width: 1280px;
   margin: 0 auto;
   width: 100%;
   min-width: 0;
+}
+.home-wrap {
+  padding-bottom: 2rem;
+}
+.home-layout {
+  display: grid;
+  gap: 2rem;
+}
+@media (min-width: 1024px) {
+  .home-layout {
+    grid-template-columns: 1fr 280px;
+    align-items: start;
+  }
+}
+.home-main {
+  min-width: 0;
+}
+.home-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+.home-search {
+  max-width: 100%;
+  width: 100%;
+}
+@media (min-width: 640px) {
+  .home-search { max-width: 20rem; }
+}
+.home-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+.home-categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.home-sort {
+  min-width: 10rem;
+}
+.apple-section {
+  margin-bottom: 2.5rem;
+}
+.section-full {
+  width: 100%;
 }
 @media (min-width: 769px) {
   .main-content {
@@ -321,18 +387,25 @@ input.input::placeholder {
   color: var(--text-secondary);
   opacity: 0.8;
 }
+textarea.input,
+.input.textarea,
+.input.textarea-input {
+  min-height: 4rem;
+  resize: vertical;
+  width: 100%;
+}
 
 /* Modals · 统一弹窗布局与体验 */
 .modal-mask {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.55);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
   padding: 1rem;
-  backdrop-filter: blur(4px);
+  backdrop-filter: blur(6px);
 }
 .modal {
   background: var(--card-bg);
@@ -342,18 +415,134 @@ input.input::placeholder {
   width: 100%;
   max-height: 90vh;
   overflow-y: auto;
-  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(var(--primary-rgb), 0.08);
   border: 1px solid var(--border-color);
 }
 .modal h3,
 .modal .modal-title {
-  font-size: 1.15rem;
+  font-size: 1.2rem;
   font-weight: 700;
   margin: 0 0 var(--space-4, 1rem);
   color: var(--text-primary);
+  letter-spacing: -0.02em;
 }
-.modal .form-group { margin-bottom: var(--space-4, 1rem); }
-.modal .form-label { display: block; margin-bottom: var(--space-1, 0.25rem); font-size: 0.9rem; color: var(--text-secondary); }
+/* 登录/注册 Tab 切换 */
+.modal .tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: var(--space-4, 1rem);
+}
+.modal .tabs .btn {
+  flex: 1;
+}
+.modal .tabs .btn.active {
+  background: rgba(var(--primary-rgb), 0.18);
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+}
+/* 表单：垂直排列、统一间距 */
+.modal .form,
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+.modal .form .input,
+.form .input {
+  width: 100%;
+}
+.modal .form-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+.modal .verification-code-row .input {
+  flex: 1;
+  min-width: 0;
+}
+.modal .verification-code-row .btn {
+  flex-shrink: 0;
+}
+/* 分隔线「或」 */
+.oauth-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.5rem 0;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+}
+.oauth-divider::before,
+.oauth-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-color);
+}
+/* Google 登录按钮 */
+.btn-google {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-sm, 8px);
+  border: 1px solid var(--border-color);
+  background: var(--background-dark);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s, color 0.2s;
+}
+.btn-google:hover {
+  border-color: var(--text-secondary);
+  background: var(--card-hover);
+}
+.btn-google-unconfigured {
+  opacity: 0.7;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+/* 错误与提示 */
+.error-msg {
+  color: var(--danger-color);
+  font-size: 0.875rem;
+  margin: 0.5rem 0 0;
+  padding: 0.5rem 0.75rem;
+  background: rgba(239, 68, 68, 0.1);
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+.hint {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  margin: 0.25rem 0 0;
+  line-height: 1.45;
+}
+.modal .google-config-hint {
+  margin-top: 0.25rem;
+}
+/* 弹窗底部关闭/取消 */
+.modal .close-btn {
+  margin-top: 1rem;
+  width: 100%;
+}
+.modal .agent-select-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+.modal .agent-select-list .btn.block,
+.btn.block {
+  display: block;
+  width: 100%;
+  text-align: center;
+}
 .modal .step-actions,
 .modal .modal-actions {
   display: flex;
@@ -361,6 +550,8 @@ input.input::placeholder {
   gap: var(--space-2, 0.5rem);
   margin-top: var(--space-5, 1.25rem);
 }
+.modal .form-group { margin-bottom: var(--space-4, 1rem); }
+.modal .form-label { display: block; margin-bottom: var(--space-1, 0.25rem); font-size: 0.9rem; color: var(--text-secondary); }
 @keyframes modal-fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes modal-scale-in { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
 .modal-mask { animation: modal-fade-in 0.2s ease; }
@@ -627,4 +818,49 @@ html { scroll-behavior: smooth; }
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
+}
+
+/* 任务卡片悬停：品牌色边框 */
+.task-card--hover:hover {
+  border-color: rgba(var(--primary-rgb), 0.5);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+/* 骨架屏 */
+.tw-skeleton-card {
+  background: var(--card-background);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+}
+.tw-skeleton {
+  background: linear-gradient(90deg, var(--border-color) 25%, var(--card-hover) 50%, var(--border-color) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shine 1.2s ease-in-out infinite;
+  border-radius: 4px;
+}
+@keyframes skeleton-shine {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* 筛选芯片：与设计系统一致 */
+.filter-chip {
+  padding: 0.35rem 0.75rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background: var(--card-background);
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s, color 0.2s;
+}
+.filter-chip:hover {
+  border-color: rgba(var(--primary-rgb), 0.4);
+  color: var(--text-primary);
+}
+.filter-chip.active {
+  border-color: var(--primary-color);
+  background: rgba(var(--primary-rgb), 0.12);
+  color: var(--primary-color);
 }

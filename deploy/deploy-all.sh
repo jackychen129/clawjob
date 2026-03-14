@@ -6,9 +6,17 @@
 set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CLAWJOB_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-# 假设 clawjob-website 与 clawjob 同级
 PARENT="$(cd "$CLAWJOB_ROOT/.." && pwd)"
-WEBSITE_ROOT="$PARENT/clawjob-website"
+# 官网目录：优先环境变量 WEBSITE_ROOT，否则与 clawjob 同级，或 clawjob 子目录
+if [ -n "$WEBSITE_ROOT" ] && [ -d "$WEBSITE_ROOT" ]; then
+  :
+elif [ -d "$PARENT/clawjob-website" ]; then
+  WEBSITE_ROOT="$PARENT/clawjob-website"
+elif [ -d "$CLAWJOB_ROOT/clawjob-website" ]; then
+  WEBSITE_ROOT="$CLAWJOB_ROOT/clawjob-website"
+else
+  WEBSITE_ROOT=""
+fi
 
 if [ -f "$SCRIPT_DIR/.deploy_env" ]; then
   set -a
@@ -100,8 +108,9 @@ echo ">>> SSH 连接正常，开始部署..."
 echo ""
 
 echo "========== 1. 部署官网 (clawjob-website) =========="
-if [ ! -d "$WEBSITE_ROOT" ]; then
-  echo "未找到 $WEBSITE_ROOT，跳过官网部署。"
+if [ -z "$WEBSITE_ROOT" ] || [ ! -d "$WEBSITE_ROOT" ]; then
+  echo "未找到 clawjob-website，跳过官网部署。"
+  echo "  可选：将官网仓库放在与 clawjob 同级（如 $(dirname "$PARENT")/clawjob-website），或设置 WEBSITE_ROOT=路径 后重试。"
 else
   cd "$WEBSITE_ROOT"
   # 官网「体验任务大厅」按钮指向本机部署的 ClawJob 应用
@@ -110,7 +119,7 @@ else
   rsync -avz --delete ${RSYNC_RSH:+-e "$RSYNC_RSH"} dist/ "${SSH_USER}@${SERVER_IP}:/var/www/clawjob-website/"
   echo "官网已上传到 /var/www/clawjob-website/（任务大厅链接: $VITE_TASK_HALL_URL）"
   # 若有 clawjob-skill（与 clawjob 同级），一并同步到官网目录供访问
-  if [ -d "$PARENT/clawjob-skill" ]; then
+  if [ -n "$PARENT" ] && [ -d "$PARENT/clawjob-skill" ]; then
     echo ">>> 同步 ClawSkill 到官网 /skill/ ..."
     $SSH_CMD "${SSH_USER}@${SERVER_IP}" "mkdir -p /var/www/clawjob-website/skill"
     rsync -avz ${RSYNC_RSH:+-e "$RSYNC_RSH"} "$PARENT/clawjob-skill/" "${SSH_USER}@${SERVER_IP}:/var/www/clawjob-website/skill/"
@@ -124,11 +133,12 @@ cd "$CLAWJOB_ROOT"
 "$SCRIPT_DIR/deploy-to-server.sh"
 
 echo ""
-echo "========== 3. 等待后端就绪后初始化数据库（首次必做） =========="
-sleep 20
+WAIT_SEC="${DEPLOY_WAIT_SECONDS:-20}"
+echo "========== 3. 等待后端就绪（${WAIT_SEC}s）并初始化数据库（首次必做） =========="
+sleep "$WAIT_SEC"
 $SSH_CMD "${SSH_USER}@${SERVER_IP}" "cd /opt/clawjob/deploy && docker compose -f docker-compose.prod.yml exec -T backend sh -c 'PYTHONPATH=. python3 -c \"from app.database.relational_db import init_db; init_db(); print(\\\"OK\\\")\"' 2>/dev/null" && echo "数据库初始化 OK" || {
   echo "（若失败：等 1 分钟后手动执行）"
-  echo "  ssh root@${SERVER_IP} 'cd /opt/clawjob/deploy && docker compose -f docker-compose.prod.yml exec backend sh -c \"PYTHONPATH=. python3 -c \\\"from app.database.relational_db import init_db; init_db(); print(\\\\\\\"OK\\\\\\\")\\\"\"'"
+  echo "  ssh ${SSH_USER}@${SERVER_IP} 'cd /opt/clawjob/deploy && docker compose -f docker-compose.prod.yml exec backend sh -c \"PYTHONPATH=. python3 -c \\\"from app.database.relational_db import init_db; init_db(); print(\\\\\\\"OK\\\\\\\")\\\"\"'"
 }
 
 if [ -n "$RUN_SEED_DEMO" ]; then
@@ -138,8 +148,22 @@ if [ -n "$RUN_SEED_DEMO" ]; then
 fi
 
 echo ""
+echo "========== 4. 更新服务器 Nginx 配置（官网 index 不缓存，部署即生效）=========="
+$SSH_CMD "${SSH_USER}@${SERVER_IP}" "cp /opt/clawjob/deploy/nginx/clawjob-website-80.conf /etc/nginx/sites-available/clawjob-website 2>/dev/null && nginx -t && systemctl reload nginx && echo 'Nginx 已重载' || true" 2>/dev/null || true
+
+echo ""
+echo "========== 5. 部署后验证（可选）=========="
+if command -v python3 &>/dev/null; then
+  python3 "$SCRIPT_DIR/verify-deployed.py" "http://${SERVER_IP}:8000" 2>/dev/null && echo "API 验证通过" || echo "（跳过或验证失败，可手动运行: python3 $SCRIPT_DIR/verify-deployed.py http://${SERVER_IP}:8000）"
+else
+  echo "（未安装 python3，跳过 API 验证）"
+fi
+
+echo ""
 echo "========== 部署完成 =========="
 echo "  官网:        http://${SERVER_IP}/"
+echo "  Skill 文档:  http://${SERVER_IP}/skill/   (clawjob-skill 已同步到官网目录)"
 echo "  任务大厅:    http://${SERVER_IP}:3000"
 echo "  后端 API:    http://${SERVER_IP}:8000"
 echo "  验证:        python3 $SCRIPT_DIR/verify-deployed.py http://${SERVER_IP}:8000"
+echo "  可选：RUN_SEED_DEMO=1 填充演示数据；FORCE_REBUILD_FRONTEND=1 强制重建前端；DEPLOY_WAIT_SECONDS=30 延长等待"

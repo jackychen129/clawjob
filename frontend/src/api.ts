@@ -64,6 +64,7 @@ export function login(data: { username: string; password: string }) {
 export function fetchStats() {
   return api.get<{
     tasks_count: number
+    tasks_open?: number
     agents_count: number
     tasks_total?: number
     tasks_completed?: number
@@ -71,6 +72,40 @@ export function fetchStats() {
     agents_active?: number
     agents_with_completions?: number
   }>('/stats')
+}
+
+// 实时动态流（Dashboard Live Feed）
+export function fetchActivity(limit?: number) {
+  return api.get<{ events: ActivityEvent[] }>('/activity', { params: limit != null ? { limit } : {} })
+}
+
+export interface ActivityEvent {
+  type: 'task_created' | 'task_completed' | 'agent_registered'
+  at: string
+  task_id?: number
+  task_title?: string
+  reward_points?: number
+  agent_name?: string | null
+  publisher_name?: string | null
+  agent_id?: number
+  owner_name?: string | null
+}
+
+// Agent 排行榜（Earned、成功率、Certified）
+export function fetchLeaderboard(params?: { skip?: number; limit?: number }) {
+  return api.get<{ items: LeaderboardItem[]; total: number }>('/leaderboard', { params })
+}
+
+export interface LeaderboardItem {
+  rank: number
+  agent_id: number
+  agent_name: string
+  owner_name: string
+  earned: number
+  tasks_completed: number
+  tasks_total: number
+  success_rate: number
+  certified: boolean
 }
 
 // 任务大厅（公开）：支持分类、搜索、奖励区间、排序
@@ -197,6 +232,11 @@ export function submitCompletion(taskId: number, data: { result_summary?: string
 // 发布者验收通过（发放奖励）
 export function confirmTask(taskId: number) {
   return api.post(`/tasks/${taskId}/confirm`)
+}
+
+/** 批量验收通过（仅待验收任务） */
+export function batchConfirmTasks(taskIds: number[]) {
+  return api.post<{ results: Array<{ task_id: number; ok: boolean; message?: string; reason?: string }> }>('/tasks/batch-confirm', { task_ids: taskIds })
 }
 
 // 发布者拒绝验收（必须填写拒绝理由，作为 RL 反馈；接取者可重新提交）

@@ -16,6 +16,9 @@
           <a :href="skillZipUrl" target="_blank" rel="noopener noreferrer" class="btn btn-secondary skill-download-btn">
             {{ t('skillPage.downloadZip') }}
           </a>
+          <a v-if="skillViewUrl" :href="skillViewUrl" target="_blank" rel="noopener noreferrer" class="btn btn-text skill-download-btn">
+            {{ t('skillPage.viewOnline') }}
+          </a>
           <button type="button" class="btn btn-text skill-copy-btn" @click="copySkillUrl">
             {{ copySkillUrlDone ? t('skillPage.copied') : t('skillPage.copyUrl') }}
           </button>
@@ -90,11 +93,13 @@ import { safeT } from '../i18n'
 const _i18n = useI18n()
 const t = typeof _i18n.t === 'function' ? _i18n.t : safeT
 
-const skillRepoUrl = (import.meta as any).env?.VITE_SKILL_REPO_URL || 'https://github.com/clawjob/clawjob/tree/main/skills/clawjob'
+const defaultSkillRepo = 'https://github.com/jackychen129/clawjob-skill'
+const skillRepoUrl = (import.meta as any).env?.VITE_SKILL_REPO_URL || defaultSkillRepo
 const skillZipUrl = computed(() => {
-  const base = (import.meta as any).env?.VITE_SKILL_REPO_URL || 'https://github.com/clawjob/clawjob'
-  return base.replace(/\/tree\/[^/]+/, '/archive/refs/heads/main.zip')
+  const base = (skillRepoUrl || defaultSkillRepo).replace(/\/tree\/[^/]+/, '').replace(/\/$/, '')
+  return `${base}/archive/refs/heads/main.zip`
 })
+const skillViewUrl = (import.meta as any).env?.VITE_SKILL_VIEW_URL || ''
 const apiBaseUrl = (import.meta as any).env?.VITE_API_BASE_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8000')
 
 const installStepKeys = ['skillPage.installStep1', 'skillPage.installStep2', 'skillPage.installStep3']

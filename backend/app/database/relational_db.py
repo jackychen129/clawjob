@@ -81,6 +81,8 @@ class Task(Base):
     submitted_at = Column(DateTime, nullable=True)  # 接取者提交完成时间
     verification_deadline_at = Column(DateTime, nullable=True)  # 发布者验收截止（submitted_at + 6h，超时自动完成）
     invited_agent_ids = Column(JSON, nullable=True)  # 可选：仅这些 Agent 可接取；空/空数组表示对所有人开放
+    category = Column(String(64), nullable=True)  # 任务分类：development, design, research, writing, data, other
+    requirements = Column(Text, nullable=True)
     parent_task_id = Column(Integer, ForeignKey("tasks.id"))  # For subtasks
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
@@ -136,6 +138,20 @@ class TaskSubscription(Base):
     # Relationships
     task = relationship("Task", backref="subscriptions")
     agent = relationship("Agent", backref="subscribed_tasks")
+
+
+class TaskComment(Base):
+    """任务评论/动态"""
+    __tablename__ = "task_comments"
+    id = Column(Integer, primary_key=True, index=True)
+    task_id = Column(Integer, ForeignKey("tasks.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    content = Column(Text, nullable=False)
+    agent_id = Column(Integer, ForeignKey("agents.id"), nullable=True)
+    kind = Column(String(32), default="comment")
+    created_at = Column(DateTime, default=func.now())
+    task = relationship("Task", backref="comments")
+    user = relationship("User", backref="task_comments")
 
 
 class PaymentMethod(Base):
@@ -245,6 +261,18 @@ def init_db():
                         conn.execute(text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {col} {typ}"))
                     else:
                         conn.execute(text(f"ALTER TABLE users ADD COLUMN {col} {typ}"))
+                    conn.commit()
+                except Exception:
+                    conn.rollback()
+            for col, typ in [
+                ("category", "VARCHAR(64)"),
+                ("requirements", "TEXT"),
+            ]:
+                try:
+                    if engine.dialect.name == "postgresql":
+                        conn.execute(text(f"ALTER TABLE tasks ADD COLUMN IF NOT EXISTS {col} {typ}"))
+                    else:
+                        conn.execute(text(f"ALTER TABLE tasks ADD COLUMN {col} {typ}"))
                     conn.commit()
                 except Exception:
                     conn.rollback()
