@@ -136,7 +136,7 @@
                 <h4 class="task-comments-title">{{ t('task.completionSubmissionTitle') }}</h4>
                 <p v-if="selectedTaskDetail.output_data.result_summary" class="completion-summary">{{ selectedTaskDetail.output_data.result_summary }}</p>
                 <p v-if="selectedTaskDetail.output_data.evidence && selectedTaskDetail.output_data.evidence.link" class="completion-link">
-                  <a :href="String(selectedTaskDetail.output_data.evidence.link)" target="_blank" rel="noopener noreferrer">{{ t('task.completionLink') }}：{{ selectedTaskDetail.output_data.evidence.link }}</a>
+                  <a :href="String(selectedTaskDetail.output_data.evidence.link)" target="_blank" rel="noopener noreferrer" class="app-link">{{ t('task.completionLink') }}：{{ selectedTaskDetail.output_data.evidence.link }}</a>
                 </p>
               </div>
               <div class="task-comments">
@@ -750,7 +750,6 @@ watch(tab, (newTab) => {
 .task-detail-completion-submission { margin-top: 1rem; padding: 0.75rem; background: var(--surface, rgba(255,255,255,0.05)); border-radius: 8px; }
 .task-detail-completion-submission .completion-summary { margin: 0 0 0.5rem; white-space: pre-wrap; font-size: 0.9rem; color: var(--text-secondary); }
 .task-detail-completion-submission .completion-link { margin: 0; font-size: 0.9rem; }
-.task-detail-completion-submission .completion-link a { color: var(--primary-color); }
 .task-comments { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--border-color); }
 .task-comments-title { font-size: 0.95rem; font-weight: 600; margin: 0 0 0.75rem; color: var(--text-primary); }
 .task-comments-list { list-style: none; padding: 0; margin: 0 0 1rem; }
@@ -769,7 +768,7 @@ watch(tab, (newTab) => {
 .task-comment-form { margin-top: 1rem; }
 .task-comment-form .textarea-input { min-height: 3.5rem; margin-bottom: 0.5rem; width: 100%; border-radius: var(--radius-sm); padding: 0.6rem 0.75rem; }
 .task-tabs { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
-.task-tab { padding: 0.5rem 1rem; border-radius: 8px; border: 1px solid var(--border, #333); background: transparent; color: var(--text-secondary); font-size: 0.9rem; cursor: pointer; transition: all 0.2s; }
+.task-tab { padding: 0.5rem 1rem; border-radius: 8px; border: 1px solid var(--border, #333); background: transparent; color: var(--text-secondary); font-size: 0.9rem; cursor: pointer; transition: border-color var(--duration-m) var(--ease-apple), background var(--duration-m) var(--ease-apple), color var(--duration-m) var(--ease-apple); }
 .task-tab:hover { border-color: var(--primary-color); color: var(--primary-color); }
 .task-tab.active { background: rgba(var(--primary-rgb, 34, 197, 94), 0.12); border-color: var(--primary-color); color: var(--primary-color); }
 .task-filter-row { margin-bottom: 0.75rem; }
@@ -782,7 +781,8 @@ watch(tab, (newTab) => {
   border: 1px solid var(--border-color, rgba(255,255,255,0.1));
   background: var(--card-background, var(--card-bg));
   padding: 1rem 1.25rem;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  box-shadow: var(--shadow-card, 0 1px 3px rgba(0,0,0,0.08));
+  transition: box-shadow var(--duration-m) var(--ease-apple), border-color var(--duration-m) var(--ease-apple);
 }
 .task-right-create .btn { width: 100%; }
 .task-right-title { font-size: 0.95rem; font-weight: 600; margin: 0 0 0.75rem; color: var(--text-primary); letter-spacing: 0.01em; }
@@ -796,7 +796,7 @@ watch(tab, (newTab) => {
   display: flex; align-items: center; gap: 0.5rem;
   font-size: 0.9rem; color: var(--primary-color); text-decoration: none;
   padding: 0.5rem 0.6rem; border-radius: 8px;
-  transition: background 0.2s, color 0.2s;
+  transition: background var(--duration-m) var(--ease-apple), color var(--duration-m) var(--ease-apple), border-color var(--duration-m) var(--ease-apple);
   border: 1px solid transparent;
 }
 .task-right-agent-link:hover { background: rgba(var(--primary-rgb, 34, 197, 94), 0.1); color: var(--primary-color); text-decoration: none; border-color: var(--border-color); }
@@ -835,7 +835,7 @@ watch(tab, (newTab) => {
 .create-task-step-label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.03em; }
 .create-task-step--identity { margin-bottom: 1.25rem; }
 .publish-identity-toggles { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.35rem; }
-.identity-toggle { padding: 0.5rem 1rem; border-radius: 8px; border: 1px solid var(--border-color); background: var(--background-dark); color: var(--text-secondary); font-size: 0.9rem; cursor: pointer; transition: border-color 0.2s, background 0.2s, color 0.2s; }
+.identity-toggle { padding: 0.5rem 1rem; border-radius: 8px; border: 1px solid var(--border-color); background: var(--background-dark); color: var(--text-secondary); font-size: 0.9rem; cursor: pointer; transition: border-color var(--duration-m) var(--ease-apple), background var(--duration-m) var(--ease-apple), color var(--duration-m) var(--ease-apple); }
 .identity-toggle:hover { border-color: var(--primary-color); color: var(--primary-color); }
 .identity-toggle.active { background: rgba(var(--primary-rgb, 34, 197, 94), 0.15); border-color: var(--primary-color); color: var(--primary-color); }
 .form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem 1rem; }

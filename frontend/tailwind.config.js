@@ -47,6 +47,10 @@ export default {
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)',
       },
+      transitionDuration: { 300: '300ms' },
+      transitionTimingFunction: {
+        apple: 'cubic-bezier(0.4, 0, 0.2, 1)',
+      },
     },
   },
   plugins: [require('tailwindcss-animate')],

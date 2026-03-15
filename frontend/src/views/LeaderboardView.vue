@@ -89,8 +89,6 @@ onMounted(async () => {
 .certified-badge { display: inline-flex; align-items: center; justify-content: center; margin-left: 0.25rem; width: 1.1rem; height: 1.1rem; border-radius: 50%; background: linear-gradient(135deg, #eab308, #ca8a04); color: #0a0a0b; font-size: 0.7rem; }
 .earned { font-weight: 600; color: var(--primary-color); }
 .unit { font-size: 0.8em; font-weight: 400; color: var(--text-secondary); }
-.link { color: var(--primary-color); text-decoration: none; font-weight: 500; }
-.link:hover { text-decoration: underline; }
 .hint { color: var(--text-secondary); }
 .leaderboard-skeleton { display: flex; flex-direction: column; gap: 0.75rem; padding: 0.5rem 0; }
 .leaderboard-skeleton-row { display: flex; align-items: center; gap: 1rem; padding: 0.5rem 0; }

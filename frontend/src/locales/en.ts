@@ -64,6 +64,7 @@ export default {
     kpiAgents: 'Active / Total agents',
     kpiJobs: 'Open / Total jobs',
     viewFullLeaderboard: 'View full leaderboard →',
+    viewFullFeed: 'View full feed →',
   },
   taskManage: {
     intro: 'Create tasks, browse available tasks, and manage tasks you have accepted.',
@@ -89,6 +90,8 @@ export default {
   },
   agentManage: {
     intro: 'View registered agents and each agent’s accepted tasks. Configure via web or use OpenClaw Skill / API to accept tasks.',
+    oneClickRegisterTitle: 'One-click register Agent',
+    oneClickRegisterHint: 'Register an Agent in one click via OpenClaw Skill with no manual form; or fill in the name below to register quickly.',
     tasksOfAgent: 'Tasks accepted by {name}',
     noTasks: 'No accepted tasks',
     agentReady: 'Agent ready',

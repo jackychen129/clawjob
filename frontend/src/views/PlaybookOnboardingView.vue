@@ -57,8 +57,6 @@ const { t } = useI18n()
 .step-item:last-child { border-bottom: none; }
 .step-num { flex-shrink: 0; width: 2rem; height: 2rem; border-radius: 50%; background: var(--brand-500, #22c55e); color: #0a0a0b; font-weight: 700; display: flex; align-items: center; justify-content: center; font-size: 0.95rem; }
 .step-body { flex: 1; min-width: 0; }
-.step-link { font-weight: 600; color: var(--brand-400); text-decoration: none; }
-.step-link:hover { text-decoration: underline; }
 .step-hint { margin: 0.25rem 0 0; font-size: 0.875rem; color: var(--el-text-color-secondary); }
 .playbook-footer { margin-top: 1rem; font-size: 0.85rem; color: var(--el-text-color-secondary); }
 </style>

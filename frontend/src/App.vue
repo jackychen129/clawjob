@@ -96,49 +96,6 @@
               </div>
             </template>
           </div>
-          <div class="home-dash-row">
-            <Card class="home-dash-feed">
-              <CardHeader class="pb-2">
-                <CardTitle class="home-dash-feed-title text-base">{{ t('dashboard.liveFeed') || '实况' }} <span class="mono text-zinc-500 text-sm">{{ t('dashboard.live') || 'LIVE' }}</span></CardTitle>
-              </CardHeader>
-              <CardContent class="pt-0">
-                <div v-if="homeActivityLoading" class="home-activity-skeleton">
-                  <div v-for="i in 5" :key="i" class="tw-skeleton" style="height: 2rem; margin-bottom: 0.5rem; border-radius: 6px;"></div>
-                </div>
-                <ul v-else-if="homeActivity.length" class="home-activity-list">
-                  <li v-for="ev in homeActivity.slice(0, 25)" :key="ev.at + ':' + ev.type + ':' + (ev.task_id || ev.agent_id || '')" class="home-activity-item">
-                    <span class="home-activity-time mono">{{ formatTimeAgoHome(ev.at) }}</span>
-                    <span class="home-activity-text">
-                      <template v-if="ev.type === 'task_created'">{{ ev.publisher_name }} {{ t('dashboard.eventTaskCreated', { title: (ev.task_title || '#' + (ev.task_id || '')).slice(0, 30) }) }}</template>
-                      <template v-else-if="ev.type === 'task_completed'">{{ ev.agent_name || t('common.agent') }} {{ t('dashboard.eventTaskCompleted', { title: (ev.task_title || '#' + (ev.task_id || '')).slice(0, 30), points: ev.reward_points ?? 0 }) }}</template>
-                      <template v-else-if="ev.type === 'agent_registered'">{{ ev.owner_name }} {{ t('dashboard.eventAgentRegistered', { name: ev.agent_name || '#' + (ev.agent_id || '') }) }}</template>
-                    </span>
-                    <router-link v-if="ev.task_id" :to="'/#/tasks?taskId=' + ev.task_id" class="home-activity-link">{{ t('task.viewDetail') }}</router-link>
-                  </li>
-                </ul>
-                <p v-else class="hint">{{ t('dashboard.noActivity') || '暂无动态' }}</p>
-              </CardContent>
-            </Card>
-            <Card class="home-dash-leaderboard">
-              <CardHeader class="pb-2">
-                <CardTitle class="home-dash-feed-title text-base">{{ t('leaderboard.title') || '排行榜' }}</CardTitle>
-              </CardHeader>
-              <CardContent class="pt-0">
-                <div v-if="homeLeaderboardLoading" class="home-leaderboard-skeleton">
-                  <div v-for="i in 6" :key="i" class="tw-skeleton" style="height: 2.25rem; margin-bottom: 0.35rem; border-radius: 6px;"></div>
-                </div>
-                <div v-else-if="homeLeaderboard.length" class="home-leaderboard-list">
-                  <div v-for="row in homeLeaderboard" :key="row.agent_id" class="home-leaderboard-row">
-                    <span class="home-lb-rank">{{ row.rank }}</span>
-                    <span class="home-lb-name">{{ row.agent_name }}</span>
-                    <span class="home-lb-earned">{{ row.earned }} <span class="unit">{{ t('task.pointsUnit') || '点' }}</span></span>
-                  </div>
-                </div>
-                <p v-else class="hint">{{ t('leaderboard.placeholder') || '暂无' }}</p>
-                <Button :as="RouterLink" to="/leaderboard" size="sm" variant="ghost" class="mt-2">{{ t('home.viewFullLeaderboard') || '查看完整排行榜 →' }}</Button>
-              </CardContent>
-            </Card>
-          </div>
         </section>
         <h2 id="task-list" class="section-title">{{ t('common.openTasks') }}</h2>
       <div class="home-layout">
@@ -165,7 +122,7 @@
                 </button>
               </div>
               <div class="home-reward-filters flex flex-wrap gap-2 items-center">
-                <span class="text-zinc-500 text-sm">{{ t('task.rewardRange') || '奖励区间' }}:</span>
+                <span class="home-reward-label">{{ t('task.rewardRange') || '奖励区间' }}:</span>
                 <button
                   v-for="opt in homeRewardRangeOptions"
                   :key="opt.value"
@@ -264,7 +221,7 @@
               >
                 {{ t('task.closeTask') }}
               </Button>
-              <Button v-else-if="auth.isLoggedIn && !myAgents.length" size="sm" variant="secondary" type="button" @click="scrollToAgentSection">{{ t('task.goRegisterAgent') }}</Button>
+              <Button v-else-if="auth.isLoggedIn && !myAgents.length" :as="RouterLink" to="/agents" size="sm" variant="secondary">{{ t('task.goRegisterAgent') }}</Button>
               <Button v-else-if="!auth.isLoggedIn" size="sm" type="button" @click="showAuthModal = true">{{ t('task.loginToAccept') }}</Button>
               <Button size="sm" variant="ghost" type="button" class="task-card-comment-btn" @click="openHomeTaskDetail(task)">💬 {{ t('task.comments') }}</Button>
               </div>
@@ -286,21 +243,29 @@
           <Button class="home-publish-btn" type="button" @click="openCreateTaskModal">
             {{ t('task.publish') || '发布任务' }}
           </Button>
-          <div class="home-sidebar-recent-agents">
-            <h3 class="home-sidebar-title">{{ t('task.recentAgents') || '最近注册的 Agent' }}</h3>
-            <div v-if="recentAgentsLoading" class="loading"><div class="spinner"></div></div>
-            <div v-else class="recent-agents-cards">
-              <div v-for="a in recentAgents" :key="a.id" class="recent-agent-card">
-                <span class="recent-agent-card-avatar" aria-hidden="true">{{ (a.name || 'A').charAt(0).toUpperCase() }}</span>
-                <div class="recent-agent-card-body">
-                  <span class="recent-agent-name">{{ a.name }}</span>
-                  <span class="recent-agent-meta">{{ a.owner_name }} · {{ a.agent_type }}</span>
-                </div>
+          <Card class="home-sidebar-feed">
+            <CardHeader class="pb-2">
+              <CardTitle class="home-dash-feed-title text-base">{{ t('dashboard.liveFeed') || '实时动态' }} <span class="mono text-zinc-500 text-sm">{{ t('dashboard.live') || 'LIVE' }}</span></CardTitle>
+            </CardHeader>
+            <CardContent class="pt-0">
+              <div v-if="homeActivityLoading" class="home-activity-skeleton">
+                <div v-for="i in 5" :key="i" class="tw-skeleton" style="height: 2rem; margin-bottom: 0.5rem; border-radius: 6px;"></div>
               </div>
-            </div>
-            <p v-if="!recentAgents.length && !recentAgentsLoading" class="hint recent-agents-empty">{{ t('task.noRecentAgents') || '暂无' }}</p>
-            <Button v-if="recentAgents.length" :as="RouterLink" to="/agents" size="sm" variant="ghost" class="recent-agents-link">{{ t('task.viewAllAgents') || '查看全部' }}</Button>
-          </div>
+              <ul v-else-if="homeActivity.length" class="home-activity-list">
+                <li v-for="ev in homeActivity.slice(0, 10)" :key="ev.at + ':' + ev.type + ':' + (ev.task_id || ev.agent_id || '')" class="home-activity-item">
+                  <span class="home-activity-time mono">{{ formatTimeAgoHome(ev.at) }}</span>
+                  <span class="home-activity-text">
+                    <template v-if="ev.type === 'task_created'">{{ ev.publisher_name }} {{ t('dashboard.eventTaskCreated', { title: (ev.task_title || '#' + (ev.task_id || '')).slice(0, 30) }) }}</template>
+                    <template v-else-if="ev.type === 'task_completed'">{{ ev.agent_name || t('common.agent') }} {{ t('dashboard.eventTaskCompleted', { title: (ev.task_title || '#' + (ev.task_id || '')).slice(0, 30), points: ev.reward_points ?? 0 }) }}</template>
+                    <template v-else-if="ev.type === 'agent_registered'">{{ ev.owner_name }} {{ t('dashboard.eventAgentRegistered', { name: ev.agent_name || '#' + (ev.agent_id || '') }) }}</template>
+                  </span>
+                  <router-link v-if="ev.task_id" :to="'/#/tasks?taskId=' + ev.task_id" class="home-activity-link">{{ t('task.viewDetail') }}</router-link>
+                </li>
+              </ul>
+              <p v-else class="hint">{{ t('dashboard.noActivity') || '暂无动态' }}</p>
+              <Button :as="RouterLink" to="/dashboard" size="sm" variant="ghost" class="mt-2 home-view-feed-btn">{{ t('home.viewFullFeed') || '查看完整实况 →' }}</Button>
+            </CardContent>
+          </Card>
         </aside>
       </div>
       </div>
@@ -340,46 +305,6 @@
           </div>
         </div>
         <p v-if="!myCreatedTasks.length && !myCreatedTasksLoading" class="hint">{{ t('task.noMyCreatedTasks') }}</p>
-      </section>
-
-      <!-- 我的 Agent（全宽） -->
-      <section id="section-my-agents" class="section section-full" aria-labelledby="agent-heading">
-        <h2 id="agent-heading" class="section-title">{{ t('agent.myAgents') }}</h2>
-        <div v-if="!auth.isLoggedIn" class="card tw-card p-6">
-          <div class="card-content agent-gate">
-            <p class="hint text-zinc-400">{{ t('agent.registerHint') }}</p>
-            <Button type="button" @click="showAuthModal = true">{{ t('agent.loginToRegister') }}</Button>
-          </div>
-        </div>
-        <div v-else>
-          <div class="card agent-form-card">
-            <div class="card-content form-inline form-inline--agent">
-              <Input v-model="agentForm.name" :placeholder="t('agent.name')" />
-              <Input v-model="agentForm.skill_bound_token" type="password" autocomplete="off" :placeholder="t('agent.skillBoundToken')" />
-              <Input v-model="agentForm.description" :placeholder="t('agent.descriptionOptional')" />
-              <Button :disabled="agentLoading" @click="doRegisterAgent">{{ t('agent.registerAgent') }}</Button>
-            </div>
-            <p class="form-hint">{{ t('agent.skillBoundTokenHint') }}</p>
-            <p v-if="agentError" class="error-msg">{{ agentError }}</p>
-          </div>
-          <div class="agent-list">
-            <div v-for="a in myAgents" :key="a.id" class="card agent-card">
-              <div class="card-content">
-                <strong>{{ a.name }}</strong>
-                <span class="agent-type">{{ a.agent_type }}</span>
-                <span v-if="a.has_skill_token" class="badge badge--skill-token" :title="t('agent.skillBound')">{{ t('agent.skillBound') }}</span>
-                <p class="desc-small">{{ a.description || t('common.noDescription') }}</p>
-              </div>
-            </div>
-          </div>
-          <div v-if="myAgents.length === 0 && !agentsLoading" class="empty agent-empty-hint">
-            <p class="empty-text">{{ t('agent.emptyAgents') }}</p>
-            <div class="agent-empty-actions">
-              <Button :as="RouterLink" to="/skill" size="sm">{{ t('taskManage.registerViaOpenClawSkill') }}</Button>
-              <Button :as="RouterLink" to="/agents" size="sm" variant="secondary">{{ t('taskManage.registerInAgentManage') }}</Button>
-            </div>
-          </div>
-        </div>
       </section>
       </template>
     </main>
@@ -626,7 +551,7 @@
           <h4 class="task-comments-title">{{ t('task.completionSubmissionTitle') }}</h4>
           <p v-if="homeTaskDetail.output_data.result_summary" class="completion-summary">{{ homeTaskDetail.output_data.result_summary }}</p>
           <p v-if="homeTaskDetail.output_data.evidence && homeTaskDetail.output_data.evidence.link" class="completion-link">
-            <a :href="String(homeTaskDetail.output_data.evidence.link)" target="_blank" rel="noopener noreferrer">{{ t('task.completionLink') }}：{{ homeTaskDetail.output_data.evidence.link }}</a>
+            <a :href="String(homeTaskDetail.output_data.evidence.link)" target="_blank" rel="noopener noreferrer" class="app-link">{{ t('task.completionLink') }}：{{ homeTaskDetail.output_data.evidence.link }}</a>
           </p>
         </div>
         <div class="task-detail-modal-comments">
@@ -947,9 +872,6 @@ function scrollToPublishSection() {
   document.getElementById('section-publish')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
-function scrollToAgentSection() {
-  document.getElementById('section-my-agents')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-}
 
 /** 使用 Google 登录：未配置时在弹窗内展示错误，已配置时整页跳转后端 OAuth */
 function onGoogleLoginClick(e: Event) {
@@ -1023,16 +945,12 @@ function loadStats() {
 function loadHomeDashboard() {
   homeStatsLoading.value = true
   homeActivityLoading.value = true
-  homeLeaderboardLoading.value = true
   api.fetchStats().then((res) => {
     homeStats.value = res.data ?? {}
   }).catch(() => { homeStats.value = {} }).finally(() => { homeStatsLoading.value = false })
-  api.fetchActivity(50).then((res) => {
+  api.fetchActivity(10).then((res) => {
     homeActivity.value = res.data.events ?? []
   }).catch(() => { homeActivity.value = [] }).finally(() => { homeActivityLoading.value = false })
-  api.fetchLeaderboard({ limit: 10 }).then((res) => {
-    homeLeaderboard.value = res.data.items ?? []
-  }).catch(() => { homeLeaderboard.value = [] }).finally(() => { homeLeaderboardLoading.value = false })
 }
 
 function formatTimeAgoHome(iso: string) {
@@ -1560,33 +1478,35 @@ onUnmounted(() => {
 .task-detail-completion-submission { margin-top: 1rem; padding: 0.75rem; background: var(--surface, rgba(255,255,255,0.05)); border-radius: 8px; }
 .task-detail-completion-submission .completion-summary { margin: 0 0 0.5rem; white-space: pre-wrap; font-size: 0.9rem; color: var(--text-secondary); }
 .task-detail-completion-submission .completion-link { margin: 0; font-size: 0.9rem; }
-.task-detail-completion-submission .completion-link a { color: var(--primary-color); }
 .draft-bar-global { background: rgba(var(--primary-rgb, 34, 197, 94), 0.08); border-color: rgba(var(--primary-rgb), 0.25); }
 .badge--skill-token { background: rgba(34, 197, 94, 0.15); color: var(--primary-color); font-size: 0.7rem; }
 .form-inline--agent { flex-wrap: wrap; }
 .form-inline--agent .input { min-width: 10rem; }
 
 /* 首页 Dashboard：KPI + 实况 + 排行榜 */
-.home-dashboard { margin-bottom: 2rem; }
-.home-kpi { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.75rem; margin-bottom: 1.25rem; }
+.home-dashboard { margin-bottom: var(--space-6, 1.5rem); }
+.home-kpi { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-3, 0.75rem); margin-bottom: var(--space-5, 1.25rem); }
 @media (min-width: 640px) { .home-kpi { grid-template-columns: repeat(4, 1fr); } }
-.home-kpi-card { padding: 1rem 1.25rem; border-radius: var(--radius-md, 8px); border: 1px solid var(--border-muted, rgba(255,255,255,0.08)); background: rgba(226, 232, 240, 0.04); }
-.home-kpi-value { display: block; font-size: 1.35rem; font-weight: 700; color: var(--primary-color); }
-.home-kpi-label { display: block; margin-top: 0.25rem; font-size: 0.78rem; color: var(--text-secondary); }
+.home-kpi-card {
+  padding: 1rem 1.25rem;
+  border-radius: var(--radius-md, 12px);
+  background: rgba(255, 255, 255, 0.03);
+  transition: background var(--duration-m) var(--ease-apple);
+}
+.home-kpi-value { display: block; font-size: 1.5rem; font-weight: 800; letter-spacing: -0.03em; color: var(--primary-color); }
+.home-kpi-label { display: block; margin-top: 0.25rem; font-size: 0.78rem; font-weight: 500; color: var(--text-secondary); }
 .home-kpi-skeleton { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.75rem; }
 @media (min-width: 640px) { .home-kpi-skeleton { grid-template-columns: repeat(4, 1fr); } }
 .home-kpi-skeleton .tw-skeleton { height: 4rem; border-radius: 8px; }
 .home-dash-row { display: grid; grid-template-columns: 1fr; gap: 1rem; }
 @media (min-width: 900px) { .home-dash-row { grid-template-columns: 1fr 320px; } }
-.home-dash-feed .card-content, .home-dash-leaderboard .card-content { padding: 1rem 1.25rem; }
+.home-dash-feed .card-content, .home-dash-leaderboard .card-content, .home-sidebar-feed .card-content { padding: 1rem 1.25rem; }
 .home-dash-feed-title { font-size: 1rem; font-weight: 600; margin: 0 0 0.75rem; }
 .home-activity-list { list-style: none; padding: 0; margin: 0; }
 .home-activity-item { display: grid; grid-template-columns: 4rem 1fr auto; gap: 0.5rem; padding: 0.5rem 0; border-bottom: 1px solid rgba(226,232,240,0.06); font-size: 0.85rem; align-items: start; }
 .home-activity-item:last-child { border-bottom: none; }
 .home-activity-time { color: var(--text-secondary); font-size: 0.75rem; }
 .home-activity-text { color: var(--text-primary); line-height: 1.35; }
-.home-activity-link { color: var(--primary-color); text-decoration: none; font-size: 0.8rem; }
-.home-activity-link:hover { text-decoration: underline; }
 .home-activity-skeleton .tw-skeleton { background: var(--surface); }
 .home-leaderboard-list { display: flex; flex-direction: column; gap: 0.25rem; }
 .home-leaderboard-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.4rem 0; font-size: 0.9rem; }
@@ -1697,6 +1617,11 @@ onUnmounted(() => {
   margin-top: 16px;
   padding-top: 16px;
   border-top: 1px solid var(--border-muted);
+}
+/* 首页任务卡片 hover：微缩放 + 抬升 + 阴影 */
+.home-task-list--grid .home-task-card.task-card--hover:hover {
+  transform: scale(1.01) translateY(-2px);
+  box-shadow: var(--shadow-card-hover);
 }
 
 .draft-bar {

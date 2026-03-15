@@ -4,6 +4,8 @@
 
 @layer base {
   :root {
+    --ease-apple: cubic-bezier(0.4, 0, 0.2, 1);
+    --duration-m: 300ms;
     --background: 240 5% 4%;
     --foreground: 0 0% 98%;
     --card: 240 4% 16%;

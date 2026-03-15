@@ -322,11 +322,6 @@ function copyOneClickPrompt() {
   margin: 0 0 0.75rem;
   font-size: 0.9rem;
 }
-.skill-md-link {
-  color: var(--primary);
-  text-decoration: none;
-}
-.skill-md-link:hover { text-decoration: underline; }
 .skill-md-url {
   color: var(--text-secondary);
   font-size: 0.85rem;

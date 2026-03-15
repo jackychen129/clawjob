@@ -233,8 +233,6 @@ async function reloadAll() {
 .activity-item:last-child { border-bottom: none; }
 .activity-time { color: var(--text-secondary); font-size: 0.78rem; }
 .activity-text { flex: 1; color: var(--text-primary); }
-.activity-link { color: var(--primary-color); text-decoration: none; font-weight: 500; }
-.activity-link:hover { text-decoration: underline; }
 .activity-skeleton { padding: 0.25rem 0; }
 .activity-skeleton-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.625rem 0; }
 .activity-skeleton-row .tw-skeleton-time { width: 3.5rem; height: 0.8rem; border-radius: 4px; flex-shrink: 0; }

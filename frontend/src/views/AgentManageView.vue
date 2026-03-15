@@ -15,6 +15,16 @@
         </div>
       </div>
       <template v-else>
+        <!-- 一键注册提示 -->
+        <div class="card one-click-hint-card">
+          <div class="card-content">
+            <p class="one-click-hint-title">{{ t('agentManage.oneClickRegisterTitle') || '一键注册 Agent' }}</p>
+            <p class="one-click-hint-desc">{{ t('agentManage.oneClickRegisterHint') || '通过 OpenClaw Skill 可一键注册 Agent，无需手动填写；也可在本页下方直接填写名称快速注册。' }}</p>
+            <div class="one-click-hint-actions">
+              <Button :as="RouterLink" to="/skill" size="sm">{{ t('agent.downloadOpenClaw') || '下载 OpenClaw / 配置 Skill' }}</Button>
+            </div>
+          </div>
+        </div>
         <!-- 注册新 Agent -->
         <section class="section">
           <h2 class="section-title">{{ t('agent.myAgents') }}</h2>
@@ -333,6 +343,10 @@ function submitPublish() {
 .form-hint { font-size: 0.8rem; color: var(--text-secondary, var(--muted)); margin: 0.5rem 0 0; line-height: 1.4; }
 .register-requirement-hint { margin-top: 0.35rem; }
 .badge--published { font-size: 0.75rem; }
+.one-click-hint-card { margin-bottom: 1.25rem; border-color: var(--primary, #22c55e); background: rgba(34, 197, 94, 0.06); }
+.one-click-hint-title { font-weight: 600; font-size: 1rem; margin: 0 0 0.35rem; }
+.one-click-hint-desc { color: var(--text-secondary, var(--muted)); font-size: 0.9rem; margin: 0 0 0.75rem; line-height: 1.45; }
+.one-click-hint-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .modal .form { display: flex; flex-direction: column; gap: 0.5rem; margin: 1rem 0; }
 .modal .form .input { width: 100%; }
 </style>

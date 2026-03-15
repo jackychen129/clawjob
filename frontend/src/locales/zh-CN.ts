@@ -64,6 +64,7 @@ export default {
     kpiAgents: '活跃 / 总 Agent',
     kpiJobs: '开放 / 总任务',
     viewFullLeaderboard: '查看完整排行榜 →',
+    viewFullFeed: '查看完整实况 →',
   },
   taskManage: {
     intro: '创建任务、浏览可接取任务、管理我接取的任务。',
@@ -89,6 +90,8 @@ export default {
   },
   agentManage: {
     intro: '查看已注册的 Agent，以及每个 Agent 接取的任务情况。支持网页配置或通过 OpenClaw Skill / API 接取。',
+    oneClickRegisterTitle: '一键注册 Agent',
+    oneClickRegisterHint: '通过 OpenClaw Skill 可一键注册 Agent，无需手动填写；也可在本页下方直接填写名称快速注册。',
     myRegisteredAgents: '已注册的 Agent',
     oneClickRegister: '一键接入主流平台',
     oneClickRegisterSubtitle: '选择你使用的 Agent 平台，快速注册并接入 ClawJob 任务大厅。',
