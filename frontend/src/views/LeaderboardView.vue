@@ -3,8 +3,8 @@
     <h1 class="page-title">{{ t('leaderboard.title') }}</h1>
     <p class="page-desc">{{ t('leaderboard.desc') }}</p>
 
-    <div class="card">
-      <div class="card-content">
+    <Card>
+      <CardContent class="leaderboard-wrap pt-6">
         <div v-if="loading" class="leaderboard-skeleton">
           <div class="leaderboard-skeleton-row" v-for="i in 8" :key="i">
             <span class="tw-skeleton w-8 h-4"></span>
@@ -16,7 +16,8 @@
           </div>
         </div>
         <template v-else>
-          <table v-if="items.length" class="leaderboard-table">
+          <div v-if="items.length" class="leaderboard-table-wrap">
+          <table class="leaderboard-table">
             <thead>
               <tr>
                 <th>{{ t('leaderboard.rank') }}</th>
@@ -43,16 +44,18 @@
               </tr>
             </tbody>
           </table>
+          </div>
           <p v-else class="hint">{{ t('leaderboard.placeholder') }}</p>
         </template>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { Card, CardContent } from '../components/ui/card'
 import * as api from '../api'
 
 const { t } = useI18n()
@@ -75,7 +78,9 @@ onMounted(async () => {
 <style scoped>
 .leaderboard-view { padding: 0; max-width: 960px; margin: 0 auto; }
 .page-desc { color: var(--text-secondary); margin-bottom: 1.5rem; font-size: 0.9375rem; line-height: 1.5; }
-.leaderboard-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.leaderboard-wrap { min-width: 0; overflow-x: auto; }
+.leaderboard-table-wrap { overflow-x: auto; margin: 0 -0.5rem; padding: 0 0.5rem; }
+.leaderboard-table { width: 100%; min-width: 560px; border-collapse: collapse; font-size: 0.9rem; }
 .leaderboard-table th { text-align: left; padding: 0.75rem 1rem; border-bottom: 1px solid var(--border-color); color: var(--text-secondary); font-weight: 600; }
 .leaderboard-table td { padding: 0.75rem 1rem; border-bottom: 1px solid var(--border-color); }
 .leaderboard-row:hover { background: rgba(var(--primary-rgb), 0.04); }

@@ -5,11 +5,54 @@
       <section class="task-center">
         <div class="task-center-inner">
           <div class="task-list-wrap">
+          <div class="task-tabs">
+            <button type="button" class="task-tab" :class="{ active: tab === 'available' }" @click="tab = 'available'">{{ t('taskManage.available') || '可接取任务' }}</button>
+            <button type="button" class="task-tab" :class="{ active: tab === 'mine' }" @click="tab = 'mine'">{{ t('taskManage.myAccepted') || '我接取的任务' }}</button>
+          </div>
           <div v-if="!auth.isLoggedIn" class="empty-state">
             <p class="empty">{{ t('taskManage.loginToSeeMine') || '请先登录查看我接取的任务' }}</p>
-            <button type="button" class="btn btn-primary" @click="showAuthModal = true">{{ t('common.loginOrRegister') }}</button>
+            <Button type="button" @click="showAuthModal = true">{{ t('common.loginOrRegister') }}</Button>
           </div>
           <template v-else>
+            <!-- 可接取任务 -->
+            <template v-if="tab === 'available'">
+              <div class="task-filter-row">
+                <select v-model="categoryFilter" class="input select-input task-filter-select">
+                  <option value="">{{ t('taskManage.categoryAll') || '全部' }}</option>
+                  <option v-for="opt in categoryFilterOptions" :key="opt.value" :value="opt.value">{{ t(opt.labelKey) }}</option>
+                </select>
+              </div>
+              <div v-if="tasksLoading" class="task-list task-list--skeleton">
+                <div v-for="i in 5" :key="i" class="card task-card tw-skeleton-card task-manage-skeleton-card">
+                  <div class="tw-skeleton task-manage-skeleton-line task-manage-skeleton-line--short"></div>
+                  <div class="tw-skeleton task-manage-skeleton-line task-manage-skeleton-line--full"></div>
+                  <div class="tw-skeleton task-manage-skeleton-line task-manage-skeleton-line--mid"></div>
+                </div>
+              </div>
+              <div v-else class="task-list">
+                <div v-for="task in filteredTasks" :key="task.id" class="card task-card task-card--structured task-manage-card">
+                  <div class="task-card__top">
+                    <span v-if="task.category" class="task-card__category">{{ taskCategoryLabel(task.category) }}</span>
+                    <span class="badge" :class="task.status">{{ t('status.' + task.status) || task.status }}</span>
+                    <span v-if="task.reward_points" class="task-card__reward mono">{{ t('task.reward', { n: task.reward_points }) }}</span>
+                  </div>
+                  <h3 class="task-card__title">{{ task.title }}</h3>
+                  <p class="task-card__desc">{{ (task.description || t('common.noDescription')).slice(0, 120) }}{{ (task.description || '').length > 120 ? '…' : '' }}</p>
+                  <p class="task-card__meta">{{ t('task.publisher') }}：{{ task.publisher_name }}<span v-if="task.creator_agent_name"> · {{ t('task.publishedByAgent') }}：{{ task.creator_agent_name }}</span><span v-if="task.subscription_count != null"> · {{ task.subscription_count }}{{ t('task.subscribers') }}</span></p>
+                  <div class="card-content task-card__actions-wrap">
+                    <Button size="sm" variant="ghost" type="button" class="detail-btn" @click="openTaskDetail(task)">{{ t('task.viewDetail') }}</Button>
+                    <Button v-if="task.status === 'open' && auth.isLoggedIn && myAgents.length" size="sm" :disabled="subscribeLoading === task.id" @click="openSubscribeModal(task)">{{ t('task.subscribe') }}</Button>
+                    <Button v-else-if="task.status === 'open' && !auth.isLoggedIn" size="sm" variant="secondary" type="button" @click="showAuthModal = true">{{ t('task.loginToAccept') }}</Button>
+                  </div>
+                </div>
+              </div>
+              <div v-if="!filteredTasks.length && !tasksLoading" class="empty-state">
+                <p class="empty">{{ categoryFilter ? (t('taskManage.noTasksInCategory') || '该分类下暂无任务') : (t('task.emptyTasks') || '暂无任务') }}</p>
+                <Button :as="RouterLink" to="/" variant="secondary">{{ t('common.home') }}</Button>
+              </div>
+            </template>
+            <!-- 我接取的任务 -->
+            <template v-else>
             <div v-if="myTasksLoading" class="task-list task-list--skeleton">
               <div v-for="i in 4" :key="i" class="card task-card tw-skeleton-card task-manage-skeleton-card">
                 <div class="tw-skeleton task-manage-skeleton-line task-manage-skeleton-line--short"></div>
@@ -32,21 +75,21 @@
                   <span v-if="task.duration_estimate" class="task-tag task-tag--duration">{{ task.duration_estimate }}</span>
                   <span v-for="s in getTaskSkills(task)" :key="s" class="task-tag task-tag--skill">{{ s }}</span>
                 </div>
-                <p class="task-card__meta">{{ t('task.publisher') }}：{{ task.publisher_name }} · {{ t('task.acceptor') || '接取者' }}：{{ task.agent_name }}</p>
+                <p class="task-card__meta">{{ t('task.publisher') }}：{{ task.publisher_name }}<span v-if="task.creator_agent_name"> · {{ t('task.publishedByAgent') }}：{{ task.creator_agent_name }}</span> · {{ t('task.acceptor') || '接取者' }}：{{ task.agent_name }}</p>
                 <div class="card-content task-card__actions-wrap">
-                  <button type="button" class="btn btn-text btn-sm detail-btn" @click="openTaskDetail(task)">{{ t('task.viewDetail') }}</button>
+                  <Button size="sm" variant="ghost" type="button" class="detail-btn" @click="openTaskDetail(task)">{{ t('task.viewDetail') }}</Button>
                   <div class="task-actions">
-                    <button
+                    <Button
                       v-if="isExecutor(task) && task.status === 'open'"
-                      class="btn btn-primary btn-sm"
+                      size="sm"
                       :disabled="submitCompletionLoading === task.id"
                       @click="openSubmitModal(task)"
                     >
                       {{ t('task.submitCompletion') }}
-                    </button>
+                    </Button>
                     <template v-if="task.owner_id === auth.userId && task.status === 'pending_verification'">
-                      <button class="btn btn-primary btn-sm" :disabled="confirmLoading === task.id" @click="doConfirm(task.id)">{{ t('task.confirmPass') }}</button>
-                      <button class="btn btn-secondary btn-sm" :disabled="rejectLoading === task.id" @click="doReject(task.id)">{{ t('task.reject') }}</button>
+                      <Button size="sm" :disabled="confirmLoading === task.id" @click="doConfirm(task.id)">{{ t('task.confirmPass') }}</Button>
+                      <Button size="sm" variant="secondary" :disabled="rejectLoading === task.id" @click="openRejectModal(task.id)">{{ t('task.reject') }}</Button>
                     </template>
                   </div>
                 </div>
@@ -54,14 +97,15 @@
             </div>
             <div v-if="!myTasks.length && !myTasksLoading" class="empty-state">
               <p class="empty">{{ t('taskManage.noMyTasks') || '暂无接取的任务' }}</p>
-              <router-link to="/" class="btn btn-primary">{{ t('taskManage.goAccept') || '去接取' }}</router-link>
+              <Button :as="RouterLink" to="/">{{ t('taskManage.goAccept') || '去接取' }}</Button>
             </div>
+            </template>
           </template>
           </div>
           <div v-if="selectedTaskDetail" class="task-detail-panel">
             <div class="task-detail-panel__head">
               <h3 class="task-detail-panel__title">{{ selectedTaskDetail.title }}</h3>
-              <button type="button" class="btn btn-text btn-sm" aria-label="关闭" @click="closeTaskDetail">×</button>
+              <Button size="sm" variant="ghost" type="button" aria-label="关闭" @click="closeTaskDetail">×</Button>
             </div>
             <div v-if="detailLoading" class="loading"><div class="spinner"></div></div>
             <template v-else>
@@ -77,15 +121,23 @@
               </dl>
               <p class="detail-footer">
                 {{ t('task.publisher') }}：{{ selectedTaskDetail.publisher_name }}
+                <span v-if="selectedTaskDetail.creator_agent_name"> · {{ t('task.publishedByAgent') }}：{{ selectedTaskDetail.creator_agent_name }}</span>
                 · <span class="badge" :class="selectedTaskDetail.status">{{ t('status.' + selectedTaskDetail.status) || selectedTaskDetail.status }}</span>
                 <span v-if="selectedTaskDetail.reward_points" class="detail-reward">{{ t('task.reward', { n: selectedTaskDetail.reward_points }) }}</span>
               </p>
               <div class="task-detail-panel__actions">
-                <button v-if="auth.isLoggedIn && isExecutor(selectedTaskDetail) && selectedTaskDetail.status === 'open'" class="btn btn-primary btn-sm" :disabled="submitCompletionLoading === selectedTaskDetail.id" @click="openSubmitModal(selectedTaskDetail)">{{ t('task.submitCompletion') }}</button>
+                <Button v-if="auth.isLoggedIn && isExecutor(selectedTaskDetail) && selectedTaskDetail.status === 'open'" size="sm" :disabled="submitCompletionLoading === selectedTaskDetail.id" @click="openSubmitModal(selectedTaskDetail)">{{ t('task.submitCompletion') }}</Button>
                 <template v-if="auth.isLoggedIn && selectedTaskDetail.owner_id === auth.userId && selectedTaskDetail.status === 'pending_verification'">
-                  <button class="btn btn-primary btn-sm" :disabled="confirmLoading === selectedTaskDetail.id" @click="doConfirm(selectedTaskDetail.id)">{{ t('task.confirmPass') }}</button>
-                  <button class="btn btn-secondary btn-sm" :disabled="rejectLoading === selectedTaskDetail.id" @click="doReject(selectedTaskDetail.id)">{{ t('task.reject') }}</button>
+                  <Button size="sm" :disabled="confirmLoading === selectedTaskDetail.id" @click="doConfirm(selectedTaskDetail.id)">{{ t('task.confirmPass') }}</Button>
+                  <Button size="sm" variant="secondary" :disabled="rejectLoading === selectedTaskDetail.id" @click="openRejectModal(selectedTaskDetail.id)">{{ t('task.reject') }}</Button>
                 </template>
+              </div>
+              <div v-if="selectedTaskDetail.status === 'pending_verification' && selectedTaskDetail.output_data && (selectedTaskDetail.output_data.result_summary || (selectedTaskDetail.output_data.evidence && selectedTaskDetail.output_data.evidence.link))" class="task-detail-completion-submission">
+                <h4 class="task-comments-title">{{ t('task.completionSubmissionTitle') }}</h4>
+                <p v-if="selectedTaskDetail.output_data.result_summary" class="completion-summary">{{ selectedTaskDetail.output_data.result_summary }}</p>
+                <p v-if="selectedTaskDetail.output_data.evidence && selectedTaskDetail.output_data.evidence.link" class="completion-link">
+                  <a :href="String(selectedTaskDetail.output_data.evidence.link)" target="_blank" rel="noopener noreferrer">{{ t('task.completionLink') }}：{{ selectedTaskDetail.output_data.evidence.link }}</a>
+                </p>
               </div>
               <div class="task-comments">
                 <h4 class="task-comments-title">{{ t('task.comments') }}</h4>
@@ -106,8 +158,8 @@
                 </ul>
                 <p v-if="!taskComments.length && !taskCommentsLoading" class="task-comments-empty">{{ t('task.noComments') }}</p>
                 <div v-if="auth.isLoggedIn" class="task-comment-form">
-                  <textarea v-model="newCommentContent" class="input textarea-input" rows="2" :placeholder="t('task.writeComment')" />
-                  <button type="button" class="btn btn-primary btn-sm" :disabled="postCommentLoading || !newCommentContent.trim()" @click="postComment">{{ t('task.postComment') }}</button>
+                  <Textarea v-model="newCommentContent" rows="2" :placeholder="t('task.writeComment')" />
+                  <Button size="sm" type="button" :disabled="postCommentLoading || !newCommentContent.trim()" @click="postComment">{{ t('task.postComment') }}</Button>
                 </div>
                 <p v-else class="hint">{{ t('task.loginToComment') }}</p>
               </div>
@@ -116,20 +168,24 @@
         </div>
       </section>
 
-      <!-- 右：发布任务按钮 + 我的 Agent（BotLearn 风格卡片） -->
+      <!-- 右：发布任务按钮 + 我的 Agent 卡片 -->
       <aside class="task-right">
         <div class="task-right-card task-right-create">
-          <button type="button" class="btn btn-primary block" @click="openCreateModal">
+          <Button type="button" class="w-full" @click="openCreateModal">
             {{ t('task.publish') || '发布任务' }}
-          </button>
+          </Button>
         </div>
         <div class="task-right-card task-right-agents">
           <h3 class="task-right-title">{{ t('taskManage.myAgents') || '我的 Agent' }}</h3>
           <div v-if="!auth.isLoggedIn" class="task-right-hint">
             <router-link to="/login">{{ t('common.loginOrRegister') }}</router-link>
           </div>
-          <div v-else-if="!myAgents.length" class="task-right-hint">
-            <router-link to="/agents">{{ t('taskManage.goRegisterAgent') || '去注册 Agent' }}</router-link>
+          <div v-else-if="!myAgents.length" class="task-right-hint task-right-hint--no-agent">
+            <p class="task-right-hint-text">{{ t('taskManage.noAgentHint') }}</p>
+            <div class="task-right-hint-actions">
+              <Button :as="RouterLink" to="/skill" size="sm">{{ t('taskManage.registerViaOpenClawSkill') }}</Button>
+              <Button :as="RouterLink" to="/agents" size="sm" variant="secondary">{{ t('taskManage.registerInAgentManage') }}</Button>
+            </div>
           </div>
           <ul v-else class="task-right-agent-list">
             <li v-for="(a, idx) in myAgents" :key="a.id" class="task-right-agent-item">
@@ -139,7 +195,7 @@
               </router-link>
             </li>
           </ul>
-          <router-link v-if="auth.isLoggedIn && myAgents.length" to="/agents" class="btn btn-text btn-sm task-right-more">{{ t('taskManage.manageAgents') || '管理 Agent' }}</router-link>
+          <Button v-if="auth.isLoggedIn && myAgents.length" :as="RouterLink" to="/agents" size="sm" variant="ghost" class="task-right-more">{{ t('taskManage.manageAgents') || '管理 Agent' }}</Button>
         </div>
       </aside>
     </div>
@@ -150,8 +206,8 @@
         <h3 class="modal-title">{{ t('task.publish') }}</h3>
         <div v-if="!auth.isLoggedIn" class="card-content publish-gate">
           <p class="hint">{{ t('task.publishHint') }}</p>
-          <button type="button" class="btn btn-primary" @click="showCreateModal = false; showAuthModal = true">{{ t('task.loginToPublish') }}</button>
-          <button type="button" class="btn btn-secondary close-btn" @click="closeCreateModal">{{ t('common.cancel') }}</button>
+          <Button type="button" @click="showCreateModal = false; showAuthModal = true">{{ t('task.loginToPublish') }}</Button>
+          <Button type="button" variant="secondary" class="close-btn w-full" @click="closeCreateModal">{{ t('common.cancel') }}</Button>
         </div>
         <div v-else class="publish-form-in-modal">
           <div class="create-task-step create-task-step--identity">
@@ -166,12 +222,12 @@
           </div>
           <div class="form-group">
             <label class="form-label" for="publish-title">{{ t('agentGuide.fieldTitle') }} <span class="required">*</span></label>
-            <input id="publish-title" v-model="publishForm.title" class="input" type="text" :placeholder="t('task.title')" minlength="2" />
+            <Input id="publish-title" v-model="publishForm.title" type="text" :placeholder="t('task.title')" minlength="2" />
             <p class="form-hint">{{ t('task.titleHint') }}</p>
           </div>
           <div class="form-group">
             <label class="form-label" for="publish-desc">{{ t('task.description') }}</label>
-            <textarea id="publish-desc" v-model="publishForm.description" class="input textarea-input" rows="4" :placeholder="t('task.requirementsPlaceholder')" />
+            <Textarea id="publish-desc" v-model="publishForm.description" rows="4" :placeholder="t('task.requirementsPlaceholder')" />
             <p class="form-hint">{{ t('task.descriptionHint') }}</p>
           </div>
           <div class="form-group">
@@ -188,18 +244,18 @@
           </div>
           <div class="form-group">
             <label class="form-label" for="publish-requirements">{{ t('task.requirements') }}</label>
-            <textarea id="publish-requirements" v-model="publishForm.requirements" class="input textarea-input" rows="3" :placeholder="t('task.requirementsPlaceholder')" />
+            <Textarea id="publish-requirements" v-model="publishForm.requirements" rows="3" :placeholder="t('task.requirementsPlaceholder')" />
             <p class="form-hint">{{ t('task.requirementsHint') }}</p>
           </div>
           <div class="form-group form-row-2">
             <label class="form-label" for="publish-location">{{ t('task.location') || '地点' }}</label>
-            <input id="publish-location" v-model="publishForm.location" class="input" type="text" :placeholder="t('task.locationPlaceholder') || '如：远程、北京'" />
+            <Input id="publish-location" v-model="publishForm.location" type="text" :placeholder="t('task.locationPlaceholder') || '如：远程、北京'" />
             <label class="form-label" for="publish-duration">{{ t('task.durationEstimate') || '预计时长' }}</label>
-            <input id="publish-duration" v-model="publishForm.duration_estimate" class="input" type="text" :placeholder="t('task.durationPlaceholder') || '如：~1h、~3h'" />
+            <Input id="publish-duration" v-model="publishForm.duration_estimate" type="text" :placeholder="t('task.durationPlaceholder') || '如：~1h、~3h'" />
           </div>
           <div class="form-group">
             <label class="form-label">{{ t('task.skills') || '技能标签' }}</label>
-            <input v-model="publishForm.skills_text" class="input" type="text" :placeholder="t('task.skillsPlaceholder') || '逗号分隔'" />
+            <Input v-model="publishForm.skills_text" type="text" :placeholder="t('task.skillsPlaceholder') || '逗号分隔'" />
           </div>
           <div class="create-task-step">
             <span class="create-task-step-label">{{ t('taskManage.stepReward') || '3. 奖励与回调' }}</span>
@@ -211,18 +267,18 @@
           <template v-if="publishForm.reward_points > 0">
             <div class="form-group">
               <label class="form-label" for="publish-webhook">{{ t('agentGuide.fieldWebhook') }}</label>
-              <input id="publish-webhook" v-model="publishForm.completion_webhook_url" class="input full-width" type="url" :placeholder="t('task.webhookPlaceholder')" />
+              <Input id="publish-webhook" v-model="publishForm.completion_webhook_url" class="w-full" type="url" :placeholder="t('task.webhookPlaceholder')" />
             </div>
           </template>
           <div class="form-group">
             <label class="form-label" for="publish-discord">{{ t('task.discordWebhookLabel') }}</label>
-            <input id="publish-discord" v-model="publishForm.discord_webhook_url" class="input full-width" type="url" :placeholder="t('task.discordWebhookPlaceholder')" />
+            <Input id="publish-discord" v-model="publishForm.discord_webhook_url" class="w-full" type="url" :placeholder="t('task.discordWebhookPlaceholder')" />
           </div>
           <p class="hint">{{ t('task.balanceHint', { n: accountCredits }) }}</p>
           <p v-if="publishError" class="error-msg" role="alert">{{ publishError }}</p>
           <div class="modal-actions">
-            <button type="button" class="btn btn-primary" :disabled="publishLoading" @click="doPublishAndClose">{{ publishLoading ? t('task.publishBtnLoading') : t('task.publishBtn') }}</button>
-            <button type="button" class="btn btn-secondary" @click="closeCreateModal">{{ t('common.cancel') }}</button>
+            <Button type="button" :disabled="publishLoading" @click="doPublishAndClose">{{ publishLoading ? t('task.publishBtnLoading') : t('task.publishBtn') }}</Button>
+            <Button type="button" variant="secondary" @click="closeCreateModal">{{ t('common.cancel') }}</Button>
           </div>
         </div>
       </div>
@@ -233,17 +289,18 @@
       <div class="modal">
         <h3>{{ t('task.selectAgentTitle', { title: subscribeTaskItem.title }) }}</h3>
         <div class="agent-select-list">
-          <button
+          <Button
             v-for="a in myAgents"
             :key="a.id"
-            class="btn btn-secondary block"
+            variant="secondary"
+            class="w-full"
             :disabled="subscribeLoading === subscribeTaskItem.id"
             @click="doSubscribe(subscribeTaskItem.id, a.id)"
           >
             {{ a.name }}（{{ a.agent_type }}）
-          </button>
+          </Button>
         </div>
-        <button class="btn btn-secondary close-btn" @click="subscribeTaskItem = null">{{ t('common.cancel') }}</button>
+        <Button variant="secondary" class="close-btn w-full" @click="subscribeTaskItem = null">{{ t('common.cancel') }}</Button>
       </div>
     </div>
     <!-- 提交完成弹窗 -->
@@ -252,10 +309,24 @@
         <h3>{{ t('task.submitCompletionTitle', { title: submitCompletionTask.title }) }}</h3>
         <p class="hint">{{ t('task.submitCompletionHint') }}</p>
         <div class="form">
-          <textarea v-model="submitCompletionForm.result_summary" class="input textarea" :placeholder="t('task.resultSummaryPlaceholder')" rows="3" />
-          <button class="btn btn-primary" :disabled="submitCompletionLoading" @click="doSubmitCompletion">{{ t('task.submitCompletion') }}</button>
+          <Textarea v-model="submitCompletionForm.result_summary" rows="3" :placeholder="t('task.resultSummaryPlaceholder')" />
+          <Input v-model="submitCompletionForm.completion_link" type="url" :placeholder="t('task.completionLinkPlaceholder')" />
+          <Button :disabled="submitCompletionLoading" @click="doSubmitCompletion">{{ t('task.submitCompletion') }}</Button>
         </div>
-        <button class="btn btn-secondary close-btn" @click="submitCompletionTask = null">{{ t('common.cancel') }}</button>
+        <Button variant="secondary" class="close-btn w-full" @click="submitCompletionTask = null">{{ t('common.cancel') }}</Button>
+      </div>
+    </div>
+
+    <!-- 拒绝验收弹窗（发布方填写理由）-->
+    <div v-if="rejectTaskId" class="modal-mask" @click.self="rejectTaskId = null; rejectReason = ''">
+      <div class="modal">
+        <h3>{{ t('task.rejectTitle') || '拒绝验收' }}</h3>
+        <p class="hint">{{ t('task.rejectHint') || '请填写拒绝理由，以便接取者改进（将作为强化学习反馈）。' }}</p>
+        <div class="form">
+          <Textarea v-model="rejectReason" rows="3" :placeholder="t('task.rejectReasonPlaceholder') || '例如：代码规范需改进、逻辑需更严密…'" />
+          <Button :disabled="rejectLoading === rejectTaskId || !rejectReason.trim()" @click="doRejectWithReason">{{ t('task.reject') }}</Button>
+        </div>
+        <Button variant="secondary" class="close-btn w-full" @click="rejectTaskId = null; rejectReason = ''">{{ t('common.cancel') }}</Button>
       </div>
     </div>
 
@@ -264,22 +335,22 @@
       <div class="modal">
         <h3>{{ authTab === 'login' ? t('auth.login') : t('auth.register') }}</h3>
         <div class="tabs">
-          <button type="button" class="btn btn-secondary" :class="{ active: authTab === 'login' }" @click="authTab = 'login'">{{ t('auth.login') }}</button>
-          <button type="button" class="btn btn-secondary" :class="{ active: authTab === 'register' }" @click="authTab = 'register'">{{ t('auth.register') }}</button>
+          <Button type="button" variant="secondary" :class="{ 'ring-2 ring-primary ring-offset-2 ring-offset-background': authTab === 'login' }" @click="authTab = 'login'">{{ t('auth.login') }}</Button>
+          <Button type="button" variant="secondary" :class="{ 'ring-2 ring-primary ring-offset-2 ring-offset-background': authTab === 'register' }" @click="authTab = 'register'">{{ t('auth.register') }}</Button>
         </div>
         <div v-if="authTab === 'login'" class="form">
-          <input v-model="loginForm.username" class="input" :placeholder="t('auth.username')" />
-          <input v-model="loginForm.password" type="password" class="input" :placeholder="t('auth.password')" />
-          <button type="button" class="btn btn-primary" :disabled="authLoading" @click="doLogin">{{ t('auth.login') }}</button>
+          <Input v-model="loginForm.username" :placeholder="t('auth.username')" />
+          <Input v-model="loginForm.password" type="password" :placeholder="t('auth.password')" />
+          <Button type="button" :disabled="authLoading" @click="doLogin">{{ t('auth.login') }}</Button>
         </div>
         <div v-else class="form">
-          <input v-model="registerForm.username" class="input" :placeholder="t('auth.username')" />
-          <input v-model="registerForm.email" class="input" :placeholder="t('auth.email')" />
-          <input v-model="registerForm.password" type="password" class="input" :placeholder="t('auth.password')" />
-          <button type="button" class="btn btn-primary" :disabled="authLoading" @click="doRegister">{{ t('auth.register') }}</button>
+          <Input v-model="registerForm.username" :placeholder="t('auth.username')" />
+          <Input v-model="registerForm.email" :placeholder="t('auth.email')" />
+          <Input v-model="registerForm.password" type="password" :placeholder="t('auth.password')" />
+          <Button type="button" :disabled="authLoading" @click="doRegister">{{ t('auth.register') }}</Button>
         </div>
         <p v-if="authError" class="error-msg">{{ authError }}</p>
-        <button type="button" class="btn btn-secondary close-btn" @click="showAuthModal = false">{{ t('common.close') }}</button>
+        <Button type="button" variant="secondary" class="close-btn w-full" @click="showAuthModal = false">{{ t('common.close') }}</Button>
       </div>
     </div>
     <Transition name="toast">
@@ -290,8 +361,11 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { Button } from '../components/ui/button'
+import { Input } from '../components/ui/input'
+import { Textarea } from '../components/ui/textarea'
 import { safeT } from '../i18n'
 import { useAuthStore } from '../stores/auth'
 import * as api from '../api'
@@ -300,7 +374,7 @@ import type { TaskListItem, TaskCommentItem } from '../api'
 const route = useRoute()
 const publishAsSelfValue = null as number | null
 
-const emit = defineEmits<{ (e: 'show-auth'): void; (e: 'scroll-agent'): void; (e: 'success', msg: string): void }>()
+const emit = defineEmits<{ (e: 'show-auth'): void; (e: 'scroll-agent'): void; (e: 'success', msg: string): void; (e: 'register-hint'): void }>()
 const _i18n = useI18n()
 const t = typeof _i18n.t === 'function' ? _i18n.t : safeT
 const auth = useAuthStore()
@@ -332,10 +406,12 @@ const accountCredits = ref(0)
 const subscribeTaskItem = ref<{ id: number; title: string } | null>(null)
 const subscribeLoading = ref<number | null>(null)
 const submitCompletionTask = ref<{ id: number; title: string } | null>(null)
-const submitCompletionForm = reactive({ result_summary: '' })
+const submitCompletionForm = reactive({ result_summary: '', completion_link: '' })
 const submitCompletionLoading = ref(false)
 const confirmLoading = ref<number | null>(null)
 const rejectLoading = ref<number | null>(null)
+const rejectTaskId = ref<number | null>(null)
+const rejectReason = ref('')
 const categoryFilter = ref('')
 const categoryFilterOptions = [
   { value: 'development', labelKey: 'task.categoryDevelopment' },
@@ -462,7 +538,7 @@ function formatCommentTime(iso: string | null) {
   if (diff < 1) return t('task.justNow')
   if (diff < 60) return t('task.minutesAgo', { n: Math.floor(diff) })
   if (diff < 1440) return t('task.hoursAgo', { n: Math.floor(diff / 60) })
-  return iso.slice(0, 16).replace('T', ' ')
+  return d.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
 }
 
 function postComment() {
@@ -535,6 +611,7 @@ function doPublish() {
     publishForm.skills_text = ''
     showSuccessLocal(t('task.publishSuccess'))
     showCreateModal.value = false
+    if (auth.isGuestUser || !myAgents.value.length) emit('register-hint')
     loadAccountMe()
     loadTasks()
   }).catch((e) => {
@@ -553,18 +630,21 @@ function doSubscribe(taskId: number, agentId: number) {
     showSuccessLocal(t('task.subscribeSuccess'))
     loadTasks()
     loadMyTasks()
+    tab.value = 'mine'
   }).finally(() => { subscribeLoading.value = null })
 }
 
 function openSubmitModal(task: { id: number; title: string }) {
   submitCompletionTask.value = task
   submitCompletionForm.result_summary = ''
+  submitCompletionForm.completion_link = ''
 }
 
 function doSubmitCompletion() {
   if (!submitCompletionTask.value) return
   submitCompletionLoading.value = true
-  api.submitCompletion(submitCompletionTask.value.id, { result_summary: submitCompletionForm.result_summary.trim() }).then(() => {
+  const evidence = submitCompletionForm.completion_link.trim() ? { link: submitCompletionForm.completion_link.trim() } : {}
+  api.submitCompletion(submitCompletionTask.value.id, { result_summary: submitCompletionForm.result_summary.trim(), evidence }).then(() => {
     submitCompletionTask.value = null
     showSuccessLocal(t('task.submitCompletionSuccess'))
     loadTasks()
@@ -582,13 +662,22 @@ function doConfirm(taskId: number) {
   }).finally(() => { confirmLoading.value = null })
 }
 
-function doReject(taskId: number) {
+function openRejectModal(taskId: number) {
+  rejectTaskId.value = taskId
+  rejectReason.value = ''
+}
+function doRejectWithReason() {
+  if (!rejectTaskId.value || !rejectReason.value.trim()) return
+  const taskId = rejectTaskId.value
   rejectLoading.value = taskId
-  api.rejectTask(taskId).then(() => {
+  api.rejectTask(taskId, { rejection_reason: rejectReason.value.trim() }).then(() => {
     showSuccessLocal(t('task.rejectSuccess'))
+    rejectTaskId.value = null
+    rejectReason.value = ''
     loadTasks()
     loadMyTasks()
-  }).finally(() => { rejectLoading.value = null })
+    if (selectedTaskDetail.value?.id === taskId) openTaskDetail(selectedTaskDetail.value)
+  }).catch(() => {}).finally(() => { rejectLoading.value = null })
 }
 
 function applyPublishAsFromQuery() {
@@ -624,6 +713,10 @@ watch(() => auth.isLoggedIn, (loggedIn) => {
     if (tab.value === 'mine') loadMyTasks()
   }
 })
+
+watch(tab, (newTab) => {
+  if (newTab === 'mine' && auth.isLoggedIn) loadMyTasks()
+})
 </script>
 
 <style scoped>
@@ -647,8 +740,17 @@ watch(() => auth.isLoggedIn, (loggedIn) => {
   background: var(--card-bg); padding: 1rem 1.25rem;
 }
 .task-detail-panel__head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.75rem; }
-.task-detail-panel__title { font-size: 1.05rem; margin: 0; font-weight: 600; line-height: 1.3; }
+.task-detail-panel__title { font-size: 1.05rem; margin: 0; font-weight: 600; line-height: 1.3; word-break: break-word; min-width: 0; }
 .task-detail-panel__actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; }
+.task-card__title { word-break: break-word; min-width: 0; }
+.task-card__desc { word-break: break-word; min-width: 0; }
+.task-card__meta { word-break: break-word; min-width: 0; }
+.task-card__actions-wrap { flex-wrap: wrap; gap: 0.5rem; }
+.task-card__top { flex-wrap: wrap; gap: 0.35rem; }
+.task-detail-completion-submission { margin-top: 1rem; padding: 0.75rem; background: var(--surface, rgba(255,255,255,0.05)); border-radius: 8px; }
+.task-detail-completion-submission .completion-summary { margin: 0 0 0.5rem; white-space: pre-wrap; font-size: 0.9rem; color: var(--text-secondary); }
+.task-detail-completion-submission .completion-link { margin: 0; font-size: 0.9rem; }
+.task-detail-completion-submission .completion-link a { color: var(--primary-color); }
 .task-comments { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--border-color); }
 .task-comments-title { font-size: 0.95rem; font-weight: 600; margin: 0 0 0.75rem; color: var(--text-primary); }
 .task-comments-list { list-style: none; padding: 0; margin: 0 0 1rem; }
@@ -666,6 +768,12 @@ watch(() => auth.isLoggedIn, (loggedIn) => {
 .task-comments-empty { font-size: 0.9rem; color: var(--muted); margin: 0 0 0.75rem; }
 .task-comment-form { margin-top: 1rem; }
 .task-comment-form .textarea-input { min-height: 3.5rem; margin-bottom: 0.5rem; width: 100%; border-radius: var(--radius-sm); padding: 0.6rem 0.75rem; }
+.task-tabs { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+.task-tab { padding: 0.5rem 1rem; border-radius: 8px; border: 1px solid var(--border, #333); background: transparent; color: var(--text-secondary); font-size: 0.9rem; cursor: pointer; transition: all 0.2s; }
+.task-tab:hover { border-color: var(--primary-color); color: var(--primary-color); }
+.task-tab.active { background: rgba(var(--primary-rgb, 34, 197, 94), 0.12); border-color: var(--primary-color); color: var(--primary-color); }
+.task-filter-row { margin-bottom: 0.75rem; }
+.task-filter-select { max-width: 180px; }
 .task-layout--mine-only { grid-template-columns: 1fr 200px; }
 .task-layout--mine-only .task-center { min-width: 0; }
 .task-right { display: flex; flex-direction: column; gap: 1rem; }
@@ -679,6 +787,9 @@ watch(() => auth.isLoggedIn, (loggedIn) => {
 .task-right-create .btn { width: 100%; }
 .task-right-title { font-size: 0.95rem; font-weight: 600; margin: 0 0 0.75rem; color: var(--text-primary); letter-spacing: 0.01em; }
 .task-right-hint { font-size: 0.85rem; color: var(--text-secondary); line-height: 1.4; }
+.task-right-hint--no-agent .task-right-hint-text { margin: 0 0 0.75rem; }
+.task-right-hint--no-agent .task-right-hint-actions { display: flex; flex-direction: column; gap: 0.5rem; }
+.task-right-hint--no-agent .task-right-hint-actions a { width: 100%; text-align: center; text-decoration: none; }
 .task-right-agent-list { list-style: none; padding: 0; margin: 0 0 0.75rem; display: flex; flex-direction: column; gap: 0.2rem; }
 .task-right-agent-item { margin: 0; }
 .task-right-agent-link {

@@ -53,6 +53,17 @@ ssh root@你的公网IP 'cd /opt/clawjob/deploy && docker compose -f docker-comp
 
 如需 80/443 和域名，见 [DEPLOY_ALIYUN.md](DEPLOY_ALIYUN.md) 的 Nginx 反代与 SSL。
 
+### 更新线上环境
+
+代码更新后，在同一台本机执行同一部署脚本即可覆盖并重启服务：
+
+```bash
+cd /path/to/clawjob
+SERVER_IP=你的公网IP ./deploy/deploy-to-server.sh
+```
+
+脚本会 rsync 最新代码到服务器并执行 `docker compose up -d --build`，前端与后端会重新构建并启动。无需再次初始化数据库（除非有新增 migration，需在服务器上执行相应 SQL 或 migration 脚本）。
+
 ---
 
 ## 方式二：用阿里云脚本自动创建 ECS 并部署

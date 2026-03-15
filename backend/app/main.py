@@ -4,6 +4,7 @@ ClawJob - Backend API
 """
 from fastapi import FastAPI, Depends, HTTPException, Request, Header
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordBearer
 from starlette.middleware.base import BaseHTTPMiddleware
 from sqlalchemy.orm import Session
@@ -29,6 +30,7 @@ from app.database.relational_db import (
     SessionLocal,
     Task,
     Agent,
+    PublishedAgentTemplate,
     TaskSubscription,
     TaskComment,
     User,
@@ -39,6 +41,7 @@ from app.database.relational_db import (
     UserCommissionRecord,
 )
 from app.database.cache_db import CacheDB
+from app.utils.datetime_iso import iso_utc
 
 # Agent system imports
 from app.agents.agent_manager import AgentManager
@@ -232,7 +235,7 @@ def get_activity(limit: int = 50, db: Session = Depends(get_db)):
         at = (t.completed_at or t.updated_at or t.created_at) or datetime.utcnow()
         events.append({
             "type": "task_completed",
-            "at": at.isoformat() if hasattr(at, "isoformat") else str(at),
+            "at": iso_utc(at) or str(at),
             "task_id": t.id,
             "task_title": (t.title or "")[:80],
             "reward_points": getattr(t, "reward_points", 0) or 0,
@@ -250,7 +253,7 @@ def get_activity(limit: int = 50, db: Session = Depends(get_db)):
     for t, owner in created:
         events.append({
             "type": "task_created",
-            "at": (t.created_at or datetime.utcnow()).isoformat(),
+            "at": iso_utc(t.created_at or datetime.utcnow()),
             "task_id": t.id,
             "task_title": (t.title or "")[:80],
             "publisher_name": owner.username if owner else None,
@@ -260,7 +263,7 @@ def get_activity(limit: int = 50, db: Session = Depends(get_db)):
     for a, owner in agents:
         events.append({
             "type": "agent_registered",
-            "at": (a.created_at or datetime.utcnow()).isoformat(),
+            "at": iso_utc(a.created_at or datetime.utcnow()),
             "agent_id": a.id,
             "agent_name": a.name,
             "owner_name": owner.username if owner else None,
@@ -311,7 +314,7 @@ def get_leaderboard(skip: int = 0, limit: int = 50, db: Session = Depends(get_db
             "rank": skip + i + 1,
             "agent_id": a.id,
             "agent_name": a.name,
-            "owner_name": owner.username if owner else "",
+            "owner_name": _owner_display_name(owner.username if owner else None),
             "earned": int(earned),
             "tasks_completed": int(completed_count),
             "tasks_total": int(total_count),
@@ -319,6 +322,97 @@ def get_leaderboard(skip: int = 0, limit: int = 50, db: Session = Depends(get_db
             "certified": False,  # 预留：Playbook 验证后为 True
         })
     return {"items": out, "total": len(out)}
+
+
+def _count_completed_tasks_for_agent(db: Session, agent_id: int) -> int:
+    return db.query(Task).filter(Task.agent_id == agent_id, Task.status == "completed").count()
+
+
+@app.get("/agent-templates")
+def get_agent_templates(db: Session = Depends(get_db), skip: int = 0, limit: int = 50):
+    """Agent 模板 / Skill 市场：可下载的 Agent 模板与 Skill 列表（含平台 verify、完成任务数）。"""
+    q = db.query(PublishedAgentTemplate).join(Agent).order_by(PublishedAgentTemplate.created_at.desc())
+    total = q.count()
+    rows = q.offset(skip).limit(limit).all()
+    items = []
+    for t in rows:
+        tasks_completed = _count_completed_tasks_for_agent(db, t.agent_id)
+        items.append({
+            "id": t.id,
+            "name": t.name,
+            "description": t.description or "",
+            "verified": t.verified,
+            "tasks_completed": tasks_completed,
+            "agent_type": t.agent.agent_type if t.agent else None,
+            "download_agent_url": t.download_agent_url,
+            "download_skill_url": t.download_skill_url,
+        })
+    return {"items": items, "total": total, "skip": skip, "limit": limit}
+
+
+@app.get("/agent-templates/stats")
+def get_agent_templates_stats(db: Session = Depends(get_db)):
+    """Agent 模板市场统计：模板数、已验证数、累计完成任务数。"""
+    template_count = db.query(PublishedAgentTemplate).count()
+    verified_count = db.query(PublishedAgentTemplate).filter(PublishedAgentTemplate.verified.is_(True)).count()
+    tasks_completed = db.query(Task).filter(Task.status == "completed").count()
+    return {
+        "template_count": template_count,
+        "verified_count": verified_count,
+        "tasks_completed": tasks_completed,
+    }
+
+
+class PublishAgentTemplateBody(BaseModel):
+    """发布 Agent 为市场模板"""
+    agent_id: int
+    name: str
+    description: str = ""
+    download_agent_url: Optional[str] = None
+    download_skill_url: Optional[str] = None
+
+
+@app.post("/agent-templates")
+def publish_agent_template(
+    body: PublishAgentTemplateBody,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """将本人名下、至少完成过 1 个任务的 Agent 发布为市场模板（一 Agent 仅可发布一条）。"""
+    uid = int(current_user["user_id"])
+    agent = db.query(Agent).filter(Agent.id == body.agent_id).first()
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    if agent.owner_id != uid:
+        raise HTTPException(status_code=403, detail="Only the owner can publish this agent")
+    completed = _count_completed_tasks_for_agent(db, agent.id)
+    if completed < 1:
+        raise HTTPException(status_code=400, detail="Agent must have at least one completed task to publish")
+    existing = db.query(PublishedAgentTemplate).filter(PublishedAgentTemplate.agent_id == agent.id).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="This agent is already published as a template")
+    name = (body.name or agent.name or "").strip() or agent.name
+    template = PublishedAgentTemplate(
+        agent_id=agent.id,
+        name=name,
+        description=(body.description or "").strip() or None,
+        download_agent_url=(body.download_agent_url or "").strip() or None,
+        download_skill_url=(body.download_skill_url or "").strip() or None,
+    )
+    db.add(template)
+    db.commit()
+    db.refresh(template)
+    tasks_completed = _count_completed_tasks_for_agent(db, agent.id)
+    return {
+        "id": template.id,
+        "name": template.name,
+        "description": template.description or "",
+        "verified": template.verified,
+        "tasks_completed": tasks_completed,
+        "agent_type": agent.agent_type,
+        "download_agent_url": template.download_agent_url,
+        "download_skill_url": template.download_skill_url,
+    }
 
 
 # OpenClaw/Clawl 对齐：capability 项 { id?, name, category? }
@@ -332,6 +426,8 @@ class CapabilityItem(BaseModel):
 class RegisterAgentBody(BaseModel):
     name: str
     description: str = ""
+    token: Optional[str] = None  # 可选：Agent 调用 API 时使用的 token，关联到本账户下该 Agent
+    skill_bound_token: Optional[str] = None  # 可选：Skill 绑定 Token，供 OpenClaw Skill 等以该 Agent 身份调用
     agent_type: str = "general"  # 主类型，与 OpenClaw type 首项对应
     types: Optional[List[str]] = None  # OpenClaw 多类型，如 ["assistant"], ["developer","security"]
     capabilities: Optional[List[CapabilityItem]] = None  # OpenClaw capabilities: [{ id, name, category }]
@@ -375,7 +471,7 @@ def register_agent(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    """注册我的 Agent（需登录），用于接取/订阅他人任务。参数对齐 OpenClaw/Clawl agent。"""
+    """注册我的 Agent（需登录），用于接取/订阅他人任务。调用方须提供：当前使用的 token（请求头 Authorization: Bearer <token>）与 Agent 名称（Body 的 name）。参数对齐 OpenClaw/Clawl agent。"""
     _ensure_agents_category_column()
     uid = int(current_user["user_id"])
     primary_type = (body.agent_type or "general").strip() or "general"
@@ -383,6 +479,10 @@ def register_agent(
         primary_type = (body.types[0] or primary_type).strip() or primary_type
     capabilities = _norm_capabilities(body.capabilities) if body.capabilities else []
     config = {}
+    if body.token and body.token.strip():
+        config["agent_token"] = body.token.strip()
+    if getattr(body, "skill_bound_token", None) and str(body.skill_bound_token).strip():
+        config["skill_bound_token"] = str(body.skill_bound_token).strip()
     if body.avatar_url and body.avatar_url.strip():
         config["avatar_url"] = body.avatar_url.strip()
     if body.profile_url and body.profile_url.strip():
@@ -470,7 +570,8 @@ def list_my_agents(
     _ensure_agents_category_column()
     uid = int(current_user["user_id"])
 
-    def _build_agent_item(a: Agent, points: int = 0) -> dict:
+    def _build_agent_item(a: Agent, points: int = 0, published_template_id: Optional[int] = None, completed_task_count: int = 0) -> dict:
+        cfg = a.config or {}
         return {
             "id": a.id,
             "name": a.name,
@@ -479,8 +580,11 @@ def list_my_agents(
             "category": getattr(a, "category", None) or "api",
             "capabilities": a.capabilities or [],
             "status": "active" if a.is_active else "inactive",
-            "config": a.config or {},
+            "config": cfg,
+            "has_skill_token": bool(cfg.get("skill_bound_token")),
             "points": int(points),
+            "published_template_id": published_template_id,
+            "completed_task_count": completed_task_count,
         }
 
     try:
@@ -490,14 +594,23 @@ def list_my_agents(
             .group_by(Task.agent_id)
             .subquery()
         )
+        completed_subq = (
+            db.query(Task.agent_id, func.count(Task.id).label("completed_count"))
+            .filter(Task.status == "completed", Task.agent_id.isnot(None))
+            .group_by(Task.agent_id)
+            .subquery()
+        )
+        agent_ids = [r[0] for r in db.query(Agent.id).filter(Agent.owner_id == uid).all()]
+        published_by_agent = {t.agent_id: t.id for t in db.query(PublishedAgentTemplate).filter(PublishedAgentTemplate.agent_id.in_(agent_ids)).all()} if agent_ids else {}
         rows = (
-            db.query(Agent, func.coalesce(points_subq.c.points, 0).label("points"))
+            db.query(Agent, func.coalesce(points_subq.c.points, 0).label("points"), func.coalesce(completed_subq.c.completed_count, 0).label("completed_count"))
             .outerjoin(points_subq, Agent.id == points_subq.c.agent_id)
+            .outerjoin(completed_subq, Agent.id == completed_subq.c.agent_id)
             .filter(Agent.owner_id == uid)
             .order_by(points_subq.c.points.desc().nullslast(), Agent.id.desc())
             .all()
         )
-        return {"agents": [_build_agent_item(a, points) for a, points in rows]}
+        return {"agents": [_build_agent_item(a, points, published_by_agent.get(a.id), int(completed_count)) for a, points, completed_count in rows]}
     except Exception as e:
         db.rollback()
         err_msg = str(e).lower()
@@ -505,7 +618,10 @@ def list_my_agents(
             _ensure_agents_category_column()
         try:
             agents = db.query(Agent).filter(Agent.owner_id == uid).order_by(Agent.id.desc()).all()
-            return {"agents": [_build_agent_item(a, 0) for a in agents]}
+            aid_list = [a.id for a in agents]
+            pub = {t.agent_id: t.id for t in db.query(PublishedAgentTemplate).filter(PublishedAgentTemplate.agent_id.in_(aid_list)).all()} if aid_list else {}
+            completed_map = {r[0]: r[1] for r in db.query(Task.agent_id, func.count(Task.id)).filter(Task.status == "completed", Task.agent_id.in_(aid_list)).group_by(Task.agent_id).all()} if aid_list else {}
+            return {"agents": [_build_agent_item(a, 0, pub.get(a.id), completed_map.get(a.id, 0)) for a in agents]}
         except Exception:
             db.rollback()
             return {"agents": []}
@@ -577,17 +693,24 @@ def list_candidates(
     sort: str = "points",  # points | recent（最近注册优先）
     db: Session = Depends(get_db),
 ):
-    """候选者列表（公开）：已注册的 Agent 及所属用户。sort=points 按积分降序，sort=recent 按注册时间倒序。"""
+    """候选者列表（公开）：已注册的 Agent、所属用户（游客显示「待注册」）、具备的 Skill（capabilities）、发布任务数。"""
     points_subq = (
         db.query(Task.agent_id, func.coalesce(func.sum(Task.reward_points), 0).label("points"))
         .filter(Task.status == "completed", Task.agent_id.isnot(None))
         .group_by(Task.agent_id)
         .subquery()
     )
+    published_subq = (
+        db.query(Task.creator_agent_id, func.count(Task.id).label("published_count"))
+        .filter(Task.creator_agent_id.isnot(None))
+        .group_by(Task.creator_agent_id)
+        .subquery()
+    )
     q = (
-        db.query(Agent, User, func.coalesce(points_subq.c.points, 0).label("points"))
+        db.query(Agent, User, func.coalesce(points_subq.c.points, 0).label("points"), func.coalesce(published_subq.c.published_count, 0).label("published_count"))
         .join(User, Agent.owner_id == User.id)
         .outerjoin(points_subq, Agent.id == points_subq.c.agent_id)
+        .outerjoin(published_subq, Agent.id == published_subq.c.creator_agent_id)
         .filter(Agent.is_active == True, User.is_active == True)
     )
     if (sort or "").strip().lower() == "recent":
@@ -596,7 +719,8 @@ def list_candidates(
         q = q.order_by(points_subq.c.points.desc().nullslast(), Agent.id.desc())
     rows = q.offset(skip).limit(limit).all()
     out = []
-    for a, owner, points in rows:
+    for row in rows:
+        a, owner, points, published_count = row
         cfg = a.config or {}
         out.append({
             "id": a.id,
@@ -609,8 +733,9 @@ def list_candidates(
             "avatar_url": cfg.get("avatar_url"),
             "profile_url": cfg.get("profile_url"),
             "owner_id": a.owner_id,
-            "owner_name": owner.username if owner else "",
+            "owner_name": _owner_display_name(owner.username if owner else None),
             "points": int(points),
+            "published_count": int(published_count),
         })
     return {"candidates": out, "total": len(out)}
 
@@ -728,6 +853,49 @@ def _get_or_create_clearing_account(db: Session) -> PlatformClearingAccount:
     return acc
 
 
+CLAWJOB_SYSTEM_USERNAME = "clawjob_system"
+CLAWJOB_SYSTEM_AGENT_NAME = "clawjob-agent"
+
+
+def _owner_display_name(username: Optional[str]) -> str:
+    """拥有者展示名：游客账号显示「待注册」，否则显示用户名。"""
+    if not username or (isinstance(username, str) and username.startswith("guest_")):
+        return "待注册"
+    return username
+
+
+def _get_or_create_clawjob_system_agent(db: Session):
+    """获取或创建平台引导用系统 Agent（clawjob-agent），用于用户通过 Skill 发布的第一个任务自动接取并完成。返回 (User, Agent)。"""
+    user = db.query(User).filter(User.username == CLAWJOB_SYSTEM_USERNAME).first()
+    if not user:
+        user = User(
+            username=CLAWJOB_SYSTEM_USERNAME,
+            email="system@clawjob.local",
+            hashed_password="",
+        )
+        db.add(user)
+        db.flush()
+    _ensure_agents_category_column()
+    agent = db.query(Agent).filter(
+        Agent.owner_id == user.id,
+        Agent.name == CLAWJOB_SYSTEM_AGENT_NAME,
+    ).first()
+    if not agent:
+        agent = Agent(
+            name=CLAWJOB_SYSTEM_AGENT_NAME,
+            description="平台引导 Agent：用户通过 Skill 发布的第一个任务将由此 Agent 自动接取并完成。",
+            agent_type="general",
+            category="api",
+            owner_id=user.id,
+            capabilities=[{"name": "clawjob", "category": "skill"}],
+            config={},
+            is_active=True,
+        )
+        db.add(agent)
+        db.flush()
+    return user, agent
+
+
 def _pay_task_reward(task: Task, db: Session) -> bool:
     """发放任务奖励：接取者得奖励；若已配置佣金则按比例计入发布者佣金余额。已完成则返回 False。"""
     if task.status == "completed":
@@ -830,9 +998,9 @@ def list_my_accepted_tasks(
             "agent_id": t.agent_id,
             "agent_name": agent.name if agent else "",
             "reward_points": getattr(t, "reward_points", 0) or 0,
-            "submitted_at": t.submitted_at.isoformat() if getattr(t, "submitted_at", None) else None,
-            "verification_deadline_at": t.verification_deadline_at.isoformat() if getattr(t, "verification_deadline_at", None) else None,
-            "created_at": t.created_at.isoformat() if t.created_at else None,
+            "submitted_at": iso_utc(getattr(t, "submitted_at", None)),
+            "verification_deadline_at": iso_utc(getattr(t, "verification_deadline_at", None)),
+            "created_at": iso_utc(t.created_at),
             **_task_extra(t),
         })
     return {"tasks": out, "total": len(out)}
@@ -871,9 +1039,9 @@ def list_agent_tasks(
             "owner_id": t.owner_id,
             "publisher_name": owner.username if owner else "",
             "reward_points": getattr(t, "reward_points", 0) or 0,
-            "submitted_at": t.submitted_at.isoformat() if getattr(t, "submitted_at", None) else None,
-            "verification_deadline_at": t.verification_deadline_at.isoformat() if getattr(t, "verification_deadline_at", None) else None,
-            "created_at": t.created_at.isoformat() if t.created_at else None,
+            "submitted_at": iso_utc(getattr(t, "submitted_at", None)),
+            "verification_deadline_at": iso_utc(getattr(t, "verification_deadline_at", None)),
+            "created_at": iso_utc(t.created_at),
             **_task_extra(t),
         })
     return {"tasks": out, "total": len(out), "agent_name": agent.name}
@@ -885,18 +1053,21 @@ def list_tasks_public(
     limit: int = 50,
     status_filter: str = None,
     category_filter: str = None,
+    creator_agent_id: Optional[int] = None,
     q: str = None,
     sort: str = "created_at_desc",
     reward_min: Optional[int] = None,
     reward_max: Optional[int] = None,
     db: Session = Depends(get_db),
 ):
-    """任务大厅：公开列出所有任务（无需登录）；支持分类、关键词、奖励区间、排序。"""
+    """任务大厅：公开列出所有任务（无需登录）；支持分类、关键词、奖励区间、排序；creator_agent_id 可筛选某 Agent 发布的任务。"""
     query = db.query(Task)
     if status_filter:
         query = query.filter(Task.status == status_filter)
     if category_filter and category_filter.strip():
         query = query.filter(Task.category == category_filter.strip())
+    if creator_agent_id is not None:
+        query = query.filter(Task.creator_agent_id == creator_agent_id)
     if q and q.strip():
         from sqlalchemy import or_
         term = f"%{q.strip()}%"
@@ -921,6 +1092,8 @@ def list_tasks_public(
             query = query.filter(Task.reward_points >= reward_min)
         if reward_max is not None:
             query = query.filter(Task.reward_points <= reward_max)
+        if creator_agent_id is not None:
+            query = query.filter(Task.creator_agent_id == creator_agent_id)
         query = query.group_by(Task.id).order_by(func.count(TaskComment.id).desc().nullslast(), Task.created_at.desc())
         total = query.count()
         rows = query.offset(skip).limit(limit).all()
@@ -961,12 +1134,15 @@ def list_tasks_public(
             "subscription_count": sub_count,
             "comment_count": comment_count,
             "invited_agent_ids": invited if invited else [],
-            "submitted_at": t.submitted_at.isoformat() if getattr(t, "submitted_at", None) else None,
-            "verification_deadline_at": t.verification_deadline_at.isoformat() if getattr(t, "verification_deadline_at", None) else None,
-            "created_at": t.created_at.isoformat() if t.created_at else None,
+            "submitted_at": iso_utc(getattr(t, "submitted_at", None)),
+            "verification_deadline_at": iso_utc(getattr(t, "verification_deadline_at", None)),
+            "created_at": iso_utc(t.created_at),
             **_task_extra(t),
         })
-    return {"tasks": out, "total": total}
+    return JSONResponse(
+        content={"tasks": out, "total": total},
+        headers={"Cache-Control": "no-store, max-age=0"},
+    )
 
 
 @app.get("/tasks/created-by-me")
@@ -1005,9 +1181,9 @@ def list_my_created_tasks(
             "subscription_count": sub_count,
             "comment_count": comment_count,
             "invited_agent_ids": invited if invited else [],
-            "submitted_at": t.submitted_at.isoformat() if getattr(t, "submitted_at", None) else None,
-            "verification_deadline_at": t.verification_deadline_at.isoformat() if getattr(t, "verification_deadline_at", None) else None,
-            "created_at": t.created_at.isoformat() if t.created_at else None,
+            "submitted_at": iso_utc(getattr(t, "submitted_at", None)),
+            "verification_deadline_at": iso_utc(getattr(t, "verification_deadline_at", None)),
+            "created_at": iso_utc(t.created_at),
             **_task_extra(t),
         })
     total = db.query(Task).filter(Task.owner_id == uid).count()
@@ -1085,6 +1261,30 @@ def publish_task(
         db.commit()
     except Exception:
         db.rollback()
+    # 用户通过 Skill/API 发布的第一个任务：由 clawjob-agent 自动接取并完成
+    first_task_count = db.query(Task).filter(Task.owner_id == uid).count()
+    if first_task_count == 1:
+        try:
+            _, clawjob_agent = _get_or_create_clawjob_system_agent(db)
+            sub = TaskSubscription(task_id=task.id, agent_id=clawjob_agent.id)
+            db.add(sub)
+            task.agent_id = clawjob_agent.id
+            task.status = "completed"
+            task.submitted_at = datetime.utcnow()
+            task.completed_at = datetime.utcnow()
+            base = task.output_data if isinstance(task.output_data, dict) else {}
+            task.output_data = {
+                **base,
+                "result_summary": "首个任务由 ClawJob 引导 Agent 自动完成，便于体验流程。",
+                "auto_completed_by": CLAWJOB_SYSTEM_AGENT_NAME,
+            }
+            db.commit()
+            db.refresh(task)
+            if reward_points > 0:
+                _pay_task_reward(task, db)
+                db.commit()
+        except Exception:
+            db.rollback()
     if reward_points > 0:
         user.credits = (getattr(user, "credits", 0) or 0) - reward_points
         tx = CreditTransaction(
@@ -1168,27 +1368,30 @@ def submit_completion(
     if task.status == "pending_verification":
         return {"message": "已提交验收，请等待发布者确认或 6 小时后自动完成", "task_id": task_id}
     webhook_url = getattr(task, "completion_webhook_url", None) or ""
-    if not webhook_url:
-        raise HTTPException(status_code=400, detail="该任务未配置完成回调，无法提交")
-    payload = {
-        "task_id": task_id,
-        "title": task.title,
-        "agent_id": task.agent_id,
-        "agent_name": agent.name,
-        "result_summary": body.result_summary or "",
-        "evidence": body.evidence or {},
-        "submitted_at": datetime.utcnow().isoformat() + "Z",
-    }
-    try:
-        with httpx.Client(timeout=10.0) as client:
-            r = client.post(webhook_url, json=payload)
-            if r.status_code >= 400:
-                raise HTTPException(
-                    status_code=502,
-                    detail=f"完成回调返回异常：{r.status_code}，发布方需验收通过后再在平台确认",
-                )
-    except httpx.RequestError as e:
-        raise HTTPException(status_code=502, detail=f"调用完成回调失败：{str(e)}")
+    reward_points = getattr(task, "reward_points", 0) or 0
+    if reward_points > 0 and not webhook_url:
+        raise HTTPException(status_code=400, detail="该任务设置了奖励点，未配置完成回调，无法提交")
+    payload = None
+    if webhook_url:
+        payload = {
+            "task_id": task_id,
+            "title": task.title,
+            "agent_id": task.agent_id,
+            "agent_name": agent.name,
+            "result_summary": body.result_summary or "",
+            "evidence": body.evidence or {},
+            "submitted_at": datetime.utcnow().isoformat() + "Z",
+        }
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                r = client.post(webhook_url, json=payload)
+                if r.status_code >= 400:
+                    raise HTTPException(
+                        status_code=502,
+                        detail=f"完成回调返回异常：{r.status_code}，发布方需验收通过后再在平台确认",
+                    )
+        except httpx.RequestError as e:
+            raise HTTPException(status_code=502, detail=f"调用完成回调失败：{str(e)}")
     task.status = "pending_verification"
     task.submitted_at = datetime.utcnow()
     task.verification_deadline_at = datetime.utcnow() + timedelta(hours=VERIFICATION_HOURS)
@@ -1199,7 +1402,7 @@ def submit_completion(
     return {
         "message": "已提交验收，发布者需在 6 小时内确认，否则将自动完成并发奖",
         "task_id": task_id,
-        "verification_deadline_at": task.verification_deadline_at.isoformat() if task.verification_deadline_at else None,
+        "verification_deadline_at": iso_utc(task.verification_deadline_at),
     }
 
 
@@ -1333,9 +1536,10 @@ async def get_task_by_id(task_id: int, db: Session = Depends(get_db)):
         "creator_agent_name": creator_agent.name if creator_agent else None,
         "reward_points": getattr(task, "reward_points", 0) or 0,
         "subscription_count": len(subs),
-        "submitted_at": task.submitted_at.isoformat() if getattr(task, "submitted_at", None) else None,
-        "verification_deadline_at": task.verification_deadline_at.isoformat() if getattr(task, "verification_deadline_at", None) else None,
-        "created_at": task.created_at.isoformat() if task.created_at else None,
+        "submitted_at": iso_utc(getattr(task, "submitted_at", None)),
+        "verification_deadline_at": iso_utc(getattr(task, "verification_deadline_at", None)),
+        "created_at": iso_utc(task.created_at),
+        "output_data": task.output_data if isinstance(getattr(task, "output_data", None), dict) else None,
         **_task_extra(task),
     }
 
@@ -1360,7 +1564,7 @@ def list_task_comments(task_id: int, db: Session = Depends(get_db)):
             "agent_name": agent.name if agent else None,
             "kind": getattr(c, "kind", None) or "message",
             "content": c.content,
-            "created_at": c.created_at.isoformat() if c.created_at else None,
+            "created_at": iso_utc(c.created_at),
         })
     return {"comments": out}
 
@@ -1415,7 +1619,7 @@ def post_task_comment(
         "agent_name": agent.name if agent else None,
         "kind": getattr(comment, "kind", None) or "message",
         "content": comment.content,
-        "created_at": comment.created_at.isoformat() if comment.created_at else None,
+        "created_at": iso_utc(comment.created_at),
     }
 
 
@@ -1462,10 +1666,10 @@ def a2a_get_task(
         "agent_id": task.agent_id,
         "executor_agent_name": executor.name if executor else None,
         "reward_points": getattr(task, "reward_points", 0) or 0,
-        "submitted_at": task.submitted_at.isoformat() if getattr(task, "submitted_at", None) else None,
-        "verification_deadline_at": task.verification_deadline_at.isoformat() if getattr(task, "verification_deadline_at", None) else None,
-        "created_at": task.created_at.isoformat() if task.created_at else None,
-        "completed_at": task.completed_at.isoformat() if getattr(task, "completed_at", None) else None,
+        "submitted_at": iso_utc(getattr(task, "submitted_at", None)),
+        "verification_deadline_at": iso_utc(getattr(task, "verification_deadline_at", None)),
+        "created_at": iso_utc(task.created_at),
+        "completed_at": iso_utc(getattr(task, "completed_at", None)),
     }
 
 
@@ -1506,7 +1710,7 @@ def a2a_post_message(
         "agent_name": agent.name if agent else None,
         "kind": getattr(comment, "kind", None) or "message",
         "content": comment.content,
-        "created_at": comment.created_at.isoformat() if comment.created_at else None,
+        "created_at": iso_utc(comment.created_at),
     }
 
 
@@ -1537,7 +1741,7 @@ def a2a_list_messages(
             "agent_name": agent.name if agent else None,
             "kind": getattr(c, "kind", None) or "message",
             "content": c.content,
-            "created_at": c.created_at.isoformat() if c.created_at else None,
+            "created_at": iso_utc(c.created_at),
         })
     return {"messages": out}
 
@@ -1620,7 +1824,7 @@ def list_clearing_commission_records(
     )
     return {
         "records": [
-            {"id": r.id, "amount": r.amount, "task_id": r.task_id, "remark": r.remark or "", "created_at": r.created_at.isoformat() if r.created_at else None}
+            {"id": r.id, "amount": r.amount, "task_id": r.task_id, "remark": r.remark or "", "created_at": iso_utc(r.created_at)}
             for r in rows
         ],
         "total": len(rows),

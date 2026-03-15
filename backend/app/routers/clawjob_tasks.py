@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from app.database.relational_db import get_db, Task, Agent, TaskSubscription, User
+from app.utils.datetime_iso import iso_utc
 
 router = APIRouter(tags=["clawjob-tasks"])
 
@@ -61,7 +62,7 @@ def list_tasks_public(
             "publisher_name": owner.username if owner else "",
             "agent_id": t.agent_id,
             "subscription_count": sub_count,
-            "created_at": t.created_at.isoformat() if t.created_at else None,
+            "created_at": iso_utc(t.created_at),
         })
     return {"tasks": out, "total": len(out)}
 

@@ -6,18 +6,20 @@
         <p class="page-desc">{{ t('dashboard.desc') }}</p>
       </div>
       <div class="dash-head-actions">
-        <button type="button" class="btn btn-secondary btn-sm" @click="reloadAll">{{ t('common.retry') || '刷新' }}</button>
+        <Button size="sm" variant="secondary" type="button" @click="reloadAll">{{ t('common.retry') || '刷新' }}</Button>
       </div>
     </div>
 
     <div class="dash-bento">
       <!-- Metrics / KPI -->
-      <section class="card bento bento--kpi">
-        <div class="card-content">
+      <Card class="bento bento--kpi">
+        <CardHeader class="pb-2">
           <div class="bento-head">
-            <h2 class="section-title">{{ t('dashboard.metrics') }}</h2>
-            <span class="bento-sub mono">{{ new Date().toISOString().slice(0, 19).replace('T', ' ') }}</span>
+            <CardTitle class="section-title text-base">{{ t('dashboard.metrics') }}</CardTitle>
+            <span class="bento-sub mono">{{ new Date().toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) }}</span>
           </div>
+        </CardHeader>
+        <CardContent class="pt-0">
           <div v-if="statsLoading" class="kpi-grid kpi-grid--skeleton">
             <div v-for="i in 5" :key="i" class="kpi">
               <span class="tw-skeleton tw-skeleton-value"></span>
@@ -46,8 +48,8 @@
               <span class="kpi-label">{{ t('dashboard.agentsActive') }}</span>
             </div>
           </div>
-        </div>
-      </section>
+        </CardContent>
+      </Card>
 
       <!-- ROI placeholder -->
       <section class="card bento bento--roi">
@@ -119,6 +121,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { Button } from '../components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import * as api from '../api'
 
 const { t } = useI18n()
@@ -176,8 +180,12 @@ async function reloadAll() {
   statsLoading.value = true
   activityLoading.value = true
   try {
-    const res = await api.fetchStats()
-    stats.value = res.data
+    let res = await api.fetchStats().catch(() => null)
+    if (!res) {
+      await new Promise((r) => setTimeout(r, 1000))
+      res = await api.fetchStats().catch(() => null)
+    }
+    stats.value = res?.data ?? {}
   } catch {
     stats.value = {}
   } finally {
@@ -211,9 +219,9 @@ async function reloadAll() {
 .bento-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.75rem; }
 .bento-sub { color: var(--text-secondary); font-size: 0.8rem; }
 
-.kpi-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.75rem; }
+.kpi-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.75rem; min-width: 0; }
 @media (min-width: 640px) { .kpi-grid { grid-template-columns: repeat(5, 1fr); } }
-.kpi { padding: 0.9rem 0.9rem; border-radius: var(--radius-md); border: 1px solid var(--border-muted); background: rgba(226, 232, 240, 0.04); box-shadow: var(--shadow-layer-1); text-align: left; }
+.kpi { padding: 0.9rem 0.75rem; border-radius: var(--radius-md); border: 1px solid var(--border-muted); background: rgba(226, 232, 240, 0.04); box-shadow: var(--shadow-layer-1); text-align: left; min-width: 0; }
 .kpi-value { display: block; font-size: 1.5rem; font-weight: 700; letter-spacing: -0.03em; color: var(--primary-color); }
 .kpi-label { display: block; margin-top: 0.15rem; font-size: 0.78rem; color: var(--text-secondary); }
 .kpi-grid--skeleton { pointer-events: none; }

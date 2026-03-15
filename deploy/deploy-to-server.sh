@@ -9,7 +9,7 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DEPLOY_DIR="$(dirname "$0")"
 cd "$REPO_ROOT"
 
-# 从 deploy/.deploy_env 读取 SERVER_IP 及可选 DEPLOY_SSH_PASSWORD / DEPLOY_SSH_KEY
+# 从 deploy/.deploy_env 读取 SERVER_IP、可选 SSL_DOMAIN/DEPLOY_DOMAIN（用于域名访问时 API/CORS）
 if [ -f "${DEPLOY_DIR}/.deploy_env" ]; then
   set -a
   # shellcheck source=/dev/null
@@ -18,6 +18,7 @@ if [ -f "${DEPLOY_DIR}/.deploy_env" ]; then
 fi
 export DEPLOY_SSH_KEY
 export DEPLOY_SSH_PASSWORD
+DOMAIN="${SSL_DOMAIN:-$DEPLOY_DOMAIN}"
 
 SSH_USER="${SSH_USER:-root}"
 REMOTE_DIR="${REMOTE_DIR:-/opt/clawjob}"
@@ -96,10 +97,10 @@ rsync -avz --delete \
   "$REPO_ROOT/" "${SSH_USER}@${SERVER_IP}:${REMOTE_DIR}/"
 
 echo ">>> 在服务器上检查 .env 并启动 Docker..."
-# 传递 FORCE_REBUILD_FRONTEND=1 可强制无缓存重建前端（解决任务大厅样式/内容未更新）
-export FORCE_REBUILD_FRONTEND="${FORCE_REBUILD_FRONTEND:-0}"
+# 有域名时强制重建前端，确保 VITE_API_BASE_URL 为 https://api.$DOMAIN，域名访问才能拿到数据
+export FORCE_REBUILD_FRONTEND="${FORCE_REBUILD_FRONTEND:-$([ -n "$DOMAIN" ] && echo 1 || echo 0)}"
 # 将 SERVER_IP 注入到远程脚本（用于修补 .env）
-$SSH_CMD "${SSH_USER}@${SERVER_IP}" "export FORCE_REBUILD_FRONTEND='${FORCE_REBUILD_FRONTEND}'; set -e
+$SSH_CMD "${SSH_USER}@${SERVER_IP}" "export FORCE_REBUILD_FRONTEND='${FORCE_REBUILD_FRONTEND}'; export DOMAIN='${DOMAIN}'; set -e
   cd ${REMOTE_DIR}/deploy
   if [ ! -f .env ]; then
     cp .env.example .env
@@ -111,10 +112,21 @@ $SSH_CMD "${SSH_USER}@${SERVER_IP}" "export FORCE_REBUILD_FRONTEND='${FORCE_REBU
     exit 1
   fi
   SIP='${SERVER_IP}'
-  grep -q '^VITE_API_BASE_URL=' .env && sed -i.bak \"s|^VITE_API_BASE_URL=.*|VITE_API_BASE_URL=http://\$SIP:8000|\" .env || echo \"VITE_API_BASE_URL=http://\$SIP:8000\" >> .env
-  grep -q '^CORS_ORIGINS=' .env && sed -i.bak \"s|^CORS_ORIGINS=.*|CORS_ORIGINS=http://\$SIP:3000|\" .env || echo \"CORS_ORIGINS=http://\$SIP:3000\" >> .env
-  grep -q '^FRONTEND_URL=' .env && sed -i.bak \"s|^FRONTEND_URL=.*|FRONTEND_URL=http://\$SIP:3000|\" .env || echo \"FRONTEND_URL=http://\$SIP:3000\" >> .env
-  grep -q '^VITE_SKILL_VIEW_URL=' .env && sed -i.bak \"s|^VITE_SKILL_VIEW_URL=.*|VITE_SKILL_VIEW_URL=http://\$SIP/skill|\" .env || echo \"VITE_SKILL_VIEW_URL=http://\$SIP/skill\" >> .env
+  if [ -n \"\$DOMAIN\" ]; then
+    API_URL=\"https://api.\$DOMAIN\"
+    CORS_VAL=\"https://app.\$DOMAIN,https://\$DOMAIN,https://www.\$DOMAIN\"
+    FRONT_VAL=\"https://app.\$DOMAIN\"
+    SKILL_VAL=\"https://\$DOMAIN/skill\"
+  else
+    API_URL=\"http://\$SIP:8000\"
+    CORS_VAL=\"http://\$SIP:3000,http://\$SIP\"
+    FRONT_VAL=\"http://\$SIP:3000\"
+    SKILL_VAL=\"http://\$SIP/skill\"
+  fi
+  grep -q '^VITE_API_BASE_URL=' .env && sed -i.bak \"s|^VITE_API_BASE_URL=.*|VITE_API_BASE_URL=\$API_URL|\" .env || echo \"VITE_API_BASE_URL=\$API_URL\" >> .env
+  grep -q '^CORS_ORIGINS=' .env && sed -i.bak \"s|^CORS_ORIGINS=.*|CORS_ORIGINS=\$CORS_VAL|\" .env || echo \"CORS_ORIGINS=\$CORS_VAL\" >> .env
+  grep -q '^FRONTEND_URL=' .env && sed -i.bak \"s|^FRONTEND_URL=.*|FRONTEND_URL=\$FRONT_VAL|\" .env || echo \"FRONTEND_URL=\$FRONT_VAL\" >> .env
+  grep -q '^VITE_SKILL_VIEW_URL=' .env && sed -i.bak \"s|^VITE_SKILL_VIEW_URL=.*|VITE_SKILL_VIEW_URL=\$SKILL_VAL|\" .env || echo \"VITE_SKILL_VIEW_URL=\$SKILL_VAL\" >> .env
   if [ \"\$FORCE_REBUILD_FRONTEND\" = \"1\" ]; then echo '强制重建前端镜像（无缓存）...'; docker compose -f docker-compose.prod.yml --env-file .env build --no-cache frontend; fi
   echo '启动 Docker Compose（已按 SERVER_IP 修补 VITE_API_BASE_URL / CORS_ORIGINS）...'
   docker compose -f docker-compose.prod.yml --env-file .env up -d --build
@@ -124,7 +136,13 @@ $SSH_CMD "${SSH_USER}@${SERVER_IP}" "export FORCE_REBUILD_FRONTEND='${FORCE_REBU
   docker compose -f docker-compose.prod.yml ps
   echo ''
   echo '>>> 数据库表由后端启动时自动创建。'
-  echo '>>> 访问：'
+  if [ -n \"\$DOMAIN\" ]; then
+    echo '>>> 域名访问（请确保 Nginx 已反代 api.'\"\$DOMAIN\"'、app.'\"\$DOMAIN\"' 与根域 \"'\"\$DOMAIN\"'\"）：'
+    echo \"  前端: https://app.\${DOMAIN}  根域: https://\${DOMAIN}（与 app 共用同一前端，数据一致）  后端 API: https://api.\${DOMAIN}  文档: https://api.\${DOMAIN}/docs\"
+    echo '>>> 若根域当前指向静态站导致数据为 0，请更新 Nginx 配置：deploy/nginx/clawjob-ssl.conf 中根域已改为反代到前端，在服务器执行：'
+    echo \"     sed 's/{{DOMAIN}}/\${DOMAIN}/g' ${REMOTE_DIR}/deploy/nginx/clawjob-ssl.conf | sudo tee /etc/nginx/conf.d/clawjob.conf && sudo nginx -t && sudo systemctl reload nginx\"
+  fi
+  echo '>>> IP 访问：'
   echo \"  前端: http://${SERVER_IP}:3000  后端 API: http://${SERVER_IP}:8000  文档: http://${SERVER_IP}:8000/docs\"
 "
 

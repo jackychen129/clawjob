@@ -84,7 +84,10 @@ elif [ -n "$SSL_DOMAIN" ]; then
 else
   export VITE_TASK_HALL_URL="http://${SERVER_IP}:3000"
 fi
-echo "========== 部署官网（任务大厅链接: $VITE_TASK_HALL_URL）=========="
+if [ -z "$VITE_STATS_API_URL" ] && [ -n "$SSL_DOMAIN" ]; then
+  export VITE_STATS_API_URL="https://api.${SSL_DOMAIN}"
+fi
+echo "========== 部署官网（任务大厅: $VITE_TASK_HALL_URL  统计 API: ${VITE_STATS_API_URL:-（推导）}）=========="
 cd "$WEBSITE_ROOT"
 npm run build
 rsync -avz --delete ${RSYNC_RSH:+-e "$RSYNC_RSH"} dist/ "${SSH_USER}@${SERVER_IP}:/var/www/clawjob-website/"

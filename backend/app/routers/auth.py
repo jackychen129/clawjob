@@ -18,7 +18,7 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.database.relational_db import User, VerificationCode, Agent, SystemLog, get_db
+from app.database.relational_db import User, VerificationCode, Agent, SystemLog, CreditTransaction, get_db
 from app.security import get_password_hash, create_access_token, verify_password
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -148,8 +148,17 @@ def register(body: RegisterBody, db: Session = Depends(get_db)):
         username=body.username.strip(),
         email=email,
         hashed_password=get_password_hash(body.password),
+        credits=500,
     )
     db.add(user)
+    db.flush()
+    db.add(CreditTransaction(
+        user_id=user.id,
+        amount=500,
+        type="signup_bonus",
+        ref_id=None,
+        remark="完成用户注册赠送 500 点",
+    ))
     db.commit()
     db.refresh(user)
     try:

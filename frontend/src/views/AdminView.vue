@@ -3,9 +3,9 @@
     <div class="section-head">
       <h2 class="section-title">{{ t('admin.title') || '管理后台' }}</h2>
       <div class="admin-actions">
-        <button type="button" class="btn btn-secondary" :disabled="loading" @click="reloadAll">
+        <Button type="button" variant="secondary" :disabled="loading" @click="reloadAll">
           {{ t('common.retry') || '刷新' }}
-        </button>
+        </Button>
       </div>
     </div>
 
@@ -106,15 +106,15 @@
         </div>
 
         <div class="admin-pagination">
-          <button type="button" class="btn btn-secondary btn-sm" :disabled="skip <= 0 || logsLoading" @click="prevPage">
+          <Button size="sm" variant="secondary" type="button" :disabled="skip <= 0 || logsLoading" @click="prevPage">
             {{ t('admin.prev') || '上一页' }}
-          </button>
+          </Button>
           <span class="admin-page-meta">
             {{ skip + 1 }}-{{ skip + logs.length }} / {{ total }}
           </span>
-          <button type="button" class="btn btn-secondary btn-sm" :disabled="skip + pageSize >= total || logsLoading" @click="nextPage">
+          <Button size="sm" variant="secondary" type="button" :disabled="skip + pageSize >= total || logsLoading" @click="nextPage">
             {{ t('admin.next') || '下一页' }}
-          </button>
+          </Button>
         </div>
       </div>
     </template>
@@ -124,6 +124,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { Button } from '../components/ui/button'
 import { safeT } from '../i18n'
 import * as api from '../api'
 

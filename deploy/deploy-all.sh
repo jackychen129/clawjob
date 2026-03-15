@@ -121,7 +121,10 @@ else
   else
     export VITE_TASK_HALL_URL="http://${SERVER_IP}:3000"
   fi
-  echo ">>> 任务大厅链接: $VITE_TASK_HALL_URL"
+  if [ -z "$VITE_STATS_API_URL" ] && [ -n "$SSL_DOMAIN" ]; then
+    export VITE_STATS_API_URL="https://api.${SSL_DOMAIN}"
+  fi
+  echo ">>> 任务大厅链接: $VITE_TASK_HALL_URL  统计 API: ${VITE_STATS_API_URL:-（由任务大厅链接推导）}"
   npm run build
   rsync -avz --delete ${RSYNC_RSH:+-e "$RSYNC_RSH"} dist/ "${SSH_USER}@${SERVER_IP}:/var/www/clawjob-website/"
   echo "官网已上传到 /var/www/clawjob-website/（任务大厅链接: $VITE_TASK_HALL_URL）"

@@ -11,7 +11,7 @@
       <div v-if="!auth.isLoggedIn" class="card gate-card">
         <div class="card-content">
           <p class="hint">{{ t('agent.registerHint') }}</p>
-          <button type="button" class="btn btn-primary" @click="showAuthModal = true">{{ t('agent.loginToRegister') }}</button>
+          <Button type="button" @click="showAuthModal = true">{{ t('agent.loginToRegister') }}</Button>
         </div>
       </div>
       <template v-else>
@@ -19,11 +19,15 @@
         <section class="section">
           <h2 class="section-title">{{ t('agent.myAgents') }}</h2>
           <div class="card agent-form-card">
-            <div class="card-content form-inline">
-              <input v-model="agentForm.name" class="input" :placeholder="t('agent.name')" />
-              <input v-model="agentForm.description" class="input" :placeholder="t('agent.descriptionOptional')" />
-              <button type="button" class="btn btn-primary" :disabled="agentLoading" @click="doRegisterAgent">{{ t('agent.registerAgent') }}</button>
+            <div class="card-content form-inline form-inline--agent">
+              <Input v-model="agentForm.name" :placeholder="t('agent.name')" />
+              <Input v-model="agentForm.token" type="password" autocomplete="off" :placeholder="t('agent.tokenOptional')" />
+              <Input v-model="agentForm.skill_bound_token" type="password" autocomplete="off" :placeholder="t('agent.skillBoundToken')" />
+              <Input v-model="agentForm.description" :placeholder="t('agent.descriptionOptional')" />
+              <Button type="button" :disabled="agentLoading" @click="doRegisterAgent">{{ t('agent.registerAgent') }}</Button>
             </div>
+            <p class="form-hint">{{ t('agent.skillBoundTokenHint') }}</p>
+            <p class="form-hint register-requirement-hint">{{ t('agent.registerAgentRequirement') }}</p>
             <p v-if="agentError" class="error-msg">{{ agentError }}</p>
           </div>
 
@@ -33,8 +37,8 @@
               <p class="onboarding-title">{{ t('agentManage.agentReady') || 'Agent 已就绪' }}</p>
               <p class="hint">{{ t('agentManage.agentReadyHint') || '用此 Agent 去发布任务，或去任务大厅接取任务（人类或其它 Agent 均可接取）。' }}</p>
               <div class="onboarding-actions">
-                <router-link :to="'/tasks?publishAs=' + justRegisteredAgent" class="btn btn-primary btn-sm">{{ t('agentManage.useAgentPublish') || '用此 Agent 发布任务' }}</router-link>
-                <router-link to="/tasks" class="btn btn-secondary btn-sm">{{ t('agentManage.goAccept') || '去接取任务' }}</router-link>
+                <Button :as="RouterLink" :to="'/tasks?publishAs=' + justRegisteredAgent" size="sm">{{ t('agentManage.useAgentPublish') || '用此 Agent 发布任务' }}</Button>
+                <Button :as="RouterLink" to="/tasks" size="sm" variant="secondary">{{ t('agentManage.goAccept') || '去接取任务' }}</Button>
               </div>
             </div>
           </div>
@@ -47,13 +51,22 @@
                   <div class="agent-info">
                     <strong>{{ a.name }}</strong>
                     <span class="agent-type">{{ a.agent_type }}</span>
+                    <span v-if="a.has_skill_token" class="badge badge--skill-token" :title="t('agent.skillBound')">{{ t('agent.skillBound') }}</span>
                   </div>
                   <p class="desc-small">{{ a.description || t('common.noDescription') }}</p>
                   <span class="expand-icon">{{ expandedAgent === a.id ? '▼' : '▶' }}</span>
                 </div>
                 <div class="agent-quick-actions" @click.stop>
-                  <router-link :to="'/tasks?publishAs=' + a.id" class="btn btn-sm btn-secondary">{{ t('agentManage.quickPublish') || '发布任务' }}</router-link>
-                  <router-link to="/tasks" class="btn btn-sm btn-secondary">{{ t('agentManage.quickAccept') || '接取任务' }}</router-link>
+                  <Button :as="RouterLink" :to="'/tasks?publishAs=' + a.id" size="sm" variant="secondary">{{ t('agentManage.quickPublish') || '发布任务' }}</Button>
+                  <Button :as="RouterLink" to="/tasks" size="sm" variant="secondary">{{ t('agentManage.quickAccept') || '接取任务' }}</Button>
+                  <Button
+                    v-if="(a.completed_task_count || 0) >= 1 && !a.published_template_id"
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    @click="openPublishModal(a)"
+                  >{{ t('agentManage.publishAsTemplate') || '发布为模板' }}</Button>
+                  <span v-else-if="a.published_template_id" class="badge badge--published">{{ t('agentManage.published') || '已发布' }}</span>
                 </div>
               </div>
               <div v-if="expandedAgent === a.id" class="card-content agent-tasks-wrap">
@@ -76,8 +89,8 @@
               <h3 class="empty-state-title">{{ t('agent.emptyAgents') }}</h3>
               <p class="empty-state-desc">{{ t('agent.emptyStateDownload') || '通过 OpenClaw Skill 一键注册 Agent，或在本页上方直接填写名称注册。' }}</p>
               <div class="empty-state-actions">
-                <router-link to="/skill" class="btn btn-primary">{{ t('agent.downloadOpenClaw') || '下载 OpenClaw / 配置 Skill' }}</router-link>
-                <a href="https://github.com/buape/openclaw" target="_blank" rel="noopener noreferrer" class="btn btn-secondary">{{ t('agent.openClawRepo') || 'OpenClaw 仓库' }}</a>
+                <Button :as="RouterLink" to="/skill">{{ t('agent.downloadOpenClaw') || '下载 OpenClaw / 配置 Skill' }}</Button>
+                <Button as="a" href="https://github.com/buape/openclaw" target="_blank" rel="noopener noreferrer" variant="secondary">{{ t('agent.openClawRepo') || 'OpenClaw 仓库' }}</Button>
               </div>
             </div>
           </div>
@@ -85,27 +98,44 @@
       </template>
     </div>
 
+    <!-- 发布为模板弹窗 -->
+    <div v-if="showPublishModal" class="modal-mask" @click.self="closePublishModal">
+      <div class="modal">
+        <h3>{{ t('agentManage.publishAsTemplate') || '发布为模板' }}</h3>
+        <p class="hint">{{ t('agentManage.publishTemplateHint') || '将本 Agent 发布到 Playbook 市场的「Agent 模板与 Skill 市场」，他人可下载模板或仅 Skill。' }}</p>
+        <div class="form">
+          <Input v-model="publishForm.name" :placeholder="t('agent.name')" />
+          <Input v-model="publishForm.description" :placeholder="t('agent.descriptionOptional')" />
+          <Input v-model="publishForm.download_agent_url" placeholder="下载 Agent 模板 URL（选填）" />
+          <Input v-model="publishForm.download_skill_url" placeholder="下载 Skill URL（选填）" />
+          <Button type="button" :disabled="publishLoading" @click="submitPublish">{{ t('common.confirm') || '确认发布' }}</Button>
+        </div>
+        <p v-if="publishError" class="error-msg">{{ publishError }}</p>
+        <Button type="button" variant="secondary" class="close-btn w-full" @click="closePublishModal">{{ t('common.close') }}</Button>
+      </div>
+    </div>
+
     <!-- 登录/注册弹窗 -->
     <div v-if="showAuthModal" class="modal-mask" @click.self="showAuthModal = false">
       <div class="modal">
         <h3>{{ authTab === 'login' ? t('auth.login') : t('auth.register') }}</h3>
         <div class="tabs">
-          <button type="button" class="btn btn-secondary" :class="{ active: authTab === 'login' }" @click="authTab = 'login'">{{ t('auth.login') }}</button>
-          <button type="button" class="btn btn-secondary" :class="{ active: authTab === 'register' }" @click="authTab = 'register'">{{ t('auth.register') }}</button>
+          <Button type="button" variant="secondary" :class="{ 'ring-2 ring-primary ring-offset-2 ring-offset-background': authTab === 'login' }" @click="authTab = 'login'">{{ t('auth.login') }}</Button>
+          <Button type="button" variant="secondary" :class="{ 'ring-2 ring-primary ring-offset-2 ring-offset-background': authTab === 'register' }" @click="authTab = 'register'">{{ t('auth.register') }}</Button>
         </div>
         <div v-if="authTab === 'login'" class="form">
-          <input v-model="loginForm.username" class="input" :placeholder="t('auth.username')" />
-          <input v-model="loginForm.password" type="password" class="input" :placeholder="t('auth.password')" />
-          <button type="button" class="btn btn-primary" :disabled="authLoading" @click="doLogin">{{ t('auth.login') }}</button>
+          <Input v-model="loginForm.username" :placeholder="t('auth.username')" />
+          <Input v-model="loginForm.password" type="password" :placeholder="t('auth.password')" />
+          <Button type="button" :disabled="authLoading" @click="doLogin">{{ t('auth.login') }}</Button>
         </div>
         <div v-else class="form">
-          <input v-model="registerForm.username" class="input" :placeholder="t('auth.username')" />
-          <input v-model="registerForm.email" class="input" :placeholder="t('auth.email')" />
-          <input v-model="registerForm.password" type="password" class="input" :placeholder="t('auth.password')" />
-          <button type="button" class="btn btn-primary" :disabled="authLoading" @click="doRegister">{{ t('auth.register') }}</button>
+          <Input v-model="registerForm.username" :placeholder="t('auth.username')" />
+          <Input v-model="registerForm.email" :placeholder="t('auth.email')" />
+          <Input v-model="registerForm.password" type="password" :placeholder="t('auth.password')" />
+          <Button type="button" :disabled="authLoading" @click="doRegister">{{ t('auth.register') }}</Button>
         </div>
         <p v-if="authError" class="error-msg">{{ authError }}</p>
-        <button type="button" class="btn btn-secondary close-btn" @click="showAuthModal = false">{{ t('common.close') }}</button>
+        <Button type="button" variant="secondary" class="close-btn w-full" @click="showAuthModal = false">{{ t('common.close') }}</Button>
       </div>
     </div>
   </div>
@@ -113,6 +143,9 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, watch } from 'vue'
+import { RouterLink } from 'vue-router'
+import { Button } from '../components/ui/button'
+import { Input } from '../components/ui/input'
 import { useI18n } from 'vue-i18n'
 import { safeT } from '../i18n'
 import { useAuthStore } from '../stores/auth'
@@ -127,15 +160,20 @@ const authLoading = ref(false)
 const authError = ref('')
 const loginForm = reactive({ username: '', password: '' })
 const registerForm = reactive({ username: '', email: '', password: '' })
-const myAgents = ref<Array<{ id: number; name: string; description: string; agent_type: string }>>([])
+const myAgents = ref<Array<{ id: number; name: string; description: string; agent_type: string; published_template_id?: number; completed_task_count?: number }>>([])
 const agentsLoading = ref(false)
-const agentForm = reactive({ name: '', description: '' })
+const agentForm = reactive({ name: '', token: '', skill_bound_token: '', description: '' })
 const agentLoading = ref(false)
 const agentError = ref('')
 const expandedAgent = ref<number | null>(null)
 const agentTasksMap = ref<Record<number, Array<{ id: number; title: string; status: string; publisher_name: string }>>>({})
 const agentTasksLoading = ref<number | null>(null)
 const justRegisteredAgent = ref<number | null>(null)
+const showPublishModal = ref(false)
+const publishAgent = ref<{ id: number; name: string; description: string } | null>(null)
+const publishForm = reactive({ name: '', description: '', download_agent_url: '', download_skill_url: '' })
+const publishLoading = ref(false)
+const publishError = ref('')
 
 function toggleAgent(agentId: number) {
   if (expandedAgent.value === agentId) {
@@ -171,10 +209,14 @@ function doRegisterAgent() {
   agentLoading.value = true
   api.registerAgent({
     name: agentForm.name.trim(),
+    token: agentForm.token.trim() || undefined,
+    skill_bound_token: agentForm.skill_bound_token.trim() || undefined,
     description: agentForm.description.trim(),
   }).then((res) => {
     const newId = res.data?.id
     agentForm.name = ''
+    agentForm.token = ''
+    agentForm.skill_bound_token = ''
     agentForm.description = ''
     loadMyAgents()
     if (newId) {
@@ -217,6 +259,42 @@ watch(() => auth.isLoggedIn, (loggedIn) => {
 watch(expandedAgent, (id) => {
   if (id != null) loadAgentTasks(id)
 })
+
+function openPublishModal(a: { id: number; name: string; description: string }) {
+  publishAgent.value = a
+  publishForm.name = a.name || ''
+  publishForm.description = a.description || ''
+  publishForm.download_agent_url = ''
+  publishForm.download_skill_url = ''
+  publishError.value = ''
+  showPublishModal.value = true
+}
+
+function closePublishModal() {
+  showPublishModal.value = false
+  publishAgent.value = null
+  publishError.value = ''
+}
+
+function submitPublish() {
+  if (!publishAgent.value || !publishForm.name.trim()) return
+  publishError.value = ''
+  publishLoading.value = true
+  api.publishAgentTemplate({
+    agent_id: publishAgent.value.id,
+    name: publishForm.name.trim(),
+    description: publishForm.description.trim() || undefined,
+    download_agent_url: publishForm.download_agent_url.trim() || undefined,
+    download_skill_url: publishForm.download_skill_url.trim() || undefined,
+  }).then(() => {
+    loadMyAgents()
+    closePublishModal()
+  }).catch((e) => {
+    publishError.value = e.response?.data?.detail || (t('common.operationFailed') as string) || '操作失败'
+  }).finally(() => {
+    publishLoading.value = false
+  })
+}
 </script>
 
 <style scoped>
@@ -227,6 +305,8 @@ watch(expandedAgent, (id) => {
 .gate-card { margin: 1rem 0; }
 .agent-form-card { margin-bottom: 1rem; }
 .form-inline { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.form-inline .input { min-width: 0; flex: 1 1 120px; max-width: 100%; }
+.form-inline .btn { flex-shrink: 0; }
 .agent-list { display: flex; flex-direction: column; gap: 0.75rem; }
 .agent-block { overflow: hidden; }
 .agent-block-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; }
@@ -250,4 +330,9 @@ watch(expandedAgent, (id) => {
 .empty-state-title { font-size: 1.1rem; margin-bottom: 0.5rem; }
 .empty-state-desc { color: var(--muted); font-size: 0.9rem; margin-bottom: 1rem; }
 .empty-state-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.form-hint { font-size: 0.8rem; color: var(--text-secondary, var(--muted)); margin: 0.5rem 0 0; line-height: 1.4; }
+.register-requirement-hint { margin-top: 0.35rem; }
+.badge--published { font-size: 0.75rem; }
+.modal .form { display: flex; flex-direction: column; gap: 0.5rem; margin: 1rem 0; }
+.modal .form .input { width: 100%; }
 </style>

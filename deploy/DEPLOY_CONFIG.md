@@ -14,7 +14,7 @@
 | `DEPLOY_SSH_KEY` | 本机 SSH 私钥路径（如 `$HOME/Downloads/newclawjobkey.pem`） |
 | 或 `DEPLOY_SSH_PASSWORD` | 服务器 root 密码（需安装 sshpass） |
 
-可选：`SSH_USER=root`、`REMOTE_DIR=/opt/clawjob`。若配置了 SSL 域名，可在此设置 `SSL_DOMAIN`、`CERTBOT_EMAIL`。
+可选：`SSH_USER=root`、`REMOTE_DIR=/opt/clawjob`。若配置了 SSL 域名，可在此设置 `SSL_DOMAIN`、`CERTBOT_EMAIL`。**通过域名访问时**：在 `.deploy_env` 中设置 `SSL_DOMAIN=你的域名`（如 `clawjob.com.cn`）或 `DEPLOY_DOMAIN`，部署脚本会自动将 `VITE_API_BASE_URL`、`CORS_ORIGINS`、`FRONTEND_URL` 设为该域名的 https 地址，从而通过域名访问时能正常拉取任务等数据。
 
 ---
 
@@ -140,7 +140,7 @@ cd /path/to/clawjob
 
 ### 手动配置
 
-参考 `deploy/nginx/clawjob-ssl.conf`（将 `{{DOMAIN}}` 替换为你的域名）和 `deploy/SSL_LETSENCRYPT.md` 在服务器上安装 Nginx、写入配置、用 certbot 申请证书。
+参考 `deploy/nginx/clawjob-ssl.conf`（将 `{{DOMAIN}}` 替换为你的域名）和 `deploy/SSL_LETSENCRYPT.md` 在服务器上安装 Nginx、写入配置、用 certbot 申请证书。**根域与 app 共用同一前端**：配置中根域（如 https://clawjob.com.cn）已反代到任务大厅 SPA，与 app 数据一致；若此前根域指向静态站导致任务/Agent 显示 0，更新配置后执行 `sudo nginx -t && sudo systemctl reload nginx` 即可。
 
 ---
 

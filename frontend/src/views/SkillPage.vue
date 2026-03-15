@@ -22,9 +22,9 @@
         </ol>
         <div class="skill-oneclick-wrap">
           <pre class="skill-oneclick-pre"><code>{{ oneClickPromptToOpenClaw }}</code></pre>
-          <button type="button" class="btn btn-primary skill-oneclick-btn" @click="copyOneClickPrompt">
+          <Button type="button" class="skill-oneclick-btn" @click="copyOneClickPrompt">
             {{ copyOneClickDone ? t('skillPage.copied') : t('skillPage.oneClickCopy') }}
-          </button>
+          </Button>
         </div>
         <p class="skill-note">{{ t('skillPage.oneClickNote') }}</p>
       </div>
@@ -35,18 +35,18 @@
         <h3 class="skill-section-title">{{ t('skillPage.downloadTitle') }}</h3>
         <p class="skill-section-desc">{{ t('skillPage.downloadDesc') }}</p>
         <div class="skill-download-actions">
-          <a :href="skillRepoUrl" target="_blank" rel="noopener noreferrer" class="btn btn-primary skill-download-btn">
+          <Button as="a" :href="skillRepoUrl" target="_blank" rel="noopener noreferrer" class="skill-download-btn">
             {{ t('skillPage.openGitHub') }}
-          </a>
-          <a :href="skillZipUrl" target="_blank" rel="noopener noreferrer" class="btn btn-secondary skill-download-btn">
+          </Button>
+          <Button as="a" :href="skillZipUrl" target="_blank" rel="noopener noreferrer" variant="secondary" class="skill-download-btn">
             {{ t('skillPage.downloadZip') }}
-          </a>
-          <a v-if="skillViewUrl" :href="skillViewUrl" target="_blank" rel="noopener noreferrer" class="btn btn-text skill-download-btn">
+          </Button>
+          <Button v-if="skillViewUrl" as="a" :href="skillViewUrl" target="_blank" rel="noopener noreferrer" variant="ghost" class="skill-download-btn">
             {{ t('skillPage.viewOnline') }}
-          </a>
-          <button type="button" class="btn btn-text skill-copy-btn" @click="copySkillUrl">
+          </Button>
+          <Button type="button" variant="ghost" class="skill-copy-btn" @click="copySkillUrl">
             {{ copySkillUrlDone ? t('skillPage.copied') : t('skillPage.copyUrl') }}
-          </button>
+          </Button>
         </div>
         <p class="skill-note">{{ t('skillPage.downloadNote') }}</p>
       </div>
@@ -88,9 +88,9 @@
           <label class="skill-config-label">CLAWJOB_API_URL</label>
           <div class="skill-config-value-wrap">
             <code class="skill-config-value">{{ apiBaseUrl }}</code>
-            <button type="button" class="btn btn-sm btn-secondary skill-copy-inline" @click="copyApiUrl">
+            <Button size="sm" variant="secondary" type="button" class="skill-copy-inline" @click="copyApiUrl">
               {{ copyApiUrlDone ? t('skillPage.copied') : t('skillPage.copy') }}
-            </button>
+            </Button>
           </div>
           <p class="skill-config-hint">{{ t('skillPage.configApiHint') }}</p>
         </div>
@@ -98,31 +98,33 @@
           <label class="skill-config-label">CLAWJOB_ACCESS_TOKEN</label>
           <div class="skill-config-value-wrap">
             <code class="skill-config-value">JWT from login or quick-register</code>
-            <button type="button" class="btn btn-sm btn-secondary skill-copy-inline" @click="copyQuickRegisterCmd">
+            <Button size="sm" variant="secondary" type="button" class="skill-copy-inline" @click="copyQuickRegisterCmd">
               {{ copyQuickRegisterDone ? t('skillPage.copied') : t('skillPage.copyQuickRegister') }}
-            </button>
+            </Button>
           </div>
           <p class="skill-config-hint">{{ t('skillPage.configTokenHint') }}</p>
         </div>
         <div class="skill-quick-register">
           <label class="skill-config-label">{{ t('skillPage.quickRegisterTitle') }}</label>
           <pre class="skill-pre"><code>{{ quickRegisterCommand }}</code></pre>
-          <button type="button" class="btn btn-sm btn-secondary" @click="copyQuickRegisterCmd">
+          <Button size="sm" variant="secondary" type="button" @click="copyQuickRegisterCmd">
             {{ copyQuickRegisterDone ? t('skillPage.copied') : t('skillPage.copy') }}
-          </button>
+          </Button>
         </div>
       </div>
     </section>
 
     <div class="skill-back-wrap">
-      <router-link to="/" class="btn btn-secondary skill-back-btn">{{ t('skillPage.backToHome') }}</router-link>
+      <Button :as="RouterLink" to="/" variant="secondary" class="skill-back-btn">{{ t('skillPage.backToHome') }}</Button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { Button } from '../components/ui/button'
 import { safeT } from '../i18n'
 
 const _i18n = useI18n()

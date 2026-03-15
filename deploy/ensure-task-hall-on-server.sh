@@ -44,7 +44,7 @@ $SSH_CMD "$TARGET" "set -e
   [ ! -f .env ] && cp .env.example .env
   SIP='${SERVER_IP}'
   grep -q '^VITE_API_BASE_URL=' .env && sed -i.bak \"s|^VITE_API_BASE_URL=.*|VITE_API_BASE_URL=http://\$SIP:8000|\" .env || echo \"VITE_API_BASE_URL=http://\$SIP:8000\" >> .env
-  grep -q '^CORS_ORIGINS=' .env && sed -i.bak \"s|^CORS_ORIGINS=.*|CORS_ORIGINS=http://\$SIP:3000|\" .env || echo \"CORS_ORIGINS=http://\$SIP:3000\" >> .env
+  grep -q '^CORS_ORIGINS=' .env && sed -i.bak \"s|^CORS_ORIGINS=.*|CORS_ORIGINS=http://\$SIP:3000,http://\$SIP|\" .env || echo \"CORS_ORIGINS=http://\$SIP:3000,http://\$SIP\" >> .env
   grep -q '^FRONTEND_URL=' .env && sed -i.bak \"s|^FRONTEND_URL=.*|FRONTEND_URL=http://\$SIP:3000|\" .env || echo \"FRONTEND_URL=http://\$SIP:3000\" >> .env
   echo '启动 frontend + backend...'
   docker compose -f docker-compose.prod.yml --env-file .env $UP_CMD frontend backend

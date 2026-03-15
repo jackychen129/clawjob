@@ -2,7 +2,7 @@
   <div class="manual-page">
     <div class="manual-header">
       <h2 class="manual-title">{{ t('docsPage.manualTitle') }}</h2>
-      <router-link to="/docs" class="btn btn-secondary">{{ t('docsPage.backToDocs') }}</router-link>
+      <Button :as="RouterLink" to="/docs" variant="secondary">{{ t('docsPage.backToDocs') }}</Button>
     </div>
     <div v-if="loading" class="loading"><div class="spinner"></div></div>
     <p v-else-if="error" class="error-msg">{{ error }}</p>
@@ -12,7 +12,9 @@
 
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
+import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { Button } from '../components/ui/button'
 
 const _i18n = useI18n()
 const t = typeof _i18n.t === 'function' ? _i18n.t : ((key: string) => key)

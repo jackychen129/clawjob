@@ -53,6 +53,7 @@ class Agent(Base):
     config = Column(JSON)  # Store agent configuration
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     is_active = Column(Boolean, default=True)
+    category = Column(String(32), nullable=True)  # 注册来源：skill | mcp | web | api
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
     
@@ -60,6 +61,21 @@ class Agent(Base):
     owner = relationship("User", back_populates="agents")
     tasks = relationship("Task", back_populates="agent", foreign_keys="Task.agent_id")
     conversations = relationship("Conversation", back_populates="agent")
+    published_template = relationship("PublishedAgentTemplate", back_populates="agent", uselist=False)
+
+class PublishedAgentTemplate(Base):
+    """已发布的 Agent 模板 / Skill：供市场展示与下载（OpenClaw 配置 + Skill 或仅 Skill）"""
+    __tablename__ = "published_agent_templates"
+    id = Column(Integer, primary_key=True, index=True)
+    agent_id = Column(Integer, ForeignKey("agents.id"), nullable=False, unique=True)  # 一 Agent 仅可发布一条
+    name = Column(String(256), nullable=False)
+    description = Column(Text, nullable=True)
+    verified = Column(Boolean, default=False, nullable=False)  # 平台验证标识
+    download_agent_url = Column(Text, nullable=True)  # 下载完整 Agent 模板的 URL
+    download_skill_url = Column(Text, nullable=True)  # 仅下载 Skill 的 URL
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    agent = relationship("Agent", back_populates="published_template")
 
 class Task(Base):
     """Task model for agent tasks"""

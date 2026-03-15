@@ -4,19 +4,46 @@
  */
 import axios from 'axios'
 
+/** 判断是否为 IP 或 localhost（非域名） */
+function isIpOrLocalhost(host: string): boolean {
+  if (!host || host === 'localhost' || host === '127.0.0.1' || host === '[::1]') return true
+  return /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)
+}
+
 export function getApiBase(): string {
   const fromEnv = (import.meta.env.VITE_API_BASE_URL && String(import.meta.env.VITE_API_BASE_URL).trim()) || ''
   if (typeof window !== 'undefined' && window.location?.hostname) {
     const host = window.location.hostname
     const protocol = window.location.protocol
     const isLocalhost = host === 'localhost' || host === '127.0.0.1'
+    // 通过域名访问时：若构建时 API 是 IP 或与当前 host 不一致，则用当前页 origin 推导 API，保证域名下能拿到数据
+    if (!isLocalhost && fromEnv) {
+      try {
+        const envUrl = new URL(fromEnv)
+        const envHost = envUrl.hostname
+        if (isIpOrLocalhost(envHost) || envHost !== host) {
+          if (host.startsWith('app.')) return `${protocol}//api.${host.slice(4)}`
+          if (host.startsWith('api.')) return `${protocol}//${host}`
+          return `${protocol}//api.${host}`
+        }
+      } catch {
+        if (host.startsWith('app.')) return `${protocol}//api.${host.slice(4)}`
+        if (host.startsWith('api.')) return `${protocol}//${host}`
+        return `${protocol}//api.${host}`
+      }
+    }
     const envPointsToLocalhost = !fromEnv || fromEnv.includes('localhost') || fromEnv.includes('127.0.0.1')
     if (!isLocalhost && envPointsToLocalhost) {
       if (host.startsWith('app.')) return `${protocol}//api.${host.slice(4)}`
-      return `${protocol}//${host}:8000`
+      if (host.startsWith('api.')) return `${protocol}//${host}`
+      return `${protocol}//api.${host}`
     }
     if (!fromEnv && isLocalhost) return 'http://localhost:8000'
-    if (!fromEnv) return `${protocol}//${host}:8000`
+    if (!fromEnv) {
+      if (host.startsWith('app.')) return `${protocol}//api.${host.slice(4)}`
+      if (host.startsWith('api.')) return `${protocol}//${host}`
+      return `${protocol}//${host}:8000`
+    }
   }
   if (fromEnv) return fromEnv
   return 'http://localhost:8000'
@@ -175,11 +202,12 @@ export interface TaskListItem {
   location?: string
   duration_estimate?: string
   skills?: string[]
+  output_data?: { result_summary?: string; evidence?: Record<string, unknown>; rejection_reason?: string }
 }
 
-// 候选者列表（公开，供发布任务时选择指定接取者）。sort=recent 为最近注册优先
+// 候选者列表（公开，供发布任务时选择指定接取者）。sort=recent 为最近注册优先；owner_name 为游客时返回「待注册」；published_count 为该 Agent 发布的任务数
 export function fetchCandidates(params?: { skip?: number; limit?: number; sort?: string }) {
-  return api.get<{ candidates: Array<{ id: number; type: string; name: string; description: string; agent_type: string; owner_id: number; owner_name: string }>; total: number }>('/candidates', { params })
+  return api.get<{ candidates: Array<{ id: number; type: string; name: string; description: string; agent_type: string; owner_id: number; owner_name: string; capabilities?: Array<{ id?: string; name: string; category?: string }>; published_count?: number }>; total: number }>('/candidates', { params })
 }
 
 // 发布任务（需登录）；有奖励点时 completion_webhook_url 必填；invited_agent_ids 为可选指定接取者；creator_agent_id 为可选（由某 Agent 代发）；discord_webhook_url 可选，推送到 Discord 频道
@@ -270,6 +298,8 @@ export interface AgentCapability {
 }
 export interface RegisterAgentData {
   name: string
+  token?: string
+  skill_bound_token?: string
   description?: string
   agent_type?: string
   types?: string[]
@@ -398,4 +428,40 @@ export interface AdminLogItem {
   status_code: number | null
   user_id: number | null
   extra: Record<string, unknown> | null
+}
+
+// Agent 模板 / Skill 市场：可下载 Agent 模板或仅 Skill，含平台验证与完成任务数
+export interface AgentTemplateItem {
+  id: string | number
+  name: string
+  description?: string
+  verified: boolean
+  tasks_completed: number
+  agent_type?: string
+  download_agent_url?: string
+  download_skill_url?: string
+}
+
+export function fetchAgentTemplates(params?: { skip?: number; limit?: number }) {
+  return api.get<{ items: AgentTemplateItem[]; total: number; skip?: number; limit?: number }>(
+    '/agent-templates',
+    { params }
+  )
+}
+
+export function fetchAgentTemplateStats() {
+  return api.get<{ template_count: number; verified_count: number; tasks_completed: number }>(
+    '/agent-templates/stats'
+  )
+}
+
+/** 发布 Agent 为市场模板（需登录，且该 Agent 至少完成 1 个任务、未发布过） */
+export function publishAgentTemplate(body: {
+  agent_id: number
+  name: string
+  description?: string
+  download_agent_url?: string
+  download_skill_url?: string
+}) {
+  return api.post<AgentTemplateItem>('/agent-templates', body)
 }

@@ -18,7 +18,6 @@
           <router-link to="/tasks" class="nav-link" :class="{ active: route.path === '/tasks' }">{{ t('nav.taskManage') || '任务管理' }}</router-link>
           <router-link to="/agents" class="nav-link" :class="{ active: route.path === '/agents' }">{{ t('nav.agentManage') || 'Agent 管理' }}</router-link>
           <router-link to="/playbook" class="nav-link" :class="{ active: route.path === '/playbook' }">{{ t('nav.playbook') || 'Playbook' }}</router-link>
-          <router-link to="/rental" class="nav-link" :class="{ active: route.path === '/rental' }">{{ t('nav.rental') || '租赁' }}</router-link>
           <router-link to="/skill" class="nav-link" :class="{ active: route.path === '/skill' }">{{ t('common.skill') }}</router-link>
           <router-link v-if="isAdmin" to="/admin" class="nav-link" :class="{ active: route.path === '/admin' }">{{ t('admin.title') || '管理后台' }}</router-link>
         </nav>
@@ -30,11 +29,11 @@
           <template v-if="auth.isLoggedIn">
             <span class="username">{{ auth.username }}</span>
             <span class="credits-badge" :title="t('common.credits')">💰 {{ accountCredits }}</span>
-            <router-link to="/account" class="btn btn-secondary" :class="{ active: route.path === '/account' }">{{ t('common.myAccount') }}</router-link>
-            <button class="btn btn-secondary" @click="auth.logout()">{{ t('common.logout') }}</button>
+            <Button :as="RouterLink" to="/account" variant="secondary" :class="{ 'ring-2 ring-primary ring-offset-2 ring-offset-background': route.path === '/account' }">{{ t('common.myAccount') }}</Button>
+            <Button variant="secondary" @click="auth.logout()">{{ t('common.logout') }}</Button>
           </template>
           <template v-else>
-            <button class="btn btn-primary" data-testid="login-btn" @click="showAuthModal = true">{{ t('common.loginOrRegister') }}</button>
+            <Button data-testid="login-btn" @click="showAuthModal = true">{{ t('common.loginOrRegister') }}</Button>
           </template>
         </div>
       </div>
@@ -42,11 +41,21 @@
 
     <div v-if="oauthError" class="oauth-error-banner" role="alert">
       <span>{{ t('common.oauthErrorPrefix') }} {{ t('oauthError.' + oauthError.split(':')[0], t('oauthError.unknown')) }}{{ oauthError.includes(':') ? ' ' + oauthError.split(':').slice(1).join(':') : '' }}</span>
-      <button type="button" class="btn btn-sm" @click="oauthError = ''">{{ t('common.dismiss') }}</button>
+      <Button size="sm" variant="secondary" type="button" @click="oauthError = ''">{{ t('common.dismiss') }}</Button>
     </div>
     <div v-if="auth.isLoggedIn && auth.isGuestUser" class="guest-hint-banner" role="status">
       <span>{{ t('auth.guestHint') }}</span>
-      <button type="button" class="btn btn-primary btn-sm" @click="showAuthModal = true; authTab = 'register'">{{ t('auth.goRegister') }}</button>
+      <Button size="sm" type="button" @click="showAuthModal = true; authTab = 'register'">{{ t('auth.goRegister') }}</Button>
+    </div>
+    <div v-if="postPublishRegisterHint" class="guest-hint-banner post-publish-register-hint" role="status">
+      <span>{{ t('task.publishThenRegisterAgentHint') }}</span>
+      <Button :as="RouterLink" to="/agents" size="sm" @click="postPublishRegisterHint = false">{{ t('task.goRegisterAgent') }}</Button>
+      <Button size="sm" variant="ghost" type="button" @click="postPublishRegisterHint = false">{{ t('common.close') }}</Button>
+    </div>
+    <div v-if="draftExists" class="guest-hint-banner draft-bar-global" role="status">
+      <span>{{ t('task.draftExists') || '您有未完成的草稿' }}</span>
+      <Button size="sm" type="button" @click="openCreateTaskModalWithDraft">{{ t('task.draftRestore') || '从草稿恢复' }}</Button>
+      <Button size="sm" variant="ghost" type="button" @click="clearDraft">{{ t('task.draftDiscard') || '丢弃草稿' }}</Button>
     </div>
     <main class="main-content relative z-0 px-6 sm:px-8 md:px-12 max-w-7xl mx-auto w-full flex-1 py-8 md:py-12" :key="route.path">
       <SkillPage v-if="route.path === '/skill'" />
@@ -55,14 +64,82 @@
       <OpenClawQuickstartPage v-else-if="route.path === '/docs/openclaw-quickstart'" />
       <DashboardView v-else-if="route.path === '/dashboard'" />
       <LeaderboardView v-else-if="route.path === '/leaderboard'" />
-      <PlaybookOnboardingView v-else-if="route.path === '/playbook'" />
-      <AgentRentalView v-else-if="route.path === '/rental'" />
-      <TaskManageView v-else-if="route.path === '/tasks'" @success="showSuccess" />
+      <PlaybookView v-else-if="route.path === '/playbook'" />
+      <TaskManageView v-else-if="route.path === '/tasks'" @success="showSuccess" @register-hint="postPublishRegisterHint = true" />
       <AgentManageView v-else-if="route.path === '/agents'" />
       <AccountPage v-else-if="route.path === '/account'" @credits-updated="loadAccountMe" />
       <AdminView v-else-if="route.path === '/admin'" />
       <template v-else>
       <div class="home-wrap apple-layout">
+        <!-- 首页 Dashboard：KPI + 实况 + 排行榜（参考 market.near.ai） -->
+        <section class="home-dashboard" aria-label="Dashboard">
+          <div class="home-kpi">
+            <div v-if="homeStatsLoading" class="home-kpi-skeleton">
+              <div v-for="i in 4" :key="i" class="home-kpi-card tw-skeleton"></div>
+            </div>
+            <template v-else>
+              <div class="home-kpi-card">
+                <span class="home-kpi-value">{{ (homeStats.rewards_paid ?? 0).toLocaleString() }} / {{ (homeStats.tasks_open ?? 0).toLocaleString() }}</span>
+                <span class="home-kpi-label">{{ t('home.kpiVolume') || '已发放 / 开放任务' }}</span>
+              </div>
+              <div class="home-kpi-card">
+                <span class="home-kpi-value">{{ homeStats.agents_active ?? 0 }} / {{ homeStats.agents_count ?? 0 }}</span>
+                <span class="home-kpi-label">{{ t('home.kpiAgents') || '活跃 / 总 Agent' }}</span>
+              </div>
+              <div class="home-kpi-card">
+                <span class="home-kpi-value">{{ homeStats.tasks_open ?? 0 }} / {{ homeStats.tasks_total ?? 0 }}</span>
+                <span class="home-kpi-label">{{ t('home.kpiJobs') || '开放 / 总任务' }}</span>
+              </div>
+              <div class="home-kpi-card">
+                <span class="home-kpi-value">{{ homeStats.tasks_completed ?? 0 }}</span>
+                <span class="home-kpi-label">{{ t('dashboard.tasksCompleted') || '已完成' }}</span>
+              </div>
+            </template>
+          </div>
+          <div class="home-dash-row">
+            <Card class="home-dash-feed">
+              <CardHeader class="pb-2">
+                <CardTitle class="home-dash-feed-title text-base">{{ t('dashboard.liveFeed') || '实况' }} <span class="mono text-zinc-500 text-sm">{{ t('dashboard.live') || 'LIVE' }}</span></CardTitle>
+              </CardHeader>
+              <CardContent class="pt-0">
+                <div v-if="homeActivityLoading" class="home-activity-skeleton">
+                  <div v-for="i in 5" :key="i" class="tw-skeleton" style="height: 2rem; margin-bottom: 0.5rem; border-radius: 6px;"></div>
+                </div>
+                <ul v-else-if="homeActivity.length" class="home-activity-list">
+                  <li v-for="ev in homeActivity.slice(0, 25)" :key="ev.at + ':' + ev.type + ':' + (ev.task_id || ev.agent_id || '')" class="home-activity-item">
+                    <span class="home-activity-time mono">{{ formatTimeAgoHome(ev.at) }}</span>
+                    <span class="home-activity-text">
+                      <template v-if="ev.type === 'task_created'">{{ ev.publisher_name }} {{ t('dashboard.eventTaskCreated', { title: (ev.task_title || '#' + (ev.task_id || '')).slice(0, 30) }) }}</template>
+                      <template v-else-if="ev.type === 'task_completed'">{{ ev.agent_name || t('common.agent') }} {{ t('dashboard.eventTaskCompleted', { title: (ev.task_title || '#' + (ev.task_id || '')).slice(0, 30), points: ev.reward_points ?? 0 }) }}</template>
+                      <template v-else-if="ev.type === 'agent_registered'">{{ ev.owner_name }} {{ t('dashboard.eventAgentRegistered', { name: ev.agent_name || '#' + (ev.agent_id || '') }) }}</template>
+                    </span>
+                    <router-link v-if="ev.task_id" :to="'/#/tasks?taskId=' + ev.task_id" class="home-activity-link">{{ t('task.viewDetail') }}</router-link>
+                  </li>
+                </ul>
+                <p v-else class="hint">{{ t('dashboard.noActivity') || '暂无动态' }}</p>
+              </CardContent>
+            </Card>
+            <Card class="home-dash-leaderboard">
+              <CardHeader class="pb-2">
+                <CardTitle class="home-dash-feed-title text-base">{{ t('leaderboard.title') || '排行榜' }}</CardTitle>
+              </CardHeader>
+              <CardContent class="pt-0">
+                <div v-if="homeLeaderboardLoading" class="home-leaderboard-skeleton">
+                  <div v-for="i in 6" :key="i" class="tw-skeleton" style="height: 2.25rem; margin-bottom: 0.35rem; border-radius: 6px;"></div>
+                </div>
+                <div v-else-if="homeLeaderboard.length" class="home-leaderboard-list">
+                  <div v-for="row in homeLeaderboard" :key="row.agent_id" class="home-leaderboard-row">
+                    <span class="home-lb-rank">{{ row.rank }}</span>
+                    <span class="home-lb-name">{{ row.agent_name }}</span>
+                    <span class="home-lb-earned">{{ row.earned }} <span class="unit">{{ t('task.pointsUnit') || '点' }}</span></span>
+                  </div>
+                </div>
+                <p v-else class="hint">{{ t('leaderboard.placeholder') || '暂无' }}</p>
+                <Button :as="RouterLink" to="/leaderboard" size="sm" variant="ghost" class="mt-2">{{ t('home.viewFullLeaderboard') || '查看完整排行榜 →' }}</Button>
+              </CardContent>
+            </Card>
+          </div>
+        </section>
         <h2 id="task-list" class="section-title">{{ t('common.openTasks') }}</h2>
       <div class="home-layout">
         <main class="home-main">
@@ -148,6 +225,7 @@
                 <span class="task-publisher-avatar" aria-hidden="true">{{ (task.publisher_name || '?').charAt(0).toUpperCase() }}</span>
                 <span>{{ task.publisher_name }}</span>
               </span>
+              <span v-if="task.creator_agent_name" class="task-creator-agent"> · {{ t('task.publishedByAgent') }}：{{ task.creator_agent_name }}</span>
               <span v-if="task.created_at" class="task-created-at mono"> · {{ formatTaskCreatedAt(task.created_at) }}</span>
               <span> · <span class="mono">{{ task.subscription_count }}</span>{{ t('task.subscribers') }}</span>
               <span v-if="task.comment_count != null"> · 💬 <span class="mono">{{ task.comment_count }}</span>{{ t('task.commentCountLabel') }}</span>
@@ -156,56 +234,58 @@
             <p v-if="task.status === 'pending_verification' && task.verification_deadline_at" class="hint deadline-hint">{{ t('task.deadlineHint', { date: formatDeadline(task.verification_deadline_at) }) }}</p>
             <div class="card-content task-card__actions-wrap">
               <div class="task-actions">
-              <button
+              <Button
                 v-if="auth.isLoggedIn && myAgents.length && task.status === 'open' && !isExecutor(task)"
-                class="btn btn-secondary btn-sm"
+                size="sm"
+                variant="secondary"
                 :disabled="subscribeLoading === task.id"
                 @click="openSubscribeModal(task)"
               >
                 {{ t('task.subscribe') }}
-              </button>
-              <button
+              </Button>
+              <Button
                 v-if="auth.isLoggedIn && isExecutor(task) && task.status === 'open'"
-                class="btn btn-primary btn-sm"
+                size="sm"
                 :disabled="submitCompletionLoading === task.id"
                 @click="openSubmitCompletionModal(task)"
               >
                 {{ t('task.submitCompletion') }}
-              </button>
+              </Button>
               <template v-if="auth.isLoggedIn && task.owner_id === auth.userId && task.status === 'pending_verification'">
-                <button class="btn btn-primary btn-sm" :disabled="confirmLoading === task.id" @click="doConfirm(task.id)">{{ t('task.confirmPass') }}</button>
-                <button class="btn btn-secondary btn-sm" :disabled="rejectLoading === task.id" @click="openRejectModal(task.id)">{{ t('task.reject') }}</button>
+                <Button size="sm" :disabled="confirmLoading === task.id" @click="doConfirm(task.id)">{{ t('task.confirmPass') }}</Button>
+                <Button size="sm" variant="secondary" :disabled="rejectLoading === task.id" @click="openRejectModal(task.id)">{{ t('task.reject') }}</Button>
               </template>
-              <button
+              <Button
                 v-if="auth.isLoggedIn && task.owner_id === auth.userId && task.status === 'open' && !task.reward_points"
-                class="btn btn-secondary btn-sm"
+                size="sm"
+                variant="secondary"
                 :disabled="confirmLoading === task.id"
                 @click="doConfirm(task.id)"
               >
                 {{ t('task.closeTask') }}
-              </button>
-              <button v-else-if="auth.isLoggedIn && !myAgents.length" type="button" class="btn btn-secondary btn-sm" @click="scrollToAgentSection">{{ t('task.goRegisterAgent') }}</button>
-              <button v-else-if="!auth.isLoggedIn" type="button" class="btn btn-primary btn-sm" @click="showAuthModal = true">{{ t('task.loginToAccept') }}</button>
-              <button type="button" class="btn btn-text btn-sm task-card-comment-btn" @click="openHomeTaskDetail(task)">💬 {{ t('task.comments') }}</button>
+              </Button>
+              <Button v-else-if="auth.isLoggedIn && !myAgents.length" size="sm" variant="secondary" type="button" @click="scrollToAgentSection">{{ t('task.goRegisterAgent') }}</Button>
+              <Button v-else-if="!auth.isLoggedIn" size="sm" type="button" @click="showAuthModal = true">{{ t('task.loginToAccept') }}</Button>
+              <Button size="sm" variant="ghost" type="button" class="task-card-comment-btn" @click="openHomeTaskDetail(task)">💬 {{ t('task.comments') }}</Button>
               </div>
             </div>
           </div>
           <div v-if="!tasks.length && !tasksLoading" class="tw-empty-state empty-state">
             <div class="tw-empty-state__icon" aria-hidden="true">📋</div>
             <p class="tw-empty-state__text">{{ t('task.emptyTasks') }}</p>
-            <button type="button" class="btn btn-secondary mt-2" @click="showCreateTaskModal = true">{{ t('task.publishFirst') }}</button>
+            <Button class="mt-2" variant="secondary" type="button" @click="showCreateTaskModal = true">{{ t('task.publishFirst') }}</Button>
           </div>
           <div v-if="tasks.length && homeHasMore" class="home-load-more">
-            <button type="button" class="btn btn-secondary" :disabled="tasksLoadingMore" @click="loadMoreTasks">
+            <Button variant="secondary" type="button" :disabled="tasksLoadingMore" @click="loadMoreTasks">
               {{ tasksLoadingMore ? (t('task.loadingMore') || '加载中…') : (t('task.loadMore') || '加载更多') }}
-            </button>
+            </Button>
           </div>
           </div>
         </main>
         <aside class="home-sidebar">
-          <button type="button" class="btn btn-primary home-publish-btn" @click="openCreateTaskModal">
+          <Button class="home-publish-btn" type="button" @click="openCreateTaskModal">
             {{ t('task.publish') || '发布任务' }}
-          </button>
+          </Button>
           <div class="home-sidebar-recent-agents">
             <h3 class="home-sidebar-title">{{ t('task.recentAgents') || '最近注册的 Agent' }}</h3>
             <div v-if="recentAgentsLoading" class="loading"><div class="spinner"></div></div>
@@ -219,7 +299,7 @@
               </div>
             </div>
             <p v-if="!recentAgents.length && !recentAgentsLoading" class="hint recent-agents-empty">{{ t('task.noRecentAgents') || '暂无' }}</p>
-            <router-link v-if="recentAgents.length" to="/agents" class="btn btn-text btn-sm recent-agents-link">{{ t('task.viewAllAgents') || '查看全部' }}</router-link>
+            <Button v-if="recentAgents.length" :as="RouterLink" to="/agents" size="sm" variant="ghost" class="recent-agents-link">{{ t('task.viewAllAgents') || '查看全部' }}</Button>
           </div>
         </aside>
       </div>
@@ -229,15 +309,15 @@
       <section v-if="auth.isLoggedIn" class="home-my-created section apple-section">
         <div class="section-head">
           <h2 class="section-title">{{ t('task.myCreatedTasks') }}</h2>
-          <button
+          <Button
             v-if="batchConfirmSelected.length"
+            size="sm"
             type="button"
-            class="btn btn-primary btn-sm"
             :disabled="batchConfirmLoading"
             @click="doBatchConfirm"
           >
             {{ t('task.batchConfirm') || '批量验收' }} ({{ batchConfirmSelected.length }})
-          </button>
+          </Button>
         </div>
         <div v-if="myCreatedTasksLoading" class="loading"><div class="spinner"></div></div>
         <div v-else class="my-created-list">
@@ -256,7 +336,7 @@
             </div>
             <h3 class="task-card__title">{{ task.title }}</h3>
             <p class="task-card__meta">{{ task.publisher_name }} · {{ task.subscription_count || 0 }}{{ t('task.subscribers') }}</p>
-            <router-link :to="'/tasks?taskId=' + task.id" class="btn btn-text btn-sm">{{ t('task.viewDetail') }}</router-link>
+            <Button :as="RouterLink" :to="'/tasks?taskId=' + task.id" size="sm" variant="ghost">{{ t('task.viewDetail') }}</Button>
           </div>
         </div>
         <p v-if="!myCreatedTasks.length && !myCreatedTasksLoading" class="hint">{{ t('task.noMyCreatedTasks') }}</p>
@@ -268,16 +348,18 @@
         <div v-if="!auth.isLoggedIn" class="card tw-card p-6">
           <div class="card-content agent-gate">
             <p class="hint text-zinc-400">{{ t('agent.registerHint') }}</p>
-            <button type="button" class="btn btn-primary" @click="showAuthModal = true">{{ t('agent.loginToRegister') }}</button>
+            <Button type="button" @click="showAuthModal = true">{{ t('agent.loginToRegister') }}</Button>
           </div>
         </div>
         <div v-else>
           <div class="card agent-form-card">
-            <div class="card-content form-inline">
-              <input v-model="agentForm.name" class="input" :placeholder="t('agent.name')" />
-              <input v-model="agentForm.description" class="input" :placeholder="t('agent.descriptionOptional')" />
-              <button class="btn btn-primary" :disabled="agentLoading" @click="doRegisterAgent">{{ t('agent.registerAgent') }}</button>
+            <div class="card-content form-inline form-inline--agent">
+              <Input v-model="agentForm.name" :placeholder="t('agent.name')" />
+              <Input v-model="agentForm.skill_bound_token" type="password" autocomplete="off" :placeholder="t('agent.skillBoundToken')" />
+              <Input v-model="agentForm.description" :placeholder="t('agent.descriptionOptional')" />
+              <Button :disabled="agentLoading" @click="doRegisterAgent">{{ t('agent.registerAgent') }}</Button>
             </div>
+            <p class="form-hint">{{ t('agent.skillBoundTokenHint') }}</p>
             <p v-if="agentError" class="error-msg">{{ agentError }}</p>
           </div>
           <div class="agent-list">
@@ -285,11 +367,18 @@
               <div class="card-content">
                 <strong>{{ a.name }}</strong>
                 <span class="agent-type">{{ a.agent_type }}</span>
+                <span v-if="a.has_skill_token" class="badge badge--skill-token" :title="t('agent.skillBound')">{{ t('agent.skillBound') }}</span>
                 <p class="desc-small">{{ a.description || t('common.noDescription') }}</p>
               </div>
             </div>
           </div>
-          <p v-if="myAgents.length === 0 && !agentsLoading" class="empty">{{ t('agent.emptyAgents') }}</p>
+          <div v-if="myAgents.length === 0 && !agentsLoading" class="empty agent-empty-hint">
+            <p class="empty-text">{{ t('agent.emptyAgents') }}</p>
+            <div class="agent-empty-actions">
+              <Button :as="RouterLink" to="/skill" size="sm">{{ t('taskManage.registerViaOpenClawSkill') }}</Button>
+              <Button :as="RouterLink" to="/agents" size="sm" variant="secondary">{{ t('taskManage.registerInAgentManage') }}</Button>
+            </div>
+          </div>
         </div>
       </section>
       </template>
@@ -302,16 +391,16 @@
         <div v-if="!auth.isLoggedIn" class="publish-gate">
           <p class="hint">{{ t('task.publishHint') }}</p>
           <div class="publish-gate-actions">
-            <button type="button" class="btn btn-primary" @click="showCreateTaskModal = false; showAuthModal = true">{{ t('task.loginToPublish') }}</button>
-            <button type="button" class="btn btn-secondary" :disabled="guestTokenLoading" @click="doGuestPublish">{{ t('task.publishAsGuest') }}</button>
-            <button type="button" class="btn btn-text" @click="closeCreateTaskModal">{{ t('common.cancel') }}</button>
+            <Button type="button" @click="showCreateTaskModal = false; showAuthModal = true">{{ t('task.loginToPublish') }}</Button>
+            <Button type="button" variant="secondary" :disabled="guestTokenLoading" @click="doGuestPublish">{{ t('task.publishAsGuest') }}</Button>
+            <Button type="button" variant="ghost" @click="closeCreateTaskModal">{{ t('common.cancel') }}</Button>
           </div>
         </div>
         <div v-else class="create-task-steps">
           <div v-if="draftExists" class="draft-bar">
             <span class="draft-bar__text">{{ t('task.draftExists') || '您有未完成的草稿' }}</span>
-            <button type="button" class="btn btn-secondary btn-sm" @click="loadDraft(); showSuccess(t('task.draftRestored') || '已恢复草稿')">{{ t('task.draftRestore') || '从草稿恢复' }}</button>
-            <button type="button" class="btn btn-text btn-sm" @click="clearDraft()">{{ t('task.draftDiscard') || '丢弃草稿' }}</button>
+            <Button size="sm" variant="secondary" type="button" @click="loadDraft(); showSuccess(t('task.draftRestored') || '已恢复草稿')">{{ t('task.draftRestore') || '从草稿恢复' }}</Button>
+            <Button size="sm" variant="ghost" type="button" @click="clearDraft()">{{ t('task.draftDiscard') || '丢弃草稿' }}</Button>
           </div>
           <div class="create-step-tabs">
             <button type="button" class="step-tab" :class="{ active: createStep === 1 }" @click="createStep = 1">1. {{ t('taskManage.stepTaskInfo') || '任务信息' }}</button>
@@ -334,12 +423,12 @@
             </div>
             <div class="form-group">
               <label class="form-label">{{ t('agentGuide.fieldTitle') }} <span class="required">*</span></label>
-              <input v-model="publishForm.title" class="input" type="text" :placeholder="t('task.title')" minlength="2" />
+              <Input v-model="publishForm.title" type="text" :placeholder="t('task.title')" minlength="2" />
               <p class="form-hint">{{ t('task.titleHint') }}</p>
             </div>
             <div class="form-group">
               <label class="form-label">{{ t('task.description') }}</label>
-              <textarea v-model="publishForm.description" class="input textarea-input" rows="4" :placeholder="t('task.requirementsPlaceholder')" />
+              <Textarea v-model="publishForm.description" rows="4" :placeholder="t('task.requirementsPlaceholder')" />
               <p class="form-hint">{{ t('task.descriptionHint') }}</p>
             </div>
             <div class="form-group">
@@ -356,26 +445,26 @@
             </div>
             <div class="form-group">
               <label class="form-label">{{ t('task.requirements') }}</label>
-              <textarea v-model="publishForm.requirements" class="input textarea-input" rows="2" :placeholder="t('task.requirementsPlaceholder')" />
+              <Textarea v-model="publishForm.requirements" rows="2" :placeholder="t('task.requirementsPlaceholder')" />
               <p class="form-hint">{{ t('task.requirementsHint') }}</p>
             </div>
             <div class="form-group form-row-2">
               <div class="form-group">
                 <label class="form-label">{{ t('task.location') }}</label>
-                <input v-model="publishForm.location" class="input" type="text" :placeholder="t('task.locationPlaceholder')" />
+                <Input v-model="publishForm.location" type="text" :placeholder="t('task.locationPlaceholder')" />
               </div>
               <div class="form-group">
                 <label class="form-label">{{ t('task.durationEstimate') }}</label>
-                <input v-model="publishForm.duration_estimate" class="input" type="text" :placeholder="t('task.durationPlaceholder')" />
+                <Input v-model="publishForm.duration_estimate" type="text" :placeholder="t('task.durationPlaceholder')" />
               </div>
             </div>
             <div class="form-group">
               <label class="form-label">{{ t('task.skills') }}</label>
-              <input v-model="publishForm.skills_text" class="input" type="text" :placeholder="t('task.skillsPlaceholder')" />
+              <Input v-model="publishForm.skills_text" type="text" :placeholder="t('task.skillsPlaceholder')" />
             </div>
             <div class="step-actions">
-              <button type="button" class="btn btn-text" @click="saveDraft">{{ t('task.draftSave') || '保存草稿' }}</button>
-              <button type="button" class="btn btn-primary" @click="createStep = 2">{{ t('common.next') }}</button>
+              <Button type="button" variant="ghost" @click="saveDraft">{{ t('task.draftSave') || '保存草稿' }}</Button>
+              <Button type="button" @click="createStep = 2">{{ t('common.next') }}</Button>
             </div>
           </div>
           <div v-show="createStep === 2" class="step-panel">
@@ -387,13 +476,13 @@
               <p class="hint">{{ t('task.webhookHint') }}</p>
               <div class="form-group">
                 <label class="form-label">{{ t('agentGuide.fieldWebhook') }}</label>
-                <input v-model="publishForm.completion_webhook_url" class="input full-width" type="url" :placeholder="t('task.webhookPlaceholder')" />
+                <Input v-model="publishForm.completion_webhook_url" class="w-full" type="url" :placeholder="t('task.webhookPlaceholder')" />
               </div>
             </template>
             <div class="step-actions">
-              <button type="button" class="btn btn-text" @click="saveDraft">{{ t('task.draftSave') || '保存草稿' }}</button>
-              <button type="button" class="btn btn-secondary" @click="createStep = 1">{{ t('common.prev') }}</button>
-              <button type="button" class="btn btn-primary" @click="createStep = 3">{{ t('common.next') }}</button>
+              <Button type="button" variant="ghost" @click="saveDraft">{{ t('task.draftSave') || '保存草稿' }}</Button>
+              <Button type="button" variant="secondary" @click="createStep = 1">{{ t('common.prev') }}</Button>
+              <Button type="button" @click="createStep = 3">{{ t('common.next') }}</Button>
             </div>
           </div>
           <div v-show="createStep === 3" class="step-panel">
@@ -420,14 +509,14 @@
             </div>
             <div class="form-group">
               <label class="form-label">{{ t('task.discordWebhookLabel') }}</label>
-              <input v-model="publishForm.discord_webhook_url" class="input full-width" type="url" :placeholder="t('task.discordWebhookPlaceholder')" />
+              <Input v-model="publishForm.discord_webhook_url" class="w-full" type="url" :placeholder="t('task.discordWebhookPlaceholder')" />
             </div>
             <p class="hint">{{ t('task.balanceHint', { n: accountCredits }) }}</p>
             <p v-if="publishError" class="error-msg" role="alert">{{ publishError }}</p>
             <div class="step-actions">
-              <button type="button" class="btn btn-text" @click="saveDraft">{{ t('task.draftSave') || '保存草稿' }}</button>
-              <button type="button" class="btn btn-secondary" @click="createStep = 2">{{ t('common.prev') }}</button>
-              <button type="button" class="btn btn-primary" :disabled="publishLoading" @click="doPublishFromModal">{{ publishLoading ? t('task.publishBtnLoading') : t('task.publishBtn') }}</button>
+              <Button type="button" variant="ghost" @click="saveDraft">{{ t('task.draftSave') || '保存草稿' }}</Button>
+              <Button type="button" variant="secondary" @click="createStep = 2">{{ t('common.prev') }}</Button>
+              <Button type="button" :disabled="publishLoading" @click="doPublishFromModal">{{ publishLoading ? t('task.publishBtnLoading') : t('task.publishBtn') }}</Button>
             </div>
           </div>
         </div>
@@ -439,47 +528,48 @@
       <div class="modal" data-testid="auth-modal">
         <h3>{{ authTab === 'login' ? t('auth.login') : t('auth.register') }}</h3>
         <div class="tabs">
-          <button class="btn btn-secondary" :class="{ active: authTab === 'login' }" @click="authTab = 'login'">{{ t('auth.login') }}</button>
-          <button class="btn btn-secondary" :class="{ active: authTab === 'register' }" @click="authTab = 'register'">{{ t('auth.register') }}</button>
+          <Button variant="secondary" :class="{ 'ring-2 ring-primary ring-offset-2 ring-offset-background': authTab === 'login' }" @click="authTab = 'login'">{{ t('auth.login') }}</Button>
+          <Button variant="secondary" :class="{ 'ring-2 ring-primary ring-offset-2 ring-offset-background': authTab === 'register' }" @click="authTab = 'register'">{{ t('auth.register') }}</Button>
         </div>
         <div v-if="authTab === 'login'" class="form">
-          <input v-model="loginForm.username" class="input" :placeholder="t('auth.username')" />
-          <input v-model="loginForm.password" type="password" class="input" :placeholder="t('auth.password')" />
-          <button class="btn btn-primary" :disabled="authLoading" @click="doLogin">{{ t('auth.login') }}</button>
+          <Input v-model="loginForm.username" :placeholder="t('auth.username')" />
+          <Input v-model="loginForm.password" type="password" :placeholder="t('auth.password')" />
+          <Button :disabled="authLoading" @click="doLogin">{{ t('auth.login') }}</Button>
           <div class="oauth-divider">{{ t('auth.or') }}</div>
           <a :href="googleLoginUrl" class="btn btn-google" :class="{ 'btn-google-unconfigured': !googleOAuthConfigured }" :title="!googleOAuthConfigured ? (googleConfigError || t('oauthError.server_config')) : undefined" target="_self" @click="onGoogleLoginClick">{{ t('auth.loginWithGoogle') }}</a>
           <p v-if="!googleOAuthConfigured && googleConfigError" class="hint google-config-hint">{{ googleConfigError }}</p>
         </div>
         <div v-else class="form">
-          <input v-model="registerForm.username" class="input" :placeholder="t('auth.username')" />
-          <input v-model="registerForm.email" class="input" type="email" :placeholder="t('auth.email')" />
+          <Input v-model="registerForm.username" :placeholder="t('auth.username')" />
+          <Input v-model="registerForm.email" type="email" :placeholder="t('auth.email')" />
           <div class="form-inline verification-code-row">
-            <input v-model="registerForm.verification_code" class="input" maxlength="6" :placeholder="t('auth.verificationCode')" />
-            <button type="button" class="btn btn-secondary" :disabled="sendCodeLoading || sendCodeCountdown > 0" @click="doSendVerificationCode">
+            <Input v-model="registerForm.verification_code" maxlength="6" :placeholder="t('auth.verificationCode')" />
+            <Button type="button" variant="secondary" :disabled="sendCodeLoading || sendCodeCountdown > 0" @click="doSendVerificationCode">
               {{ sendCodeCountdown > 0 ? t('auth.sendCodeCountdown', { n: sendCodeCountdown }) : t('auth.sendVerificationCode') }}
-            </button>
+            </Button>
           </div>
-          <input v-model="registerForm.password" type="password" class="input" :placeholder="t('auth.password')" />
-          <button class="btn btn-primary" :disabled="authLoading" @click="doRegister">{{ t('auth.register') }}</button>
+          <Input v-model="registerForm.password" type="password" :placeholder="t('auth.password')" />
+          <Button :disabled="authLoading" @click="doRegister">{{ t('auth.register') }}</Button>
           <div class="oauth-divider">{{ t('auth.or') }}</div>
           <a :href="googleLoginUrl" class="btn btn-google" :class="{ 'btn-google-unconfigured': !googleOAuthConfigured }" :title="!googleOAuthConfigured ? (googleConfigError || t('oauthError.server_config')) : undefined" target="_self" @click="onGoogleLoginClick">{{ t('auth.loginWithGoogle') }}</a>
           <p v-if="!googleOAuthConfigured && googleConfigError" class="hint google-config-hint">{{ googleConfigError }}</p>
         </div>
         <p v-if="authError" class="error-msg">{{ authError }}</p>
-        <button class="btn btn-secondary close-btn" @click="showAuthModal = false">{{ t('common.close') }}</button>
+        <Button variant="secondary" class="close-btn w-full" @click="showAuthModal = false">{{ t('common.close') }}</Button>
       </div>
     </div>
 
-    <!-- 提交完成弹窗（接取者填写结果摘要）-->
+    <!-- 提交完成弹窗（接取者填写结果摘要与链接）-->
     <div v-if="submitCompletionTask" class="modal-mask" @click.self="submitCompletionTask = null">
       <div class="modal">
         <h3>{{ t('task.submitCompletionTitle', { title: submitCompletionTask.title }) }}</h3>
         <p class="hint">{{ t('task.submitCompletionHint') }}</p>
         <div class="form">
-          <textarea v-model="submitCompletionForm.result_summary" class="input textarea" :placeholder="t('task.resultSummaryPlaceholder')" rows="3" />
-          <button class="btn btn-primary" :disabled="submitCompletionLoading" @click="doSubmitCompletion">{{ t('task.submitCompletion') }}</button>
+          <Textarea v-model="submitCompletionForm.result_summary" rows="3" :placeholder="t('task.resultSummaryPlaceholder')" />
+          <Input v-model="submitCompletionForm.completion_link" type="url" :placeholder="t('task.completionLinkPlaceholder')" />
+          <Button :disabled="submitCompletionLoading" @click="doSubmitCompletion">{{ t('task.submitCompletion') }}</Button>
         </div>
-        <button class="btn btn-secondary close-btn" @click="submitCompletionTask = null">{{ t('common.cancel') }}</button>
+        <Button variant="secondary" class="close-btn w-full" @click="submitCompletionTask = null">{{ t('common.cancel') }}</Button>
       </div>
     </div>
 
@@ -489,34 +579,37 @@
         <h3>{{ t('task.rejectTitle') || '拒绝验收' }}</h3>
         <p class="hint">{{ t('task.rejectHint') || '请填写拒绝理由，以便接取者改进（将作为强化学习反馈）。' }}</p>
         <div class="form">
-          <textarea v-model="rejectReason" class="input textarea" :placeholder="t('task.rejectReasonPlaceholder') || '例如：代码规范需改进、逻辑需更严密…'" rows="3" />
+          <Textarea v-model="rejectReason" rows="3" :placeholder="t('task.rejectReasonPlaceholder') || '例如：代码规范需改进、逻辑需更严密…'" />
           <div class="quick-reply-templates flex flex-wrap gap-2 mt-2">
-            <button
+            <Button
               v-for="tpl in rejectQuickReplyTemplates"
               :key="tpl"
+              size="sm"
+              variant="ghost"
               type="button"
-              class="btn btn-text btn-sm border border-zinc-600 rounded-lg px-2 py-1 text-zinc-400 hover:text-white"
+              class="border border-zinc-600 rounded-lg px-2 py-1 text-zinc-400 hover:text-white"
               @click="rejectReason = (rejectReason ? rejectReason + '；' : '') + tpl"
             >
               {{ tpl }}
-            </button>
+            </Button>
           </div>
-          <button class="btn btn-primary mt-3" :disabled="rejectLoading === rejectTaskId || !rejectReason.trim()" @click="doRejectWithReason">{{ t('task.reject') }}</button>
+          <Button class="mt-3" :disabled="rejectLoading === rejectTaskId || !rejectReason.trim()" @click="doRejectWithReason">{{ t('task.reject') }}</Button>
         </div>
-        <button class="btn btn-secondary close-btn" @click="rejectTaskId = null; rejectReason = ''">{{ t('common.cancel') }}</button>
+        <Button variant="secondary" class="close-btn w-full" @click="rejectTaskId = null; rejectReason = ''">{{ t('common.cancel') }}</Button>
       </div>
     </div>
 
-    <!-- 首页任务详情 + 评论弹窗（BotLearn 风格：发布者/时间/结构化信息） -->
+    <!-- 首页任务详情 + 评论弹窗：发布者/时间/结构化信息 -->
     <div v-if="homeTaskDetail" class="modal-mask" @click.self="closeHomeTaskDetail">
       <div class="modal modal--task-detail">
         <div class="task-detail-modal-head">
           <h3 class="task-detail-modal-title">{{ homeTaskDetail.title }}</h3>
-          <button type="button" class="btn btn-text btn-sm" aria-label="关闭" @click="closeHomeTaskDetail">×</button>
+          <Button size="sm" variant="ghost" type="button" aria-label="关闭" @click="closeHomeTaskDetail">×</Button>
         </div>
         <div class="task-detail-modal-meta-row">
           <span class="task-publisher-avatar" aria-hidden="true">{{ (homeTaskDetail.publisher_name || '?').charAt(0).toUpperCase() }}</span>
           <span>{{ t('task.publisher') }}：{{ homeTaskDetail.publisher_name }}</span>
+          <span v-if="homeTaskDetail.creator_agent_name" class="task-creator-agent"> · {{ t('task.publishedByAgent') }}：{{ homeTaskDetail.creator_agent_name }}</span>
           <span v-if="homeTaskDetail.created_at" class="task-created-at"> · {{ formatTaskCreatedAt(homeTaskDetail.created_at) }}</span>
           <span class="badge" :class="homeTaskDetail.status">{{ t('status.' + homeTaskDetail.status) || homeTaskDetail.status }}</span>
           <span v-if="homeTaskDetail.reward_points" class="detail-reward"> · {{ t('task.reward', { n: homeTaskDetail.reward_points }) }}</span>
@@ -529,6 +622,13 @@
           <template v-if="homeTaskDetail.location"><dt>{{ t('task.detailLocation') }}</dt><dd>{{ homeTaskDetail.location }}</dd></template>
           <template v-if="homeTaskDetail.duration_estimate"><dt>{{ t('task.detailDuration') }}</dt><dd>{{ homeTaskDetail.duration_estimate }}</dd></template>
         </dl>
+        <div v-if="homeTaskDetail.status === 'pending_verification' && homeTaskDetail.output_data && (homeTaskDetail.output_data.result_summary || (homeTaskDetail.output_data.evidence && homeTaskDetail.output_data.evidence.link))" class="task-detail-completion-submission">
+          <h4 class="task-comments-title">{{ t('task.completionSubmissionTitle') }}</h4>
+          <p v-if="homeTaskDetail.output_data.result_summary" class="completion-summary">{{ homeTaskDetail.output_data.result_summary }}</p>
+          <p v-if="homeTaskDetail.output_data.evidence && homeTaskDetail.output_data.evidence.link" class="completion-link">
+            <a :href="String(homeTaskDetail.output_data.evidence.link)" target="_blank" rel="noopener noreferrer">{{ t('task.completionLink') }}：{{ homeTaskDetail.output_data.evidence.link }}</a>
+          </p>
+        </div>
         <div class="task-detail-modal-comments">
           <h4 class="task-comments-title">{{ t('task.comments') }}</h4>
           <div v-if="homeTaskCommentsLoading" class="loading"><div class="spinner"></div></div>
@@ -548,8 +648,8 @@
           </ul>
           <p v-if="!homeTaskComments.length && !homeTaskCommentsLoading" class="task-comments-empty">{{ t('task.noComments') }}</p>
           <div v-if="auth.isLoggedIn" class="task-comment-form">
-            <textarea v-model="homeNewCommentContent" class="input textarea-input" rows="2" :placeholder="t('task.writeComment')" />
-            <button type="button" class="btn btn-primary btn-sm" :disabled="homePostCommentLoading || !homeNewCommentContent.trim()" @click="postHomeComment">{{ t('task.postComment') }}</button>
+            <Textarea v-model="homeNewCommentContent" rows="2" :placeholder="t('task.writeComment')" />
+            <Button size="sm" type="button" :disabled="homePostCommentLoading || !homeNewCommentContent.trim()" @click="postHomeComment">{{ t('task.postComment') }}</Button>
           </div>
           <p v-else class="hint">{{ t('task.loginToComment') }}</p>
         </div>
@@ -561,17 +661,18 @@
       <div class="modal">
         <h3>{{ t('task.selectAgentTitle', { title: subscribeTaskItem.title }) }}</h3>
         <div class="agent-select-list">
-          <button
+          <Button
             v-for="a in myAgents"
             :key="a.id"
-            class="btn btn-secondary block"
+            variant="secondary"
+            class="w-full"
             :disabled="subscribeLoading === subscribeTaskItem.id"
             @click="doSubscribe(subscribeTaskItem.id, a.id)"
           >
             {{ a.name }}（{{ a.agent_type }}）
-          </button>
+          </Button>
         </div>
-        <button class="btn btn-secondary close-btn" @click="subscribeTaskItem = null">{{ t('common.cancel') }}</button>
+        <Button variant="secondary" class="close-btn w-full" @click="subscribeTaskItem = null">{{ t('common.cancel') }}</Button>
       </div>
     </div>
 
@@ -596,7 +697,7 @@
 <script setup lang="ts">
 declare const __BUILD_ID__: string | undefined
 import { ref, reactive, onMounted, onUnmounted, computed, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { i18n, setLocale, safeT, type LocaleKey } from './i18n'
 import { useAuthStore } from './stores/auth'
@@ -610,9 +711,12 @@ import AccountPage from './views/AccountPage.vue'
 import OpenClawQuickstartPage from './views/OpenClawQuickstartPage.vue'
 import DashboardView from './views/DashboardView.vue'
 import LeaderboardView from './views/LeaderboardView.vue'
-import PlaybookOnboardingView from './views/PlaybookOnboardingView.vue'
-import AgentRentalView from './views/AgentRentalView.vue'
+import PlaybookView from './views/PlaybookView.vue'
 import AdminView from './views/AdminView.vue'
+import { Button } from './components/ui/button'
+import { Input } from './components/ui/input'
+import { Card, CardContent, CardHeader, CardTitle } from './components/ui/card'
+import { Textarea } from './components/ui/textarea'
 import { getTemplateById } from './constants/taskTemplates'
 
 const route = useRoute()
@@ -686,6 +790,12 @@ const homeCategoryOptions = [
 
 const tasksTotal = ref<number>(0)
 const agentsTotal = ref<number>(0)
+const homeStats = ref<Record<string, number>>({})
+const homeStatsLoading = ref(true)
+const homeActivity = ref<api.ActivityEvent[]>([])
+const homeActivityLoading = ref(true)
+const homeLeaderboard = ref<api.LeaderboardItem[]>([])
+const homeLeaderboardLoading = ref(true)
 const showCreateTaskModal = ref(false)
 const createStep = ref(1)
 const myCreatedTasks = ref<typeof tasks.value>([])
@@ -728,7 +838,7 @@ const recentAgents = ref<Array<{ id: number; name: string; agent_type: string; o
 const recentAgentsLoading = ref(false)
 const myAgents = ref<Array<{ id: number; name: string; description: string; agent_type: string }>>([])
 const agentsLoading = ref(false)
-const agentForm = reactive({ name: '', description: '' })
+const agentForm = reactive({ name: '', description: '', skill_bound_token: '' })
 const agentLoading = ref(false)
 const agentError = ref('')
 
@@ -741,7 +851,7 @@ const homeTaskComments = ref<api.TaskCommentItem[]>([])
 const homeTaskCommentsLoading = ref(false)
 const homeNewCommentContent = ref('')
 const homePostCommentLoading = ref(false)
-const submitCompletionForm = reactive({ result_summary: '' })
+const submitCompletionForm = reactive({ result_summary: '', completion_link: '' })
 const submitCompletionLoading = ref(false)
 const confirmLoading = ref<number | null>(null)
 const rejectLoading = ref<number | null>(null)
@@ -797,6 +907,10 @@ function loadDraft() {
   if (typeof d.skills_text === 'string') publishForm.skills_text = d.skills_text
   if (Array.isArray(d.invited_agent_ids)) publishForm.invited_agent_ids = d.invited_agent_ids.map(Number).filter(Boolean)
 }
+function openCreateTaskModalWithDraft() {
+  loadDraft()
+  showCreateTaskModal.value = true
+}
 function clearDraft() {
   try {
     localStorage.removeItem(PUBLISH_DRAFT_KEY)
@@ -819,6 +933,7 @@ const SKILL_BANNER_KEY = 'clawjob_skill_banner_dismissed'
 const showSkillBanner = ref(false)
 const showAgentGuide = ref(false)
 const successToast = ref('')
+const postPublishRegisterHint = ref(false)
 function showSuccess(message: string) {
   successToast.value = message
   setTimeout(() => { successToast.value = '' }, 2200)
@@ -905,6 +1020,32 @@ function loadStats() {
   })
 }
 
+function loadHomeDashboard() {
+  homeStatsLoading.value = true
+  homeActivityLoading.value = true
+  homeLeaderboardLoading.value = true
+  api.fetchStats().then((res) => {
+    homeStats.value = res.data ?? {}
+  }).catch(() => { homeStats.value = {} }).finally(() => { homeStatsLoading.value = false })
+  api.fetchActivity(50).then((res) => {
+    homeActivity.value = res.data.events ?? []
+  }).catch(() => { homeActivity.value = [] }).finally(() => { homeActivityLoading.value = false })
+  api.fetchLeaderboard({ limit: 10 }).then((res) => {
+    homeLeaderboard.value = res.data.items ?? []
+  }).catch(() => { homeLeaderboard.value = [] }).finally(() => { homeLeaderboardLoading.value = false })
+}
+
+function formatTimeAgoHome(iso: string) {
+  try {
+    const d = new Date(iso)
+    const diff = Math.floor((Date.now() - d.getTime()) / 1000)
+    if (diff < 60) return (diff <= 0 ? '1' : String(diff)) + (locale.value === 'zh-CN' ? '秒前' : 's ago')
+    if (diff < 3600) return Math.floor(diff / 60) + (locale.value === 'zh-CN' ? '分钟前' : 'm ago')
+    if (diff < 86400) return Math.floor(diff / 3600) + (locale.value === 'zh-CN' ? '小时前' : 'h ago')
+    return Math.floor(diff / 86400) + (locale.value === 'zh-CN' ? '天前' : 'd ago')
+  } catch { return '' }
+}
+
 function onHomeSearchInput() {
   if (homeSearchTimer) clearTimeout(homeSearchTimer)
   homeSearchTimer = setTimeout(() => loadTasks(), 300)
@@ -918,7 +1059,7 @@ function formatCommentTimeHome(iso: string | null) {
   if (diff < 1) return t('task.justNow')
   if (diff < 60) return t('task.minutesAgo', { n: Math.floor(diff) })
   if (diff < 1440) return t('task.hoursAgo', { n: Math.floor(diff / 60) })
-  return iso.slice(0, 16).replace('T', ' ')
+  return d.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
 }
 
 function formatTaskCreatedAt(iso: string | undefined) {
@@ -931,7 +1072,7 @@ function formatTaskCreatedAt(iso: string | undefined) {
   if (diffMin < 1440) return t('task.hoursAgo', { n: Math.floor(diffMin / 60) })
   const diffDays = Math.floor(diffMin / 1440)
   if (diffDays < 31) return (t('task.daysAgo') as string).replace('{n}', String(diffDays))
-  return iso.slice(0, 10)
+  return d.toLocaleDateString(undefined, { dateStyle: 'short' })
 }
 
 function openHomeTaskDetail(task: api.TaskListItem) {
@@ -1169,6 +1310,9 @@ function doPublish() {
     loadAccountMe()
     loadTasks()
     loadMyCreatedTasks()
+    if (auth.isGuestUser || !myAgents.value.length) {
+      postPublishRegisterHint.value = true
+    }
   }).catch((e) => {
     const d = e.response?.data?.detail
     publishError.value = Array.isArray(d) ? (d.map((x: { msg?: string }) => x?.msg || '').filter(Boolean).join('; ') || t('task.publishErrorGeneric')) : (typeof d === 'string' ? d : t('task.publishErrorGeneric'))
@@ -1184,9 +1328,11 @@ function doRegisterAgent() {
   api.registerAgent({
     name: agentForm.name.trim(),
     description: agentForm.description.trim(),
+    skill_bound_token: agentForm.skill_bound_token.trim() || undefined,
   }).then(() => {
     agentForm.name = ''
     agentForm.description = ''
+    agentForm.skill_bound_token = ''
     loadMyAgents()
   }).catch((e) => {
     agentError.value = e.response?.data?.detail || t('common.registerFailed')
@@ -1212,7 +1358,11 @@ function doSubscribe(taskId: number, agentId: number) {
 
 function formatDeadline(iso: string) {
   if (!iso) return ''
-  return iso.slice(0, 19).replace('T', ' ')
+  try {
+    return new Date(iso).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
+  } catch {
+    return iso.slice(0, 19).replace('T', ' ')
+  }
 }
 function isExecutor(t: { agent_id?: number }) {
   if (!auth.userId || !t.agent_id) return false
@@ -1238,12 +1388,14 @@ function taskCategoryLabel(cat: string) {
 function openSubmitCompletionModal(task: { id: number; title: string }) {
   submitCompletionTask.value = task
   submitCompletionForm.result_summary = ''
+  submitCompletionForm.completion_link = ''
 }
 function doSubmitCompletion() {
   if (!submitCompletionTask.value) return
   const taskId = submitCompletionTask.value.id
   submitCompletionLoading.value = true
-  api.submitCompletion(taskId, { result_summary: submitCompletionForm.result_summary.trim() }).then(() => {
+  const evidence = submitCompletionForm.completion_link.trim() ? { link: submitCompletionForm.completion_link.trim() } : {}
+  api.submitCompletion(taskId, { result_summary: submitCompletionForm.result_summary.trim(), evidence }).then(() => {
     submitCompletionTask.value = null
     showSuccess(t('task.submitCompletionSuccess'))
     loadTasks()
@@ -1343,9 +1495,12 @@ onMounted(() => {
       loadMyAgents()
     }
   }
+  draftExists.value = hasDraft()
   loadTasks()
   loadCandidates()
   loadRecentAgents()
+  loadStats()
+  loadHomeDashboard()
   if (auth.isLoggedIn) {
     loadAccountMe()
     loadMyAgents()
@@ -1393,12 +1548,54 @@ onUnmounted(() => {
   margin-bottom: 0.75rem;
 }
 .section-head .section-title { margin-bottom: 0; }
+.agent-empty-hint .empty-text { margin: 0 0 0.75rem; }
+.agent-empty-hint .agent-empty-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.agent-empty-hint .agent-empty-actions a { text-decoration: none; }
 .task-card__batch-check {
   display: inline-flex;
   align-items: center;
   margin-right: 0.5rem;
 }
 .task-card__batch-check input { margin: 0; }
+.task-detail-completion-submission { margin-top: 1rem; padding: 0.75rem; background: var(--surface, rgba(255,255,255,0.05)); border-radius: 8px; }
+.task-detail-completion-submission .completion-summary { margin: 0 0 0.5rem; white-space: pre-wrap; font-size: 0.9rem; color: var(--text-secondary); }
+.task-detail-completion-submission .completion-link { margin: 0; font-size: 0.9rem; }
+.task-detail-completion-submission .completion-link a { color: var(--primary-color); }
+.draft-bar-global { background: rgba(var(--primary-rgb, 34, 197, 94), 0.08); border-color: rgba(var(--primary-rgb), 0.25); }
+.badge--skill-token { background: rgba(34, 197, 94, 0.15); color: var(--primary-color); font-size: 0.7rem; }
+.form-inline--agent { flex-wrap: wrap; }
+.form-inline--agent .input { min-width: 10rem; }
+
+/* 首页 Dashboard：KPI + 实况 + 排行榜 */
+.home-dashboard { margin-bottom: 2rem; }
+.home-kpi { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.75rem; margin-bottom: 1.25rem; }
+@media (min-width: 640px) { .home-kpi { grid-template-columns: repeat(4, 1fr); } }
+.home-kpi-card { padding: 1rem 1.25rem; border-radius: var(--radius-md, 8px); border: 1px solid var(--border-muted, rgba(255,255,255,0.08)); background: rgba(226, 232, 240, 0.04); }
+.home-kpi-value { display: block; font-size: 1.35rem; font-weight: 700; color: var(--primary-color); }
+.home-kpi-label { display: block; margin-top: 0.25rem; font-size: 0.78rem; color: var(--text-secondary); }
+.home-kpi-skeleton { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.75rem; }
+@media (min-width: 640px) { .home-kpi-skeleton { grid-template-columns: repeat(4, 1fr); } }
+.home-kpi-skeleton .tw-skeleton { height: 4rem; border-radius: 8px; }
+.home-dash-row { display: grid; grid-template-columns: 1fr; gap: 1rem; }
+@media (min-width: 900px) { .home-dash-row { grid-template-columns: 1fr 320px; } }
+.home-dash-feed .card-content, .home-dash-leaderboard .card-content { padding: 1rem 1.25rem; }
+.home-dash-feed-title { font-size: 1rem; font-weight: 600; margin: 0 0 0.75rem; }
+.home-activity-list { list-style: none; padding: 0; margin: 0; }
+.home-activity-item { display: grid; grid-template-columns: 4rem 1fr auto; gap: 0.5rem; padding: 0.5rem 0; border-bottom: 1px solid rgba(226,232,240,0.06); font-size: 0.85rem; align-items: start; }
+.home-activity-item:last-child { border-bottom: none; }
+.home-activity-time { color: var(--text-secondary); font-size: 0.75rem; }
+.home-activity-text { color: var(--text-primary); line-height: 1.35; }
+.home-activity-link { color: var(--primary-color); text-decoration: none; font-size: 0.8rem; }
+.home-activity-link:hover { text-decoration: underline; }
+.home-activity-skeleton .tw-skeleton { background: var(--surface); }
+.home-leaderboard-list { display: flex; flex-direction: column; gap: 0.25rem; }
+.home-leaderboard-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.4rem 0; font-size: 0.9rem; }
+.home-lb-rank { font-weight: 600; color: var(--primary-color); min-width: 1.5rem; }
+.home-lb-name { flex: 1; min-width: 0; }
+.home-lb-earned { font-weight: 600; color: var(--primary-color); }
+.home-lb-earned .unit { font-size: 0.8em; font-weight: 400; color: var(--text-secondary); }
+.home-leaderboard-skeleton .tw-skeleton { background: var(--surface); }
+.mt-2 { margin-top: 0.5rem; }
 
 /* 首页任务列表：网格与骨架屏（不依赖 Tailwind） */
 .home-task-list--grid {

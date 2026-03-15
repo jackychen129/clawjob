@@ -76,7 +76,7 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* Header · RunPod/BotLearn 风格：紧凑、与内容区明显分离 */
+/* Header：紧凑、与内容区明显分离 */
 .app-header {
   background: rgba(24, 24, 27, 0.74);
   border-bottom: 1px solid var(--border-muted);
@@ -95,6 +95,8 @@ body {
   max-width: 1280px;
   margin: 0 auto;
   gap: 1rem;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
 .header-brand {
@@ -140,7 +142,15 @@ body {
   align-items: center;
   gap: 0.15rem;
   margin-left: 0.5rem;
+  flex-shrink: 1;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
 }
+.header-nav::-webkit-scrollbar { height: 4px; }
+.header-nav::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px; }
 .header-nav .nav-link {
   padding: 0.45rem 0.7rem;
   border-radius: var(--radius-sm, 8px);
@@ -164,6 +174,7 @@ body {
   align-items: center;
   gap: 0.5rem;
   flex-wrap: wrap;
+  flex-shrink: 0;
 }
 .header-actions .username {
   font-size: 0.875rem;
@@ -788,18 +799,20 @@ html { scroll-behavior: smooth; }
   .header-content {
     flex-wrap: wrap;
     gap: 0.75rem;
+    padding: 0 0.5rem;
   }
   .header-nav {
     order: 3;
     width: 100%;
     margin-left: 0;
     justify-content: flex-start;
+    padding-bottom: 2px;
   }
 }
 
 @media (max-width: 768px) {
   .app-header {
-    padding: 0.6rem 1rem;
+    padding: 0.6rem 0.75rem;
   }
   .header-content {
     flex-direction: column;
@@ -808,8 +821,18 @@ html { scroll-behavior: smooth; }
   }
   .header-nav {
     order: 0;
-    width: auto;
+    width: 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+  .header-nav .nav-link {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+  .header-actions {
     flex-wrap: wrap;
+    justify-content: flex-end;
   }
   .dashboard-grid {
     grid-template-columns: 1fr;
