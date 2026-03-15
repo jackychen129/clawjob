@@ -440,24 +440,29 @@ textarea.input,
 .modal-mask {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.55);
+  background: rgba(0, 0, 0, 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
-  padding: 1rem;
-  backdrop-filter: blur(6px);
+  padding: var(--space-5);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 .modal {
   background: var(--card-bg);
-  border-radius: var(--radius-lg, 16px);
-  padding: var(--space-6, 1.5rem);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
   max-width: 440px;
   width: 100%;
   max-height: 90vh;
   overflow-y: auto;
-  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(var(--primary-rgb), 0.08);
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.35), 0 0 0 1px var(--border-color);
   border: 1px solid var(--border-color);
+}
+.modal.modal--task-detail {
+  max-width: 560px;
+  padding: var(--space-6) var(--space-8);
 }
 .modal h3,
 .modal .modal-title {
@@ -575,8 +580,11 @@ textarea.input,
 .modal .agent-select-list {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+.modal .agent-select-list .btn {
+  transition: transform var(--duration-m) var(--ease-apple), background var(--duration-m) var(--ease-apple), border-color var(--duration-m) var(--ease-apple);
 }
 .modal .agent-select-list .btn.block,
 .btn.block {
@@ -595,8 +603,8 @@ textarea.input,
 .modal .form-label { display: block; margin-bottom: var(--space-1, 0.25rem); font-size: 0.9rem; color: var(--text-secondary); }
 @keyframes modal-fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes modal-scale-in { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
-.modal-mask { animation: modal-fade-in 0.2s ease; }
-.modal { animation: modal-scale-in 0.22s ease; }
+.modal-mask { animation: modal-fade-in 0.25s var(--ease-apple); }
+.modal { animation: modal-scale-in 0.28s var(--ease-apple); }
 
 /* Footer · 与内容区留白 */
 .app-footer {
@@ -735,15 +743,148 @@ a.link:hover,
   margin-right: 0.25rem;
 }
 
-/* Page title · 内页首标题，与内容区顶有间距 */
+/* 评论区块 · Apple 风格间距与层次（任务详情/弹窗共用） */
+.task-comments {
+  margin-top: var(--space-6);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--border-color);
+}
+.task-comments-title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 var(--space-4);
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+}
+.task-comments-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--space-4);
+}
+.task-comment-item {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--border-color);
+  align-items: flex-start;
+  transition: background var(--duration-m) var(--ease-apple);
+}
+.task-comment-item:last-child {
+  border-bottom: none;
+}
+.task-comment-item.comment-kind-status {
+  border-left: 3px solid var(--secondary-color);
+  padding-left: var(--space-2);
+  margin-left: -var(--space-2);
+}
+.task-comment-avatar {
+  flex-shrink: 0;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--primary-color);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.task-comment-body {
+  flex: 1;
+  min-width: 0;
+}
+.task-comment-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.5rem;
+  margin-bottom: 0.25rem;
+}
+.task-comment-author {
+  font-weight: 600;
+  font-size: 0.9375rem;
+  color: var(--text-primary);
+}
+.task-comment-by-user {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+.task-comment-kind-badge {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  background: rgba(139, 92, 246, 0.15);
+  color: var(--secondary-color);
+}
+.task-comment-time {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.task-comments-empty {
+  font-size: 0.9375rem;
+  color: var(--muted);
+  margin: 0 0 var(--space-3);
+}
+.task-comment-form {
+  margin-top: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.task-comment-form .textarea-input {
+  min-height: 3.5rem;
+  margin-bottom: 0;
+  border-radius: var(--radius-sm);
+  padding: 0.65rem 0.75rem;
+  transition: border-color var(--duration-m) var(--ease-apple), box-shadow var(--duration-m) var(--ease-apple);
+}
+.task-comment-form .btn {
+  align-self: flex-start;
+}
+
+/* 任务卡片操作区：订阅/接取/详情等按钮统一间距与过渡 */
+.task-card__actions-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.task-card__actions-wrap .btn {
+  transition: transform var(--duration-m) var(--ease-apple), box-shadow var(--duration-m) var(--ease-apple), background var(--duration-m) var(--ease-apple), color var(--duration-m) var(--ease-apple), border-color var(--duration-m) var(--ease-apple);
+}
+.task-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* 任务管理页布局 · 网格与呼吸感 */
+.task-layout {
+  gap: var(--space-4) var(--space-6);
+  align-items: start;
+  min-height: 60vh;
+}
+.task-layout--mine-only {
+  grid-template-columns: minmax(0, 1fr) 220px;
+}
+.task-center-inner {
+  gap: var(--space-5);
+}
+.task-list-wrap {
+  min-width: 0;
+}
+
+/* Page title · 内页首标题，与内容区顶有间距，Apple 层级 */
 .page-title {
   font-size: 1.5rem;
   font-weight: 700;
   letter-spacing: -0.025em;
   color: var(--text-primary);
-  margin: 0 0 var(--space-6, 1.5rem);
-  padding-bottom: var(--space-4, 1rem);
+  margin: 0 0 var(--space-6);
+  padding-bottom: var(--space-4);
   border-bottom: 1px solid var(--border-color);
+  line-height: 1.25;
 }
 
 /* Page sections · 区块间距统一 */
@@ -757,9 +898,10 @@ a.link:hover,
 .section-title {
   font-size: 1.125rem;
   font-weight: 700;
-  color: var(--text-primary);
-  margin: 0 0 var(--space-5, 1.25rem);
   letter-spacing: -0.025em;
+  color: var(--text-primary);
+  margin: 0 0 var(--space-5);
+  line-height: 1.3;
 }
 .section-subtitle {
   font-size: var(--font-body);
@@ -804,6 +946,29 @@ a.link:hover,
   line-height: 1.6;
   max-width: 36rem;
   margin: 0 auto var(--space-6, 1.5rem);
+}
+/* Agent 管理页 · 紧凑 Hero 与内容区 */
+.hero-compact {
+  padding: var(--space-8) 0;
+  min-height: auto;
+}
+.hero-compact .hero-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  color: var(--text-primary);
+  margin: 0 0 var(--space-2);
+}
+.hero-compact .hero-desc {
+  font-size: var(--font-body);
+  color: var(--text-secondary);
+  line-height: 1.55;
+  margin: 0;
+}
+.agent-manage-content {
+  max-width: 800px;
+  margin: 0 auto;
+  padding-bottom: var(--space-8);
 }
 .hero-block .hero-stats {
   display: flex;
@@ -886,20 +1051,23 @@ a.link:hover,
   line-height: 1.4;
 }
 
-/* Empty state · consistent across pages */
+/* Empty state · consistent across pages，Apple 留白 */
 .empty-state {
   text-align: center;
-  padding: var(--space-10, 2.5rem) var(--space-6, 1.5rem);
+  padding: var(--space-10) var(--space-6);
   background: var(--card-background);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg, 16px);
+  border-radius: var(--radius-md);
+  margin: var(--space-4) 0;
+  transition: border-color var(--duration-m) var(--ease-apple), box-shadow var(--duration-m) var(--ease-apple);
 }
 .empty-state .empty {
   font-size: 1rem;
   color: var(--text-secondary);
-  margin: 0 0 var(--space-4, 1rem);
+  margin: 0 0 var(--space-5);
+  line-height: 1.5;
 }
-.empty-state .btn { margin-top: 0.5rem; }
+.empty-state .btn { margin-top: 0; }
 
 /* Responsive Design */
 @media (max-width: 992px) {
@@ -1029,7 +1197,7 @@ a.link:hover,
   100% { background-position: -200% 0; }
 }
 
-/* 筛选芯片：统一过渡 */
+/* 筛选芯片：与 Badge 一致的圆角与过渡 */
 .filter-chip {
   padding: 0.35rem 0.75rem;
   border-radius: var(--radius-sm);
@@ -1038,6 +1206,7 @@ a.link:hover,
   color: var(--text-secondary);
   font-size: 0.875rem;
   font-weight: 500;
+  letter-spacing: 0.01em;
   cursor: pointer;
   transition: border-color var(--duration-m) var(--ease-apple), background var(--duration-m) var(--ease-apple), color var(--duration-m) var(--ease-apple);
 }

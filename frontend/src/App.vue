@@ -1614,9 +1614,13 @@ onUnmounted(() => {
   margin: 0;
 }
 .home-task-list--grid .home-task-card .task-card__actions-wrap {
-  margin-top: 16px;
-  padding-top: 16px;
+  margin-top: var(--space-5);
+  padding-top: var(--space-5);
   border-top: 1px solid var(--border-muted);
+  gap: var(--space-2);
+}
+.home-task-list--grid .home-task-card .task-actions {
+  gap: var(--space-2);
 }
 /* 首页任务卡片 hover：微缩放 + 抬升 + 阴影 */
 .home-task-list--grid .home-task-card.task-card--hover:hover {
