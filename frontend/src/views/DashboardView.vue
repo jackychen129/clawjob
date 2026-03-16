@@ -1,6 +1,6 @@
 <template>
   <div class="dashboard-view">
-    <div class="dash-head">
+    <header class="dash-head">
       <div>
         <h1 class="page-title">{{ t('dashboard.title') }}</h1>
         <p class="page-desc">{{ t('dashboard.desc') }}</p>
@@ -8,109 +8,87 @@
       <div class="dash-head-actions">
         <Button size="sm" variant="secondary" type="button" @click="reloadAll">{{ t('common.retry') || '刷新' }}</Button>
       </div>
-    </div>
+    </header>
 
     <div class="dash-bento">
-      <!-- Metrics / KPI -->
-      <Card class="bento bento--kpi">
-        <CardHeader class="pb-2">
-          <div class="bento-head">
+      <!-- Hero Statistics / KPI -->
+      <Card class="dash-card dash-hero bento bento--kpi">
+        <CardHeader class="dash-hero-header">
+          <div class="dash-bento-head">
             <CardTitle class="section-title text-base">{{ t('dashboard.metrics') }}</CardTitle>
-            <span class="bento-sub mono">{{ new Date().toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) }}</span>
+            <span class="dash-bento-sub mono">{{ new Date().toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) }}</span>
           </div>
         </CardHeader>
-        <CardContent class="pt-0">
-          <div v-if="statsLoading" class="kpi-grid kpi-grid--skeleton">
-            <div v-for="i in 5" :key="i" class="kpi">
+        <CardContent class="dash-hero-content">
+          <div v-if="statsLoading" class="dash-kpi-grid dash-kpi-grid--skeleton">
+            <div v-for="i in 5" :key="i" class="dash-kpi">
               <span class="tw-skeleton tw-skeleton-value"></span>
               <span class="tw-skeleton tw-skeleton-label"></span>
             </div>
           </div>
-          <div v-else class="kpi-grid">
-            <div class="kpi">
-              <span class="kpi-value mono">{{ stats.tasks_total ?? 0 }}</span>
-              <span class="kpi-label">{{ t('dashboard.tasksTotal') }}</span>
-            </div>
-            <div class="kpi">
-              <span class="kpi-value mono">{{ stats.tasks_completed ?? 0 }}</span>
-              <span class="kpi-label">{{ t('dashboard.tasksCompleted') }}</span>
-            </div>
-            <div class="kpi">
-              <span class="kpi-value mono">{{ openJobsCount }}</span>
-              <span class="kpi-label">{{ t('dashboard.openJobs') }}</span>
-            </div>
-            <div class="kpi">
-              <span class="kpi-value mono">{{ stats.rewards_paid ?? 0 }}</span>
-              <span class="kpi-label">{{ t('dashboard.rewardsPaid') }}</span>
-            </div>
-            <div class="kpi">
-              <span class="kpi-value mono">{{ stats.agents_active ?? 0 }}</span>
-              <span class="kpi-label">{{ t('dashboard.agentsActive') }}</span>
+          <div v-else class="dash-kpi-grid" role="list">
+            <div v-for="(_, idx) in 5" :key="idx" class="dash-kpi" :style="{ '--dash-kpi-order': idx }" role="listitem">
+              <span class="dash-kpi-value mono">{{ kpiValues[idx] }}</span>
+              <span class="dash-kpi-label">{{ kpiLabels[idx] }}</span>
             </div>
           </div>
         </CardContent>
       </Card>
 
       <!-- ROI placeholder -->
-      <section class="card bento bento--roi">
+      <section class="dash-card dash-chart bento bento--roi">
         <div class="card-content">
-          <div class="bento-head">
+          <div class="dash-bento-head">
             <h2 class="section-title">{{ t('dashboard.roiCurve') }}</h2>
-            <span class="bento-sub">{{ t('dashboard.placeholder') }}</span>
+            <span class="dash-bento-sub">{{ t('dashboard.placeholder') }}</span>
           </div>
-          <div class="roi-chart-placeholder" aria-hidden="true">
-            <div class="roi-chart-axis">
-              <span class="roi-axis-label">{{ t('dashboard.roiYLabel') || '收益' }}</span>
-              <div class="roi-chart-bars">
-                <div v-for="i in 7" :key="i" class="roi-bar" :style="{ height: (30 + Math.abs((i * 17) % 50)) + '%' }"></div>
+          <div class="dash-roi-wrap" aria-hidden="true">
+            <div class="dash-roi-chart">
+              <span class="dash-roi-y">{{ t('dashboard.roiYLabel') || '收益' }}</span>
+              <div class="dash-roi-bars">
+                <div v-for="i in 7" :key="i" class="dash-roi-bar" :style="{ height: (30 + Math.abs((i * 17) % 50)) + '%' }"></div>
               </div>
             </div>
-            <div class="roi-chart-x"><span v-for="d in 7" :key="d">{{ d }}</span></div>
+            <div class="dash-roi-x"><span v-for="d in 7" :key="d">{{ d }}</span></div>
           </div>
         </div>
       </section>
 
       <!-- Live feed sidebar -->
-      <aside class="card bento bento--feed">
-        <div class="card-content">
-          <div class="bento-head">
+      <aside class="dash-card dash-feed bento bento--feed">
+        <div class="card-content dash-feed-content">
+          <div class="dash-bento-head">
             <h2 class="section-title">{{ t('dashboard.liveFeed') }}</h2>
-            <span class="bento-sub mono">{{ t('dashboard.live') || 'LIVE' }}</span>
+            <span class="dash-bento-sub mono">{{ t('dashboard.live') || 'LIVE' }}</span>
           </div>
 
-          <div v-if="activityLoading" class="activity-skeleton">
-            <div v-for="i in 6" :key="i" class="activity-skeleton-row">
+          <div v-if="activityLoading" class="dash-feed-skeleton">
+            <div v-for="i in 6" :key="i" class="dash-feed-skeleton-row">
               <span class="tw-skeleton tw-skeleton-time"></span>
               <span class="tw-skeleton tw-skeleton-text"></span>
             </div>
           </div>
 
-          <TransitionGroup v-else-if="activityEvents.length" name="feed" tag="ul" class="activity-list">
-            <li v-for="ev in activityEvents" :key="ev.at + ':' + ev.type + ':' + (ev.task_id || ev.agent_id || '')" class="activity-item">
-              <span class="activity-time mono">{{ formatTimeAgo(ev.at) }}</span>
-              <span class="activity-text">
-                <template v-if="ev.type === 'task_created'">
-                  {{ ev.publisher_name }} {{ t('dashboard.eventTaskCreated', { title: ev.task_title || '#' + ev.task_id }) }}
-                </template>
-                <template v-else-if="ev.type === 'task_completed'">
-                  {{ ev.agent_name || t('common.agent') }} {{ t('dashboard.eventTaskCompleted', { title: ev.task_title || '#' + ev.task_id, points: ev.reward_points ?? 0 }) }}
-                </template>
-                <template v-else-if="ev.type === 'agent_registered'">
-                  {{ ev.owner_name }} {{ t('dashboard.eventAgentRegistered', { name: ev.agent_name || '#' + ev.agent_id }) }}
-                </template>
-              </span>
-              <router-link v-if="ev.task_id" :to="`/#/tasks`" class="activity-link">{{ t('task.viewDetail') || '查看' }}</router-link>
+          <TransitionGroup v-else-if="activityEvents.length" name="dash-feed" tag="ul" class="dash-feed-list">
+            <li v-for="ev in activityEvents" :key="ev.at + ':' + ev.type + ':' + (ev.task_id || ev.agent_id || '')" class="dash-feed-item">
+              <div class="dash-feed-item-inner">
+                <span class="dash-feed-time mono">{{ formatTimeAgo(ev.at) }}</span>
+                <p class="dash-feed-body">
+                  <span class="dash-feed-who">{{ getEventWho(ev) }}</span> {{ getEventWhat(ev) }}
+                </p>
+                <router-link v-if="ev.task_id" :to="`/#/tasks`" class="dash-feed-link">{{ t('task.viewDetail') || '查看' }}</router-link>
+              </div>
             </li>
           </TransitionGroup>
-          <div v-else class="empty-feed">
-            <svg class="empty-illustration" viewBox="0 0 240 140" fill="none" aria-hidden="true">
+          <div v-else class="dash-feed-empty">
+            <svg class="dash-feed-empty-illus" viewBox="0 0 240 140" fill="none" aria-hidden="true">
               <path d="M22 106c23-36 52-54 88-54s65 18 88 54" stroke="rgba(34,197,94,0.22)" stroke-width="2" stroke-linecap="round"/>
               <path d="M38 98c18-27 41-40 72-40s54 13 72 40" stroke="rgba(226,232,240,0.10)" stroke-width="2" stroke-linecap="round"/>
               <circle cx="120" cy="44" r="6" fill="rgba(34,197,94,0.40)"/>
               <circle cx="92" cy="54" r="3" fill="rgba(226,232,240,0.20)"/>
               <circle cx="152" cy="54" r="3" fill="rgba(226,232,240,0.20)"/>
             </svg>
-            <p class="hint">{{ t('dashboard.noActivity') }}</p>
+            <p class="dash-feed-empty-hint">{{ t('dashboard.noActivity') }}</p>
           </div>
         </div>
       </aside>
@@ -139,6 +117,34 @@ const openJobsCount = computed(() => {
   const completed = stats.value.tasks_completed ?? 0
   return Math.max(0, total - completed)
 })
+
+const kpiValues = computed(() => [
+  stats.value.tasks_total ?? 0,
+  stats.value.tasks_completed ?? 0,
+  openJobsCount.value,
+  stats.value.rewards_paid ?? 0,
+  stats.value.agents_active ?? 0,
+])
+const kpiLabels = computed(() => [
+  t('dashboard.tasksTotal'),
+  t('dashboard.tasksCompleted'),
+  t('dashboard.openJobs'),
+  t('dashboard.rewardsPaid'),
+  t('dashboard.agentsActive'),
+])
+
+function getEventWho(ev: api.ActivityEvent): string {
+  if (ev.type === 'task_created') return ev.publisher_name ?? ''
+  if (ev.type === 'task_completed') return ev.agent_name ?? t('common.agent')
+  if (ev.type === 'agent_registered') return ev.owner_name ?? ''
+  return ''
+}
+function getEventWhat(ev: api.ActivityEvent): string {
+  if (ev.type === 'task_created') return t('dashboard.eventTaskCreated', { title: ev.task_title || '#' + ev.task_id })
+  if (ev.type === 'task_completed') return t('dashboard.eventTaskCompleted', { title: ev.task_title || '#' + ev.task_id, points: ev.reward_points ?? 0 })
+  if (ev.type === 'agent_registered') return t('dashboard.eventAgentRegistered', { name: ev.agent_name || '#' + ev.agent_id })
+  return ''
+}
 
 function formatTimeAgo(iso: string) {
   try {
@@ -203,55 +209,349 @@ async function reloadAll() {
 </script>
 
 <style scoped>
-.dashboard-view { padding: 0; max-width: 1120px; margin: 0 auto; }
-.dash-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
-.dash-head-actions { display: flex; gap: 0.5rem; }
-.page-desc { color: var(--text-secondary); margin-top: 0.4rem; margin-bottom: 0; font-size: 0.9rem; line-height: 1.7; }
-
-.dash-bento { display: grid; grid-template-columns: 1fr; gap: 1rem; }
-@media (min-width: 1024px) {
-  .dash-bento { grid-template-columns: 1fr 320px; grid-auto-rows: minmax(120px, auto); gap: 1.25rem; }
-  .bento--kpi { grid-column: 1 / 2; }
-  .bento--roi { grid-column: 1 / 2; }
-  .bento--feed { grid-column: 2 / 3; grid-row: 1 / span 2; position: sticky; top: 92px; align-self: start; }
+/* ----- 容器与留白（仅本页） ----- */
+.dashboard-view {
+  padding: 0;
+  max-width: 1120px;
+  margin: 0 auto;
+}
+.dash-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-8);
+}
+.dash-head-actions { display: flex; gap: var(--space-2); }
+.page-desc {
+  color: var(--text-secondary);
+  margin-top: var(--space-1);
+  margin-bottom: 0;
+  font-size: var(--font-body);
+  line-height: 1.6;
+  letter-spacing: 0.01em;
 }
 
-.bento-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.75rem; }
-.bento-sub { color: var(--text-secondary); font-size: 0.8rem; }
+.dash-bento {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-8);
+}
+@media (min-width: 1024px) {
+  .dash-bento {
+    grid-template-columns: 1fr 340px;
+    grid-auto-rows: minmax(120px, auto);
+    gap: var(--space-8);
+  }
+  .bento--kpi { grid-column: 1 / 2; }
+  .bento--roi { grid-column: 1 / 2; }
+  .bento--feed {
+    grid-column: 2 / 3;
+    grid-row: 1 / span 2;
+    position: sticky;
+    top: 92px;
+    align-self: start;
+  }
+}
 
-.kpi-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.75rem; min-width: 0; }
-@media (min-width: 640px) { .kpi-grid { grid-template-columns: repeat(5, 1fr); } }
-.kpi { padding: 0.9rem 0.75rem; border-radius: var(--radius-md); border: 1px solid var(--border-muted); background: rgba(226, 232, 240, 0.04); box-shadow: var(--shadow-layer-1); text-align: left; min-width: 0; }
-.kpi-value { display: block; font-size: 1.5rem; font-weight: 700; letter-spacing: -0.03em; color: var(--primary-color); }
-.kpi-label { display: block; margin-top: 0.15rem; font-size: 0.78rem; color: var(--text-secondary); }
-.kpi-grid--skeleton { pointer-events: none; }
-.kpi-grid--skeleton .kpi { background: var(--card-background); }
-.kpi-grid--skeleton .tw-skeleton-value { display: block; width: 3.2rem; height: 1.5rem; border-radius: 6px; }
-.kpi-grid--skeleton .tw-skeleton-label { display: block; width: 4.4rem; height: 0.85rem; margin-top: 0.5rem; border-radius: 6px; }
-.activity-list { list-style: none; padding: 0; margin: 0; }
-.activity-item { display: grid; grid-template-columns: 4.25rem 1fr auto; gap: 0.75rem; padding: 0.65rem 0; border-bottom: 1px solid rgba(226, 232, 240, 0.06); font-size: 0.88rem; }
-.activity-item:last-child { border-bottom: none; }
-.activity-time { color: var(--text-secondary); font-size: 0.78rem; }
-.activity-text { flex: 1; color: var(--text-primary); }
-.activity-skeleton { padding: 0.25rem 0; }
-.activity-skeleton-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.625rem 0; }
-.activity-skeleton-row .tw-skeleton-time { width: 3.5rem; height: 0.8rem; border-radius: 4px; flex-shrink: 0; }
-.activity-skeleton-row .tw-skeleton-text { flex: 1; max-width: 80%; height: 0.9rem; border-radius: 4px; }
-.roi-chart-placeholder { min-height: 140px; padding: 0.5rem 0; margin-bottom: 0.75rem; }
-.roi-chart-axis { display: flex; align-items: stretch; gap: 0.5rem; }
-.roi-axis-label { font-size: 0.75rem; color: var(--text-secondary); writing-mode: vertical-rl; transform: rotate(-180deg); align-self: center; }
-.roi-chart-bars { display: flex; align-items: flex-end; gap: 0.35rem; flex: 1; min-height: 100px; }
-.roi-bar { width: 100%; min-height: 8px; border-radius: 4px; background: linear-gradient(180deg, rgba(var(--primary-rgb), 0.5), rgba(var(--primary-rgb), 0.15)); transition: height 0.3s ease; }
-.roi-chart-x { display: flex; justify-content: space-around; padding-top: 0.35rem; font-size: 0.75rem; color: var(--text-secondary); }
-.empty-feed { padding: 0.5rem 0 0.25rem; text-align: center; }
-.empty-illustration { width: 100%; max-width: 240px; margin: 0.25rem auto 0.5rem; display: block; }
-.hint { color: var(--text-secondary); font-size: 0.9rem; }
-.loading { padding: 1.5rem; text-align: center; }
+.dash-bento-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+.dash-bento-sub {
+  color: var(--text-secondary);
+  font-size: var(--font-caption);
+}
 
-/* New event push-in animation */
-.feed-enter-active, .feed-leave-active { transition: all 0.22s ease; }
-.feed-enter-from { opacity: 0; transform: translateY(-10px); }
-.feed-enter-to { opacity: 1; transform: translateY(0); }
-.feed-leave-from { opacity: 1; }
-.feed-leave-to { opacity: 0; transform: translateY(8px); }
+/* ----- Hero Statistics：无边框、柔和背景、进入动效 ----- */
+.dash-card.dash-hero {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+.dash-hero-header {
+  padding-bottom: var(--space-2);
+}
+.dash-hero-content {
+  padding-top: 0;
+}
+
+.dash-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-4);
+  min-width: 0;
+}
+@media (min-width: 640px) {
+  .dash-kpi-grid { grid-template-columns: repeat(5, 1fr); }
+}
+.dash-kpi {
+  padding: var(--space-5) var(--space-4);
+  border-radius: var(--radius-lg);
+  border: none;
+  background: rgba(255, 255, 255, 0.03);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.06), 0 4px 12px rgba(0, 0, 0, 0.04);
+  text-align: left;
+  min-width: 0;
+  animation: dash-kpi-enter 0.4s var(--ease-apple) both;
+  animation-delay: calc(var(--dash-kpi-order, 0) * 0.04s);
+}
+.dash-kpi-value {
+  display: block;
+  font-size: 1.625rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  color: var(--primary-color);
+  line-height: 1.2;
+}
+.dash-kpi-label {
+  display: block;
+  margin-top: var(--space-2);
+  font-size: var(--font-caption);
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+  line-height: 1.4;
+}
+.dash-kpi-grid--skeleton { pointer-events: none; }
+.dash-kpi-grid--skeleton .dash-kpi {
+  background: var(--card-background);
+  animation: none;
+}
+.dash-kpi-grid--skeleton .tw-skeleton-value {
+  display: block;
+  width: 3.2rem;
+  height: 1.6rem;
+  border-radius: var(--radius-sm);
+}
+.dash-kpi-grid--skeleton .tw-skeleton-label {
+  display: block;
+  width: 4.4rem;
+  height: 0.875rem;
+  margin-top: var(--space-2);
+  border-radius: var(--radius-sm);
+}
+
+@keyframes dash-kpi-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ----- 图表区：极简、统一圆角 ----- */
+.dash-card.dash-chart {
+  background-color: var(--card-background);
+  border-radius: var(--radius-xl);
+  border: var(--border-hairline);
+  overflow: hidden;
+}
+.dash-roi-wrap {
+  min-height: 160px;
+  padding: var(--space-4) 0;
+  margin-bottom: var(--space-2);
+}
+.dash-roi-chart {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-2);
+}
+.dash-roi-y {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  writing-mode: vertical-rl;
+  transform: rotate(-180deg);
+  align-self: center;
+  opacity: 0.85;
+}
+.dash-roi-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  flex: 1;
+  min-height: 100px;
+}
+.dash-roi-bar {
+  width: 100%;
+  min-height: 8px;
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(var(--primary-rgb), 0.45), rgba(var(--primary-rgb), 0.12));
+  transition: height 0.35s var(--ease-apple);
+}
+.dash-roi-x {
+  display: flex;
+  justify-content: space-around;
+  padding-top: var(--space-2);
+  font-size: var(--font-caption);
+  color: var(--text-secondary);
+}
+
+/* ----- 实时活动流：毛玻璃、时间轴、字号层级 ----- */
+.dash-card.dash-feed {
+  background-color: var(--card-background);
+  border-radius: var(--radius-xl);
+  border: var(--border-hairline);
+  overflow: hidden;
+}
+.dash-feed-content {
+  max-height: 72vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+}
+.dash-feed-content::-webkit-scrollbar {
+  width: 6px;
+}
+.dash-feed-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+.dash-feed-content::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-full);
+}
+.dash-feed-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.dash-feed-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  position: relative;
+  padding-left: 1.25rem;
+}
+.dash-feed-list::before {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 0.5rem;
+  bottom: 0.5rem;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius-full);
+}
+.dash-feed-item {
+  position: relative;
+  padding-bottom: var(--space-3);
+}
+.dash-feed-item:last-child { padding-bottom: 0; }
+.dash-feed-item::before {
+  content: '';
+  position: absolute;
+  left: -1.25rem;
+  top: 0.65rem;
+  width: 6px;
+  height: 6px;
+  margin-left: 2px;
+  border-radius: 50%;
+  background: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.2);
+  animation: dash-node-pulse 2.2s var(--ease-apple) infinite;
+}
+.dash-feed-item-inner {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: background var(--duration-m) var(--ease-apple), border-color var(--duration-m) var(--ease-apple);
+}
+.dash-feed-item-inner:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+.dash-feed-time {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-1);
+}
+.dash-feed-body {
+  font-size: var(--font-body);
+  color: var(--text-primary);
+  line-height: 1.5;
+  margin: 0 0 var(--space-2);
+}
+.dash-feed-who {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.dash-feed-link {
+  font-size: var(--font-caption);
+  color: var(--primary-color);
+  text-decoration: none;
+  transition: color var(--duration-m) var(--ease-apple), opacity var(--duration-m) var(--ease-apple);
+}
+.dash-feed-link:hover {
+  color: var(--secondary-color);
+  opacity: 0.95;
+}
+
+@keyframes dash-node-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.2); }
+  50% { opacity: 0.85; box-shadow: 0 0 0 4px rgba(var(--primary-rgb), 0.12); }
+}
+
+.dash-feed-skeleton { padding: var(--space-1) 0; }
+.dash-feed-skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+}
+.dash-feed-skeleton-row .tw-skeleton-time {
+  width: 3.5rem;
+  height: 0.8rem;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+.dash-feed-skeleton-row .tw-skeleton-text {
+  flex: 1;
+  max-width: 80%;
+  height: 0.9rem;
+  border-radius: var(--radius-sm);
+}
+
+.dash-feed-empty {
+  padding: var(--space-8) var(--space-4);
+  text-align: center;
+}
+.dash-feed-empty-illus {
+  width: 100%;
+  max-width: 220px;
+  margin: 0 auto var(--space-4);
+  display: block;
+  opacity: 0.9;
+}
+.dash-feed-empty-hint {
+  color: var(--text-secondary);
+  font-size: var(--font-body);
+  margin: 0;
+}
+
+/* 活动流进入/离开动画 */
+.dash-feed-enter-active,
+.dash-feed-leave-active {
+  transition: opacity 0.25s var(--ease-apple), transform 0.25s var(--ease-apple);
+}
+.dash-feed-enter-from {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+.dash-feed-enter-to {
+  opacity: 1;
+  transform: translateY(0);
+}
+.dash-feed-leave-from { opacity: 1; }
+.dash-feed-leave-to {
+  opacity: 0;
+  transform: translateY(6px);
+}
 </style>

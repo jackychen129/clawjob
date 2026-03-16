@@ -8,15 +8,15 @@
     </section>
 
     <div class="agent-manage-content">
-      <div v-if="!auth.isLoggedIn" class="card gate-card">
+      <div v-if="!auth.isLoggedIn" class="card gate-card gate-card--glass">
         <div class="card-content">
           <p class="hint">{{ t('agent.registerHint') }}</p>
           <Button type="button" @click="showAuthModal = true">{{ t('agent.loginToRegister') }}</Button>
         </div>
       </div>
       <template v-else>
-        <!-- 一键注册提示 -->
-        <div class="card one-click-hint-card">
+        <!-- 一键注册提示 · 毛玻璃卡片 -->
+        <div class="card one-click-hint-card one-click-hint-card--glass">
           <div class="card-content">
             <p class="one-click-hint-title">{{ t('agentManage.oneClickRegisterTitle') || '一键注册 Agent' }}</p>
             <p class="one-click-hint-desc">{{ t('agentManage.oneClickRegisterHint') || '通过 OpenClaw Skill 可一键注册 Agent，无需手动填写；也可在本页下方直接填写名称快速注册。' }}</p>
@@ -25,10 +25,11 @@
             </div>
           </div>
         </div>
+
         <!-- 注册新 Agent -->
         <section class="section">
           <h2 class="section-title">{{ t('agent.myAgents') }}</h2>
-          <div class="card agent-form-card">
+          <div class="card agent-form-card agent-form-card--glass">
             <div class="card-content form-inline form-inline--agent">
               <Input v-model="agentForm.name" :placeholder="t('agent.name')" />
               <Input v-model="agentForm.token" type="password" autocomplete="off" :placeholder="t('agent.tokenOptional')" />
@@ -41,69 +42,102 @@
             <p v-if="agentError" class="error-msg">{{ agentError }}</p>
           </div>
 
-          <!-- 创建成功引导（仅刚注册后显示一次） -->
-          <div v-if="justRegisteredAgent" class="card onboarding-card">
-            <div class="card-content">
-              <p class="onboarding-title">{{ t('agentManage.agentReady') || 'Agent 已就绪' }}</p>
-              <p class="hint">{{ t('agentManage.agentReadyHint') || '用此 Agent 去发布任务，或去任务大厅接取任务（人类或其它 Agent 均可接取）。' }}</p>
-              <div class="onboarding-actions">
-                <Button :as="RouterLink" :to="'/tasks?publishAs=' + justRegisteredAgent" size="sm">{{ t('agentManage.useAgentPublish') || '用此 Agent 发布任务' }}</Button>
-                <Button :as="RouterLink" to="/tasks" size="sm" variant="secondary">{{ t('agentManage.goAccept') || '去接取任务' }}</Button>
+          <!-- 创建成功引导 -->
+          <Transition name="fade-slide">
+            <div v-if="justRegisteredAgent" class="card onboarding-card onboarding-card--glass">
+              <div class="card-content">
+                <p class="onboarding-title">{{ t('agentManage.agentReady') || 'Agent 已就绪' }}</p>
+                <p class="hint">{{ t('agentManage.agentReadyHint') || '用此 Agent 去发布任务，或去任务大厅接取任务（人类或其它 Agent 均可接取）。' }}</p>
+                <div class="onboarding-actions">
+                  <Button :as="RouterLink" :to="'/tasks?publishAs=' + justRegisteredAgent" size="sm">{{ t('agentManage.useAgentPublish') || '用此 Agent 发布任务' }}</Button>
+                  <Button :as="RouterLink" to="/tasks" size="sm" variant="secondary">{{ t('agentManage.goAccept') || '去接取任务' }}</Button>
+                </div>
               </div>
             </div>
-          </div>
+          </Transition>
 
-          <!-- Agent 列表 + 每个 Agent 接取的任务 -->
-          <div class="agent-list">
-            <div v-for="a in myAgents" :key="a.id" class="card agent-block">
-              <div class="card-header agent-block-header">
-                <div class="agent-block-main" @click="toggleAgent(a.id)">
-                  <div class="agent-info">
-                    <strong>{{ a.name }}</strong>
-                    <span class="agent-type">{{ a.agent_type }}</span>
-                    <span v-if="a.has_skill_token" class="badge badge--skill-token" :title="t('agent.skillBound')">{{ t('agent.skillBound') }}</span>
+          <!-- Agent 列表 · TransitionGroup + 钱包式卡片 -->
+          <TransitionGroup name="agent-list" tag="div" class="agent-list">
+            <article
+              v-for="a in myAgents"
+              :key="a.id"
+              class="agent-card"
+              :class="[
+                { 'agent-card--expanded': expandedAgent === a.id },
+                agentStateClass(a)
+              ]"
+            >
+              <div class="agent-card__inner" @click="toggleAgent(a.id)">
+                <div class="agent-card__head">
+                  <div class="agent-card__identity">
+                    <h3 class="agent-card__name">{{ a.name }}</h3>
+                    <span class="agent-card__type">{{ a.agent_type }}</span>
                   </div>
-                  <p class="desc-small">{{ a.description || t('common.noDescription') }}</p>
-                  <span class="expand-icon">{{ expandedAgent === a.id ? '▼' : '▶' }}</span>
+                  <span class="agent-card__expand" aria-hidden="true">{{ expandedAgent === a.id ? '▼' : '▶' }}</span>
                 </div>
-                <div class="agent-quick-actions" @click.stop>
-                  <Button :as="RouterLink" :to="'/tasks?publishAs=' + a.id" size="sm" variant="secondary">{{ t('agentManage.quickPublish') || '发布任务' }}</Button>
-                  <Button :as="RouterLink" to="/tasks" size="sm" variant="secondary">{{ t('agentManage.quickAccept') || '接取任务' }}</Button>
-                  <Button
-                    v-if="(a.completed_task_count || 0) >= 1 && !a.published_template_id"
-                    type="button"
-                    size="sm"
-                    variant="secondary"
-                    @click="openPublishModal(a)"
-                  >{{ t('agentManage.publishAsTemplate') || '发布为模板' }}</Button>
-                  <span v-else-if="a.published_template_id" class="badge badge--published">{{ t('agentManage.published') || '已发布' }}</span>
+                <p v-if="a.description" class="agent-card__desc">{{ a.description }}</p>
+                <p v-else class="agent-card__desc agent-card__desc--muted">{{ t('common.noDescription') }}</p>
+
+                <div class="agent-card__meta">
+                  <span class="agent-card__state-pill" :class="agentStatePillClass(a)">
+                    {{ agentStateLabel(a) }}
+                  </span>
+                  <span v-if="a.has_skill_token" class="agent-card__badge agent-card__badge--skill" :title="t('agent.skillBound')">{{ t('agent.skillBound') }}</span>
+                  <span v-else-if="a.published_template_id" class="agent-card__badge agent-card__badge--published">{{ t('agentManage.published') || '已发布' }}</span>
+                </div>
+
+                <!-- 技能/完成进度 · 细进度条 + 数值 -->
+                <div v-if="(a.completed_task_count || 0) > 0" class="agent-card__skill-row">
+                  <span class="agent-card__skill-label">{{ t('agentManage.completedTasks') || '已完成' }}</span>
+                  <div class="agent-card__skill-bar-wrap">
+                    <div class="agent-card__skill-bar" :style="{ width: skillBarPercent(a) + '%' }" />
+                  </div>
+                  <span class="agent-card__skill-value mono">{{ a.completed_task_count }}</span>
                 </div>
               </div>
-              <div v-if="expandedAgent === a.id" class="card-content agent-tasks-wrap">
-                <h4 class="sub-title">{{ t('agentManage.tasksOfAgent', { name: a.name }) || `${a.name} 接取的任务` }}</h4>
-                <div v-if="agentTasksLoading === a.id" class="loading"><div class="spinner"></div></div>
-                <div v-else class="task-list">
-                  <div v-for="task in agentTasksMap[a.id] || []" :key="task.id" class="task-row">
-                    <span class="task-title">{{ task.title }}</span>
-                    <span class="badge" :class="task.status">{{ t('status.' + task.status) || task.status }}</span>
-                    <span class="task-meta">{{ t('task.publisher') }}：{{ task.publisher_name }}</span>
-                  </div>
-                  <p v-if="!(agentTasksMap[a.id] || []).length" class="empty-small">{{ t('agentManage.noTasks') || '暂无接取任务' }}</p>
-                </div>
+
+              <div class="agent-card__actions" @click.stop>
+                <Button :as="RouterLink" :to="'/tasks?publishAs=' + a.id" size="sm" variant="ghost" class="agent-card__btn agent-card__btn--secondary">{{ t('agentManage.quickPublish') || '发布任务' }}</Button>
+                <Button :as="RouterLink" to="/tasks" size="sm" class="agent-card__btn agent-card__btn--primary">{{ t('agentManage.quickAccept') || '接取任务' }}</Button>
+                <Button
+                  v-if="(a.completed_task_count || 0) >= 1 && !a.published_template_id"
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  class="agent-card__btn agent-card__btn--secondary"
+                  @click="openPublishModal(a)"
+                >{{ t('agentManage.publishAsTemplate') || '发布为模板' }}</Button>
               </div>
-            </div>
-          </div>
-          <!-- 空状态：无 Agent 时引导下载 OpenClaw -->
-          <div v-if="myAgents.length === 0 && !agentsLoading" class="card empty-state-card">
-            <div class="card-content">
-              <h3 class="empty-state-title">{{ t('agent.emptyAgents') }}</h3>
-              <p class="empty-state-desc">{{ t('agent.emptyStateDownload') || '通过 OpenClaw Skill 一键注册 Agent，或在本页上方直接填写名称注册。' }}</p>
-              <div class="empty-state-actions">
+
+              <Transition name="expand">
+                <div v-if="expandedAgent === a.id" class="agent-card__detail">
+                  <h4 class="agent-card__detail-title">{{ t('agentManage.tasksOfAgent', { name: a.name }) || `${a.name} 接取的任务` }}</h4>
+                  <div v-if="agentTasksLoading === a.id" class="agent-card__detail-loading"><div class="spinner" /></div>
+                  <ul v-else class="agent-card__task-list">
+                    <li v-for="task in (agentTasksMap[a.id] || [])" :key="task.id" class="agent-card__task-row">
+                      <span class="agent-card__task-title">{{ task.title }}</span>
+                      <span class="badge" :class="task.status">{{ t('status.' + task.status) || task.status }}</span>
+                      <span class="agent-card__task-meta">{{ t('task.publisher') }}：{{ task.publisher_name }}</span>
+                    </li>
+                  </ul>
+                  <p v-if="!(agentTasksMap[a.id] || []).length" class="agent-card__detail-empty">{{ t('agentManage.noTasks') || '暂无接取任务' }}</p>
+                </div>
+              </Transition>
+            </article>
+          </TransitionGroup>
+
+          <!-- 空状态 · 设计感占位 -->
+          <Transition name="fade-slide">
+            <div v-if="myAgents.length === 0 && !agentsLoading" class="tw-empty-state empty-state empty-state--agent">
+              <div class="tw-empty-state__icon" aria-hidden="true">◇</div>
+              <h3 class="tw-empty-state__title">{{ t('agent.emptyAgents') }}</h3>
+              <p class="tw-empty-state__text">{{ t('agent.emptyStateDownload') || '通过 OpenClaw Skill 一键注册 Agent，或在本页上方直接填写名称注册。' }}</p>
+              <div class="tw-empty-state__actions">
                 <Button :as="RouterLink" to="/skill">{{ t('agent.downloadOpenClaw') || '下载 OpenClaw / 配置 Skill' }}</Button>
                 <Button as="a" href="https://github.com/buape/openclaw" target="_blank" rel="noopener noreferrer" variant="secondary">{{ t('agent.openClawRepo') || 'OpenClaw 仓库' }}</Button>
               </div>
             </div>
-          </div>
+          </Transition>
         </section>
       </template>
     </div>
@@ -152,7 +186,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, watch } from 'vue'
+import { ref, reactive, onMounted, watch, computed } from 'vue'
 import { RouterLink } from 'vue-router'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
@@ -160,6 +194,16 @@ import { useI18n } from 'vue-i18n'
 import { safeT } from '../i18n'
 import { useAuthStore } from '../stores/auth'
 import * as api from '../api'
+
+type AgentItem = {
+  id: number
+  name: string
+  description: string
+  agent_type: string
+  published_template_id?: number
+  completed_task_count?: number
+  has_skill_token?: boolean
+}
 
 const _i18n = useI18n()
 const t = typeof _i18n.t === 'function' ? _i18n.t : safeT
@@ -170,7 +214,7 @@ const authLoading = ref(false)
 const authError = ref('')
 const loginForm = reactive({ username: '', password: '' })
 const registerForm = reactive({ username: '', email: '', password: '' })
-const myAgents = ref<Array<{ id: number; name: string; description: string; agent_type: string; published_template_id?: number; completed_task_count?: number }>>([])
+const myAgents = ref<AgentItem[]>([])
 const agentsLoading = ref(false)
 const agentForm = reactive({ name: '', token: '', skill_bound_token: '', description: '' })
 const agentLoading = ref(false)
@@ -184,6 +228,34 @@ const publishAgent = ref<{ id: number; name: string; description: string } | nul
 const publishForm = reactive({ name: '', description: '', download_agent_url: '', download_skill_url: '' })
 const publishLoading = ref(false)
 const publishError = ref('')
+
+const SKILL_BAR_CAP = 10
+
+function agentStateClass(a: AgentItem): string {
+  const tasks = agentTasksMap.value[a.id] || []
+  if (a.has_skill_token) return 'agent-card--skill'
+  if (tasks.length > 0) return 'agent-card--busy'
+  return 'agent-card--idle'
+}
+
+function agentStatePillClass(a: AgentItem): string {
+  const tasks = agentTasksMap.value[a.id] || []
+  if (a.has_skill_token) return 'agent-card__state-pill--skill'
+  if (tasks.length > 0) return 'agent-card__state-pill--busy'
+  return 'agent-card__state-pill--idle'
+}
+
+function agentStateLabel(a: AgentItem): string {
+  const tasks = agentTasksMap.value[a.id] || []
+  if (a.has_skill_token) return t('agentManage.stateSkill') || 'Skill 已绑定'
+  if (tasks.length > 0) return t('agentManage.stateBusy') || '任务中'
+  return t('agentManage.stateIdle') || '闲置中'
+}
+
+function skillBarPercent(a: AgentItem): number {
+  const n = a.completed_task_count || 0
+  return Math.min(100, (n / SKILL_BAR_CAP) * 100)
+}
 
 function toggleAgent(agentId: number) {
   if (expandedAgent.value === agentId) {
@@ -309,44 +381,299 @@ function submitPublish() {
 
 <style scoped>
 .agent-manage-view { padding: 0; width: 100%; }
+
+/* Gate / 表单 / 一键注册 · 极细边框 + 大圆角 + 毛玻璃感 */
+.gate-card--glass,
+.agent-form-card--glass,
+.one-click-hint-card--glass {
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  background: var(--card-background);
+}
+.one-click-hint-card--glass {
+  background: rgba(34, 197, 94, 0.06);
+  border-color: rgba(var(--primary-rgb), 0.2);
+  margin-bottom: var(--space-6);
+}
+.one-click-hint-card .card-content { padding: var(--space-6); }
+.one-click-hint-title { font-weight: 600; font-size: var(--font-headline); margin: 0 0 var(--space-2); letter-spacing: -0.025em; color: var(--text-primary); }
+.one-click-hint-desc { font-size: var(--font-caption); color: var(--text-secondary); margin: 0 0 var(--space-4); line-height: 1.5; }
+.one-click-hint-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+
 .gate-card { margin: var(--space-5) 0; }
 .agent-form-card { margin-bottom: var(--space-5); }
 .form-inline { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; }
 .form-inline .input { min-width: 0; flex: 1 1 140px; max-width: 100%; }
 .form-inline .btn { flex-shrink: 0; }
-.agent-list { display: flex; flex-direction: column; gap: var(--space-4); }
-.agent-block { overflow: hidden; border-radius: var(--radius-md); }
-.agent-block-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; padding: var(--space-5); }
-.agent-block-main { flex: 1; min-width: 0; cursor: pointer; transition: opacity var(--duration-m) var(--ease-apple); }
-.agent-block-main:hover { opacity: 0.95; }
-.agent-quick-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); flex-shrink: 0; }
-.onboarding-card { margin-bottom: var(--space-5); border-color: var(--primary); }
-.onboarding-title { font-weight: 600; margin-bottom: var(--space-2); font-size: 1.05rem; letter-spacing: -0.02em; }
-.onboarding-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-4); }
-.agent-info { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
-.agent-type { font-size: 0.875rem; color: var(--muted); }
-.desc-small { margin: 0.25rem 0 0; font-size: 0.875rem; color: var(--muted); flex: 1; }
-.expand-icon { font-size: 0.75rem; color: var(--text-secondary); }
-.agent-tasks-wrap { border-top: 1px solid var(--border-color); padding-top: var(--space-5); }
-.sub-title { font-size: 0.95rem; font-weight: 600; margin: 0 0 var(--space-3); letter-spacing: -0.02em; }
-.task-list { display: flex; flex-direction: column; gap: var(--space-2); }
-.task-row { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; font-size: 0.875rem; padding: var(--space-2) 0; border-bottom: 1px solid var(--border-color); }
-.task-row:last-child { border-bottom: none; }
-.task-title { flex: 1; min-width: 120px; }
-.task-meta { color: var(--muted); }
-.empty-small { color: var(--muted); font-size: 0.875rem; margin: var(--space-3) 0; }
-.empty-state-card { margin-top: var(--space-6); border-color: var(--primary); padding: var(--space-8) var(--space-6); }
-.empty-state-title { font-size: 1.1rem; font-weight: 600; margin-bottom: var(--space-2); letter-spacing: -0.02em; }
-.empty-state-desc { color: var(--muted); font-size: 0.9rem; margin-bottom: var(--space-5); line-height: 1.5; }
-.empty-state-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); }
-.form-hint { font-size: 0.8rem; color: var(--text-secondary); margin: 0.5rem 0 0; line-height: 1.4; }
+.form-hint { font-size: var(--font-caption); color: var(--text-secondary); margin: 0.5rem 0 0; line-height: 1.4; }
 .register-requirement-hint { margin-top: 0.35rem; }
-.badge--published { font-size: 0.75rem; }
-.one-click-hint-card { margin-bottom: var(--space-6); border-color: var(--primary); background: rgba(34, 197, 94, 0.06); }
-.one-click-hint-card .card-content { padding: var(--space-6); }
-.one-click-hint-title { font-weight: 600; font-size: 1rem; margin: 0 0 var(--space-2); letter-spacing: -0.02em; }
-.one-click-hint-desc { color: var(--text-secondary); font-size: 0.9rem; margin: 0 0 var(--space-4); line-height: 1.5; }
-.one-click-hint-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+
+.onboarding-card--glass { border: 1px solid var(--border-muted); border-radius: var(--radius-lg); border-color: rgba(var(--primary-rgb), 0.25); margin-bottom: var(--space-5); }
+.onboarding-title { font-weight: 600; font-size: 1.05rem; margin-bottom: var(--space-2); letter-spacing: -0.02em; color: var(--text-primary); }
+.onboarding-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-4); }
+
+/* Agent 列表 · 呼吸感间距 */
+.agent-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-height: 0;
+}
+
+/* 单张 Agent 卡片 · 钱包/控制中心风格 */
+.agent-card {
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-lg);
+  background: var(--card-background);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+  transition: transform var(--duration-m) var(--ease-apple), box-shadow var(--duration-m) var(--ease-apple), border-color var(--duration-m) var(--ease-apple), background var(--duration-m) var(--ease-apple);
+}
+.agent-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-card-hover);
+  border-color: rgba(var(--primary-rgb), 0.12);
+}
+.agent-card--idle { background: var(--card-background); }
+.agent-card--busy { background: rgba(255, 255, 255, 0.02); }
+.agent-card--skill { background: rgba(var(--primary-rgb), 0.03); }
+.agent-card--expanded { border-color: rgba(var(--primary-rgb), 0.18); }
+
+.agent-card__inner {
+  padding: var(--space-5) var(--space-6);
+  cursor: pointer;
+  min-width: 0;
+}
+.agent-card__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+.agent-card__identity { min-width: 0; }
+.agent-card__name {
+  font-size: var(--font-body);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  margin: 0 0 var(--space-1);
+  line-height: 1.3;
+}
+.agent-card__type {
+  font-size: var(--font-caption);
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+.agent-card__expand {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  transition: transform var(--duration-m) var(--ease-apple);
+}
+.agent-card--expanded .agent-card__expand { transform: rotate(0deg); }
+
+.agent-card__desc {
+  font-size: var(--font-caption);
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0 0 var(--space-4);
+  font-weight: 500;
+}
+.agent-card__desc--muted { color: var(--muted); }
+
+.agent-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+.agent-card__state-pill {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-full);
+  transition: background var(--duration-m) var(--ease-apple), color var(--duration-m) var(--ease-apple);
+}
+.agent-card__state-pill--idle {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary);
+}
+.agent-card__state-pill--busy {
+  background: rgba(var(--primary-rgb), 0.12);
+  color: var(--primary-color);
+}
+.agent-card__state-pill--skill {
+  background: rgba(139, 92, 246, 0.12);
+  color: var(--secondary-color);
+}
+.agent-card__badge {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  padding: 0.2rem 0.45rem;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-muted);
+}
+.agent-card__badge--skill { border-color: rgba(139, 92, 246, 0.3); color: var(--secondary-color); background: rgba(139, 92, 246, 0.08); }
+.agent-card__badge--published { border-color: rgba(var(--primary-rgb), 0.25); color: var(--primary-color); background: rgba(var(--primary-rgb), 0.08); }
+
+/* 技能进度条 · 细条 + 数值 */
+.agent-card__skill-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+.agent-card__skill-label {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+.agent-card__skill-bar-wrap {
+  flex: 1;
+  height: 4px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  min-width: 48px;
+}
+.agent-card__skill-bar {
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+  transition: width var(--duration-m) var(--ease-apple);
+}
+.agent-card__skill-value {
+  font-size: var(--font-caption);
+  font-weight: 600;
+  color: var(--primary-color);
+  flex-shrink: 0;
+}
+
+.agent-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: 0 var(--space-6) var(--space-5);
+  padding-top: 0;
+}
+.agent-card__btn--primary { flex-shrink: 0; }
+.agent-card__btn--secondary { flex-shrink: 0; }
+
+.agent-card__detail {
+  border-top: 1px solid var(--border-muted);
+  padding: var(--space-5) var(--space-6);
+  background: rgba(0, 0, 0, 0.15);
+}
+.agent-card__detail-title {
+  font-size: var(--font-caption);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  margin: 0 0 var(--space-4);
+}
+.agent-card__detail-loading { display: flex; justify-content: center; align-items: center; min-height: 80px; }
+.agent-card__task-list { list-style: none; padding: 0; margin: 0; }
+.agent-card__task-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border-muted);
+  font-size: var(--font-caption);
+}
+.agent-card__task-row:last-child { border-bottom: none; }
+.agent-card__task-title { flex: 1; min-width: 120px; font-weight: 500; color: var(--text-primary); }
+.agent-card__task-meta { color: var(--muted); font-weight: 500; }
+.agent-card__detail-empty { font-size: var(--font-caption); color: var(--muted); margin: var(--space-3) 0 0; }
+
+/* 空状态 · 视觉增强 */
+.tw-empty-state.empty-state--agent {
+  padding: var(--space-10) var(--space-6);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-muted);
+  background: var(--card-background);
+  text-align: center;
+}
+.tw-empty-state__icon {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto var(--space-5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  color: var(--text-secondary);
+  opacity: 0.6;
+  border: 1px dashed var(--border-color);
+  border-radius: var(--radius-lg);
+}
+.tw-empty-state__title {
+  font-size: var(--font-headline);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  margin: 0 0 var(--space-3);
+}
+.tw-empty-state__text {
+  font-size: var(--font-body);
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0 0 var(--space-6);
+  max-width: 28rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+.tw-empty-state__actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-3); }
+
 .modal .form { display: flex; flex-direction: column; gap: var(--space-3); margin: var(--space-5) 0; }
 .modal .form .input { width: 100%; }
+
+/* TransitionGroup · 列表进入/离开/移动 */
+.agent-list-move,
+.agent-list-enter-active,
+.agent-list-leave-active {
+  transition: transform var(--duration-m) var(--ease-apple), opacity var(--duration-m) var(--ease-apple);
+}
+.agent-list-enter-from,
+.agent-list-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+.agent-list-leave-active { position: absolute; width: 100%; }
+
+/* 展开详情 */
+.expand-enter-active,
+.expand-leave-active {
+  transition: opacity var(--duration-m) var(--ease-apple), transform var(--duration-m) var(--ease-apple);
+}
+.expand-enter-from,
+.expand-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+  transition: opacity var(--duration-m) var(--ease-apple), transform var(--duration-m) var(--ease-apple);
+}
+.fade-slide-enter-from,
+.fade-slide-leave-to {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+@media (max-width: 768px) {
+  .agent-card__inner { padding: var(--space-4) var(--space-5); }
+  .agent-card__actions { padding: 0 var(--space-5) var(--space-5); flex-direction: column; }
+  .agent-card__btn--primary,
+  .agent-card__btn--secondary { width: 100%; }
+  .agent-card__detail { padding: var(--space-4) var(--space-5); }
+}
 </style>

@@ -9,9 +9,12 @@
             <button type="button" class="task-tab" :class="{ active: tab === 'available' }" @click="tab = 'available'">{{ t('taskManage.available') || '可接取任务' }}</button>
             <button type="button" class="task-tab" :class="{ active: tab === 'mine' }" @click="tab = 'mine'">{{ t('taskManage.myAccepted') || '我接取的任务' }}</button>
           </div>
-          <div v-if="!auth.isLoggedIn" class="empty-state">
-            <p class="empty">{{ t('taskManage.loginToSeeMine') || '请先登录查看我接取的任务' }}</p>
-            <Button type="button" @click="showAuthModal = true">{{ t('common.loginOrRegister') }}</Button>
+          <div v-if="!auth.isLoggedIn" class="tw-empty-state empty-state empty-state--task">
+            <div class="tw-empty-state__icon" aria-hidden="true">◇</div>
+            <p class="tw-empty-state__title">{{ t('taskManage.loginToSeeMine') || '请先登录查看我接取的任务' }}</p>
+            <div class="tw-empty-state__actions">
+              <Button type="button" @click="showAuthModal = true">{{ t('common.loginOrRegister') }}</Button>
+            </div>
           </div>
           <template v-else>
             <!-- 可接取任务 -->
@@ -23,81 +26,98 @@
                 </select>
               </div>
               <div v-if="tasksLoading" class="task-list task-list--skeleton">
-                <div v-for="i in 5" :key="i" class="card task-card tw-skeleton-card task-manage-skeleton-card">
+                <div v-for="i in 5" :key="i" class="task-row task-row--skeleton">
                   <div class="tw-skeleton task-manage-skeleton-line task-manage-skeleton-line--short"></div>
                   <div class="tw-skeleton task-manage-skeleton-line task-manage-skeleton-line--full"></div>
                   <div class="tw-skeleton task-manage-skeleton-line task-manage-skeleton-line--mid"></div>
                 </div>
               </div>
-              <div v-else class="task-list">
-                <div v-for="task in filteredTasks" :key="task.id" class="card task-card task-card--structured task-manage-card">
-                  <div class="task-card__top">
-                    <span v-if="task.category" class="task-card__category">{{ taskCategoryLabel(task.category) }}</span>
-                    <span class="badge" :class="task.status">{{ t('status.' + task.status) || task.status }}</span>
-                    <span v-if="task.reward_points" class="task-card__reward mono">{{ t('task.reward', { n: task.reward_points }) }}</span>
+              <TransitionGroup v-else name="task-list" tag="div" class="task-list">
+                <article
+                  v-for="task in filteredTasks"
+                  :key="task.id"
+                  :class="cn('task-row', 'task-row--available', `task-row--${task.status}`)"
+                >
+                  <div class="task-row__head">
+                    <span v-if="task.category" class="task-row__category">{{ taskCategoryLabel(task.category) }}</span>
+                    <span :class="taskStatusPillClass(task.status)">{{ t('status.' + task.status) || task.status }}</span>
+                    <span v-if="task.reward_points" class="task-row__reward mono">{{ t('task.reward', { n: task.reward_points }) }}</span>
                   </div>
-                  <h3 class="task-card__title">{{ task.title }}</h3>
-                  <p class="task-card__desc">{{ (task.description || t('common.noDescription')).slice(0, 120) }}{{ (task.description || '').length > 120 ? '…' : '' }}</p>
-                  <p class="task-card__meta">{{ t('task.publisher') }}：{{ task.publisher_name }}<span v-if="task.creator_agent_name"> · {{ t('task.publishedByAgent') }}：{{ task.creator_agent_name }}</span><span v-if="task.subscription_count != null"> · {{ task.subscription_count }}{{ t('task.subscribers') }}</span></p>
-                  <div class="card-content task-card__actions-wrap">
-                    <Button size="sm" variant="ghost" type="button" class="detail-btn" @click="openTaskDetail(task)">{{ t('task.viewDetail') }}</Button>
-                    <Button v-if="task.status === 'open' && auth.isLoggedIn && myAgents.length" size="sm" :disabled="subscribeLoading === task.id" @click="openSubscribeModal(task)">{{ t('task.subscribe') }}</Button>
-                    <Button v-else-if="task.status === 'open' && !auth.isLoggedIn" size="sm" variant="secondary" type="button" @click="showAuthModal = true">{{ t('task.loginToAccept') }}</Button>
+                  <h3 class="task-row__title">{{ task.title }}</h3>
+                  <p class="task-row__desc">{{ (task.description || t('common.noDescription')).slice(0, 120) }}{{ (task.description || '').length > 120 ? '…' : '' }}</p>
+                  <p class="task-row__meta">{{ t('task.publisher') }}：{{ task.publisher_name }}<span v-if="task.creator_agent_name"> · {{ t('task.publishedByAgent') }}：{{ task.creator_agent_name }}</span><span v-if="task.subscription_count != null"> · {{ task.subscription_count }}{{ t('task.subscribers') }}</span></p>
+                  <div class="task-row__actions">
+                    <Button size="sm" variant="ghost" type="button" class="task-row__btn" @click="openTaskDetail(task)">{{ t('task.viewDetail') }}</Button>
+                    <Button v-if="task.status === 'open' && auth.isLoggedIn && myAgents.length" size="sm" :disabled="subscribeLoading === task.id" class="task-row__btn task-row__btn--primary" @click="openSubscribeModal(task)">{{ t('task.subscribe') }}</Button>
+                    <Button v-else-if="task.status === 'open' && !auth.isLoggedIn" size="sm" variant="secondary" type="button" class="task-row__btn" @click="showAuthModal = true">{{ t('task.loginToAccept') }}</Button>
                   </div>
+                </article>
+              </TransitionGroup>
+              <div v-if="!filteredTasks.length && !tasksLoading" class="tw-empty-state empty-state empty-state--task">
+                <div class="tw-empty-state__icon" aria-hidden="true">◇</div>
+                <p class="tw-empty-state__title">{{ categoryFilter ? (t('taskManage.noTasksInCategory') || '该分类下暂无任务') : (t('task.emptyTasks') || '暂无任务') }}</p>
+                <p class="tw-empty-state__text">{{ t('taskManage.emptyTaskHint') || '切换分类或前往首页浏览更多任务' }}</p>
+                <div class="tw-empty-state__actions">
+                  <Button :as="RouterLink" to="/" variant="secondary">{{ t('common.home') }}</Button>
                 </div>
-              </div>
-              <div v-if="!filteredTasks.length && !tasksLoading" class="empty-state">
-                <p class="empty">{{ categoryFilter ? (t('taskManage.noTasksInCategory') || '该分类下暂无任务') : (t('task.emptyTasks') || '暂无任务') }}</p>
-                <Button :as="RouterLink" to="/" variant="secondary">{{ t('common.home') }}</Button>
               </div>
             </template>
             <!-- 我接取的任务 -->
             <template v-else>
             <div v-if="myTasksLoading" class="task-list task-list--skeleton">
-              <div v-for="i in 4" :key="i" class="card task-card tw-skeleton-card task-manage-skeleton-card">
+              <div v-for="i in 4" :key="i" class="task-row task-row--skeleton">
                 <div class="tw-skeleton task-manage-skeleton-line task-manage-skeleton-line--short"></div>
                 <div class="tw-skeleton task-manage-skeleton-line task-manage-skeleton-line--full"></div>
                 <div class="tw-skeleton task-manage-skeleton-line task-manage-skeleton-line--mid"></div>
               </div>
             </div>
-            <div v-else class="task-list">
-              <div v-for="task in myTasks" :key="task.id" class="card task-card task-card--structured task-manage-card">
-                <div class="task-card__top">
-                  <span v-if="task.category" class="task-card__category">{{ taskCategoryLabel(task.category) }}</span>
-                  <span v-if="task.task_type" class="task-card__type">{{ task.task_type }}</span>
-                  <span class="badge" :class="task.status">{{ t('status.' + task.status) || task.status }}</span>
-                  <span v-if="task.reward_points" class="task-card__reward mono">{{ t('task.reward', { n: task.reward_points }) }}</span>
+            <TransitionGroup v-else name="task-list" tag="div" class="task-list">
+              <article
+                v-for="task in myTasks"
+                :key="task.id"
+                :class="cn('task-row', 'task-row--mine', `task-row--${task.status}`)"
+              >
+                <div class="task-row__head">
+                  <span v-if="task.category" class="task-row__category">{{ taskCategoryLabel(task.category) }}</span>
+                  <span v-if="task.task_type" class="task-row__type">{{ task.task_type }}</span>
+                  <span :class="taskStatusPillClass(task.status)">{{ t('status.' + task.status) || task.status }}</span>
+                  <span v-if="task.reward_points" class="task-row__reward mono">{{ t('task.reward', { n: task.reward_points }) }}</span>
                 </div>
-                <h3 class="task-card__title">{{ task.title }}</h3>
-                <p class="task-card__desc">{{ (task.description || t('common.noDescription')).slice(0, 120) }}{{ (task.description || '').length > 120 ? '…' : '' }}</p>
-                <div v-if="task.location || task.duration_estimate || (getTaskSkills(task).length)" class="task-card__attrs">
+                <h3 class="task-row__title">{{ task.title }}</h3>
+                <p class="task-row__desc">{{ (task.description || t('common.noDescription')).slice(0, 120) }}{{ (task.description || '').length > 120 ? '…' : '' }}</p>
+                <div v-if="task.location || task.duration_estimate || (getTaskSkills(task).length)" class="task-row__tags">
                   <span v-if="task.location" class="task-tag task-tag--location">{{ task.location }}</span>
                   <span v-if="task.duration_estimate" class="task-tag task-tag--duration">{{ task.duration_estimate }}</span>
                   <span v-for="s in getTaskSkills(task)" :key="s" class="task-tag task-tag--skill">{{ s }}</span>
                 </div>
-                <p class="task-card__meta">{{ t('task.publisher') }}：{{ task.publisher_name }}<span v-if="task.creator_agent_name"> · {{ t('task.publishedByAgent') }}：{{ task.creator_agent_name }}</span> · {{ t('task.acceptor') || '接取者' }}：{{ task.agent_name }}</p>
-                <div class="card-content task-card__actions-wrap">
-                  <Button size="sm" variant="ghost" type="button" class="detail-btn" @click="openTaskDetail(task)">{{ t('task.viewDetail') }}</Button>
+                <p class="task-row__meta">{{ t('task.publisher') }}：{{ task.publisher_name }}<span v-if="task.creator_agent_name"> · {{ t('task.publishedByAgent') }}：{{ task.creator_agent_name }}</span> · {{ t('task.acceptor') || '接取者' }}：{{ task.agent_name }}</p>
+                <div class="task-row__actions">
+                  <Button size="sm" variant="ghost" type="button" class="task-row__btn" @click="openTaskDetail(task)">{{ t('task.viewDetail') }}</Button>
                   <div class="task-actions">
                     <Button
                       v-if="isExecutor(task) && task.status === 'open'"
                       size="sm"
                       :disabled="submitCompletionLoading === task.id"
+                      class="task-row__btn task-row__btn--primary"
                       @click="openSubmitModal(task)"
                     >
                       {{ t('task.submitCompletion') }}
                     </Button>
                     <template v-if="task.owner_id === auth.userId && task.status === 'pending_verification'">
-                      <Button size="sm" :disabled="confirmLoading === task.id" @click="doConfirm(task.id)">{{ t('task.confirmPass') }}</Button>
-                      <Button size="sm" variant="secondary" :disabled="rejectLoading === task.id" @click="openRejectModal(task.id)">{{ t('task.reject') }}</Button>
+                      <Button size="sm" :disabled="confirmLoading === task.id" class="task-row__btn task-row__btn--primary" @click="doConfirm(task.id)">{{ t('task.confirmPass') }}</Button>
+                      <Button size="sm" variant="secondary" :disabled="rejectLoading === task.id" class="task-row__btn" @click="openRejectModal(task.id)">{{ t('task.reject') }}</Button>
                     </template>
                   </div>
                 </div>
+              </article>
+            </TransitionGroup>
+            <div v-if="!myTasks.length && !myTasksLoading" class="tw-empty-state empty-state empty-state--task">
+              <div class="tw-empty-state__icon" aria-hidden="true">◇</div>
+              <p class="tw-empty-state__title">{{ t('taskManage.noMyTasks') || '暂无接取的任务' }}</p>
+              <p class="tw-empty-state__text">{{ t('taskManage.goAcceptHint') || '前往首页或可接取任务列表接取第一个任务' }}</p>
+              <div class="tw-empty-state__actions">
+                <Button :as="RouterLink" to="/">{{ t('taskManage.goAccept') || '去接取' }}</Button>
               </div>
-            </div>
-            <div v-if="!myTasks.length && !myTasksLoading" class="empty-state">
-              <p class="empty">{{ t('taskManage.noMyTasks') || '暂无接取的任务' }}</p>
-              <Button :as="RouterLink" to="/">{{ t('taskManage.goAccept') || '去接取' }}</Button>
             </div>
             </template>
           </template>
@@ -122,8 +142,8 @@
               <p class="detail-footer">
                 {{ t('task.publisher') }}：{{ selectedTaskDetail.publisher_name }}
                 <span v-if="selectedTaskDetail.creator_agent_name"> · {{ t('task.publishedByAgent') }}：{{ selectedTaskDetail.creator_agent_name }}</span>
-                · <span class="badge" :class="selectedTaskDetail.status">{{ t('status.' + selectedTaskDetail.status) || selectedTaskDetail.status }}</span>
-                <span v-if="selectedTaskDetail.reward_points" class="detail-reward">{{ t('task.reward', { n: selectedTaskDetail.reward_points }) }}</span>
+                · <span :class="taskStatusPillClass(selectedTaskDetail.status)">{{ t('status.' + selectedTaskDetail.status) || selectedTaskDetail.status }}</span>
+                <span v-if="selectedTaskDetail.reward_points" class="detail-reward mono">{{ t('task.reward', { n: selectedTaskDetail.reward_points }) }}</span>
               </p>
               <div class="task-detail-panel__actions">
                 <Button v-if="auth.isLoggedIn && isExecutor(selectedTaskDetail) && selectedTaskDetail.status === 'open'" size="sm" :disabled="submitCompletionLoading === selectedTaskDetail.id" @click="openSubmitModal(selectedTaskDetail)">{{ t('task.submitCompletion') }}</Button>
@@ -366,6 +386,7 @@ import { useI18n } from 'vue-i18n'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Textarea } from '../components/ui/textarea'
+import { cn } from '../lib/utils'
 import { safeT } from '../i18n'
 import { useAuthStore } from '../stores/auth'
 import * as api from '../api'
@@ -505,6 +526,12 @@ const categoryLabels: Record<string, string> = {
 }
 function taskCategoryLabel(cat: string) {
   return t(categoryLabels[cat] || cat)
+}
+
+function taskStatusPillClass(status: string): string {
+  const s = (status || '').replace(/-/g, '_')
+  if (['open', 'completed', 'pending_verification', 'rejected'].includes(s)) return `task-status-pill task-status-pill--${s}`
+  return 'task-status-pill task-status-pill--open'
 }
 const selectedTaskDetail = ref<TaskListItem | null>(null)
 const detailLoading = ref(false)
@@ -743,18 +770,146 @@ watch(tab, (newTab) => {
 .task-detail-panel__head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: var(--space-4); }
 .task-detail-panel__title { font-size: 1.05rem; margin: 0; font-weight: 600; letter-spacing: -0.02em; line-height: 1.3; word-break: break-word; min-width: 0; color: var(--text-primary); }
 .task-detail-panel__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-4); }
-.task-card__title { word-break: break-word; min-width: 0; }
-.task-card__desc { word-break: break-word; min-width: 0; }
-.task-card__meta { word-break: break-word; min-width: 0; }
-.task-card__actions-wrap { flex-wrap: wrap; gap: 0.5rem; }
-.task-card__top { flex-wrap: wrap; gap: 0.35rem; }
+
+/* 任务行 · 极细分隔、背景层级、状态过渡 */
+.task-list { display: flex; flex-direction: column; gap: 0; }
+.task-row {
+  padding: var(--space-5) var(--space-6);
+  border-radius: var(--radius-md);
+  background: var(--card-background);
+  border: none;
+  border-bottom: var(--border-hairline);
+  box-shadow: none;
+  transition: background var(--duration-m) var(--ease-apple), box-shadow var(--duration-m) var(--ease-apple), transform var(--duration-m) var(--ease-apple);
+}
+.task-row:last-child { border-bottom: none; }
+.task-row:hover {
+  background: rgba(255, 255, 255, 0.02);
+  box-shadow: var(--shadow-card);
+}
+.task-row--open { background: var(--card-background); }
+.task-row--pending_verification { background: rgba(234, 179, 8, 0.03); }
+.task-row--completed { background: rgba(59, 130, 246, 0.03); }
+.task-row--rejected { background: rgba(239, 68, 68, 0.03); }
+.task-row__head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+.task-row__category {
+  font-size: var(--font-caption);
+  padding: 0.2rem 0.45rem;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+.task-row__type { font-size: 0.6875rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
+.task-row__reward {
+  margin-left: auto;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--primary-color);
+  letter-spacing: -0.02em;
+}
+.task-row__title {
+  font-size: var(--font-body);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  margin: 0 0 var(--space-2);
+  line-height: 1.35;
+  word-break: break-word;
+}
+.task-row__desc {
+  font-size: var(--font-caption);
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0 0 var(--space-3);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.task-row__tags { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-2); font-size: var(--font-caption); }
+.task-tag { display: inline-block; font-size: 0.6875rem; padding: 0.2rem 0.45rem; border-radius: var(--radius-full); background: rgba(255,255,255,0.06); color: var(--text-secondary); border: 1px solid var(--border-muted); font-weight: 500; }
+.task-tag--location { border-color: rgba(var(--primary-rgb), 0.3); color: var(--secondary-color); }
+.task-tag--duration { border-color: rgba(59, 130, 246, 0.35); color: rgba(191, 219, 254, 0.9); }
+.task-tag--skill { border-color: rgba(168, 85, 247, 0.35); color: rgba(233, 213, 255, 0.95); }
+.task-row__meta {
+  font-size: var(--font-caption);
+  color: var(--muted);
+  line-height: 1.5;
+  margin: 0 0 var(--space-4);
+}
+.task-row__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding-top: var(--space-4);
+  border-top: var(--border-hairline);
+}
+.task-row__btn {
+  transition: background var(--duration-m) var(--ease-apple), transform var(--duration-m) var(--ease-apple), box-shadow var(--duration-m) var(--ease-apple);
+}
+.task-row__btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+.task-row__btn:active:not(:disabled) { transform: scale(0.98); }
+.task-row--skeleton { padding: var(--space-5); border-radius: var(--radius-md); background: var(--card-background); border-bottom: var(--border-hairline); }
+.task-list--skeleton .task-row--skeleton:last-child { border-bottom: none; }
+.task-manage-skeleton-line { display: block; border-radius: 4px; height: 0.875rem; margin-bottom: 0.5rem; }
+.task-manage-skeleton-line:last-child { margin-bottom: 0; }
+.task-manage-skeleton-line--short { width: 30%; }
+.task-manage-skeleton-line--full { width: 100%; }
+.task-manage-skeleton-line--mid { width: 75%; }
+
+/* 空状态 · 细线图标与呼吸感 */
+.tw-empty-state.empty-state--task {
+  text-align: center;
+  padding: var(--space-10) var(--space-6);
+  margin: var(--space-6) 0;
+  border-radius: var(--radius-lg);
+  border: var(--border-hairline);
+  background: var(--card-background);
+}
+.tw-empty-state__icon {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto var(--space-5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  color: var(--text-secondary);
+  opacity: 0.5;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+}
+.tw-empty-state__title { font-size: var(--font-headline); font-weight: 600; letter-spacing: -0.02em; color: var(--text-primary); margin: 0 0 var(--space-2); }
+.tw-empty-state__text { font-size: var(--font-body); color: var(--text-secondary); line-height: 1.5; margin: 0 0 var(--space-5); }
+.tw-empty-state__actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-3); }
+
+/* TransitionGroup · 列表进入/离开/移动 */
+.task-list-move,
+.task-list-enter-active,
+.task-list-leave-active {
+  transition: transform var(--duration-m) var(--ease-apple), opacity var(--duration-m) var(--ease-apple);
+}
+.task-list-enter-from,
+.task-list-leave-to { opacity: 0; transform: translateY(-6px); }
+.task-list-leave-active { position: absolute; width: 100%; }
+
 .task-detail-completion-submission { margin-top: var(--space-5); padding: var(--space-4); background: var(--surface); border-radius: var(--radius-sm); }
 .task-detail-completion-submission .completion-summary { margin: 0 0 0.5rem; white-space: pre-wrap; font-size: 0.9rem; color: var(--text-secondary); }
 .task-detail-completion-submission .completion-link { margin: 0; font-size: 0.9rem; }
 .task-tabs { display: flex; gap: var(--space-2); margin-bottom: var(--space-5); }
 .task-tab { padding: 0.5rem 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: transparent; color: var(--text-secondary); font-size: 0.9rem; font-weight: 500; cursor: pointer; transition: border-color var(--duration-m) var(--ease-apple), background var(--duration-m) var(--ease-apple), color var(--duration-m) var(--ease-apple); }
 .task-tab:hover { border-color: var(--primary-color); color: var(--primary-color); }
-.task-tab.active { background: rgba(var(--primary-rgb, 34, 197, 94), 0.12); border-color: var(--primary-color); color: var(--primary-color); }
+.task-tab.active { background: rgba(var(--primary-rgb), 0.12); border-color: var(--primary-color); color: var(--primary-color); }
 .task-filter-row { margin-bottom: var(--space-4); }
 .task-filter-select { max-width: 180px; }
 .task-layout--mine-only { grid-template-columns: minmax(0, 1fr) 220px; }
@@ -763,7 +918,7 @@ watch(tab, (newTab) => {
 .task-right-card {
   border-radius: var(--radius-md);
   border: 1px solid var(--border-color);
-  background: var(--card-background, var(--card-bg));
+  background: var(--card-background);
   padding: var(--space-5) var(--space-6);
   box-shadow: var(--shadow-card);
   transition: box-shadow var(--duration-m) var(--ease-apple), border-color var(--duration-m) var(--ease-apple);
@@ -783,15 +938,47 @@ watch(tab, (newTab) => {
   transition: background var(--duration-m) var(--ease-apple), color var(--duration-m) var(--ease-apple), border-color var(--duration-m) var(--ease-apple);
   border: 1px solid transparent;
 }
-.task-right-agent-link:hover { background: rgba(var(--primary-rgb, 34, 197, 94), 0.1); color: var(--primary-color); text-decoration: none; border-color: var(--border-color); }
-.task-right-agent-num {
-  flex-shrink: 0; width: 1.35rem; height: 1.35rem; border-radius: 6px;
-  background: var(--surface); color: var(--text-secondary);
-  font-size: 0.75rem; font-weight: 600; display: inline-flex; align-items: center; justify-content: center;
-}
-.task-right-agent-link:hover .task-right-agent-num { background: rgba(var(--primary-rgb, 34, 197, 94), 0.2); color: var(--primary-color); }
+.task-right-agent-link:hover { background: rgba(var(--primary-rgb), 0.1); color: var(--primary-color); text-decoration: none; border-color: var(--border-color); }
+.task-right-agent-num { flex-shrink: 0; width: 1.35rem; height: 1.35rem; border-radius: 6px; background: var(--surface); color: var(--text-secondary); font-size: 0.75rem; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; }
+.task-right-agent-link:hover .task-right-agent-num { background: rgba(var(--primary-rgb), 0.2); color: var(--primary-color); }
 .task-right-agent-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .task-right-more { padding: 0.25rem 0; margin-top: 0.25rem; }
+
+.detail-section { margin-bottom: var(--space-5); }
+.detail-desc { white-space: pre-wrap; word-break: break-word; color: var(--text-secondary); font-size: var(--font-body); line-height: 1.55; }
+.detail-meta { margin: 0 0 var(--space-5); font-size: var(--font-caption); }
+.detail-meta dt { font-weight: 600; color: var(--text-secondary); margin-top: 0.5rem; margin-bottom: 0.2rem; }
+.detail-meta dd { margin: 0; }
+.detail-requirements { white-space: pre-wrap; word-break: break-word; }
+.detail-footer { font-size: var(--font-caption); color: var(--text-secondary); margin-top: var(--space-4); }
+.detail-reward { margin-left: 0.5rem; font-weight: 700; color: var(--primary-color); }
+
+.select-input { max-width: 100%; }
+.textarea-input { min-height: 4rem; resize: vertical; }
+.modal--create { max-width: 520px; width: 95%; max-height: 90vh; overflow-y: auto; padding: var(--space-6); }
+.publish-form-in-modal .form-group { margin-bottom: 1rem; }
+.publish-form-in-modal .create-task-step { margin-bottom: 0.75rem; }
+.publish-form-in-modal .create-task-step-label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.5rem; }
+.publish-form-in-modal .modal-actions { display: flex; gap: 0.5rem; margin-top: 1rem; }
+.publish-form-in-modal .form-group.form-inline { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.publish-form-in-modal .form-group.form-inline .form-label { margin-bottom: 0; margin-right: 0.25rem; }
+.publish-form-in-modal .form-group.form-inline .input-num { width: 6rem; }
+.publish-form-in-modal .form-hint { font-size: 0.8rem; color: var(--text-secondary); margin: 0.35rem 0 0; line-height: 1.4; }
+.create-task-step { margin-bottom: 1rem; }
+.create-task-step-label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.03em; }
+.create-task-step--identity { margin-bottom: 1.25rem; }
+.publish-identity-toggles { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.35rem; }
+.identity-toggle { padding: 0.5rem 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--background-dark); color: var(--text-secondary); font-size: 0.9rem; cursor: pointer; transition: border-color var(--duration-m) var(--ease-apple), background var(--duration-m) var(--ease-apple), color var(--duration-m) var(--ease-apple); }
+.identity-toggle:hover { border-color: var(--primary-color); color: var(--primary-color); }
+.identity-toggle.active { background: rgba(var(--primary-rgb), 0.15); border-color: var(--primary-color); color: var(--primary-color); }
+.form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem 1rem; }
+.form-row-2 .form-group { margin-bottom: 0; }
+@media (max-width: 480px) { .form-row-2 { grid-template-columns: 1fr; } }
+.task-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.agent-select-list { display: flex; flex-direction: column; gap: 0.5rem; margin: 1rem 0; }
+.modal--create .form-group { margin-bottom: var(--space-4); }
+.modal--create .modal-actions { margin-top: var(--space-5); }
+
 @media (max-width: 1024px) {
   .task-layout { grid-template-columns: 1fr 200px; }
   .task-left { order: 1; grid-column: 1 / -1; }
@@ -805,85 +992,9 @@ watch(tab, (newTab) => {
   .task-right { order: -1; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 0.75rem; }
   .task-right-create { flex: 1; min-width: 120px; }
   .task-right-agents { flex: 1 1 100%; }
+  .task-row { padding: var(--space-4) var(--space-5); }
+  .task-row__actions { flex-direction: column; align-items: stretch; }
+  .task-row__btn { width: 100%; }
+  .task-row__btn.task-row__btn--primary { width: 100%; }
 }
-.modal--create { max-width: 520px; width: 95%; max-height: 90vh; overflow-y: auto; }
-.publish-form-in-modal .form-group { margin-bottom: 1rem; }
-.publish-form-in-modal .create-task-step { margin-bottom: 0.75rem; }
-.publish-form-in-modal .create-task-step-label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.5rem; }
-.publish-form-in-modal .modal-actions { display: flex; gap: 0.5rem; margin-top: 1rem; }
-.publish-form-in-modal .form-group.form-inline { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
-.publish-form-in-modal .form-group.form-inline .form-label { margin-bottom: 0; margin-right: 0.25rem; }
-.publish-form-in-modal .form-group.form-inline .input-num { width: 6rem; }
-.publish-form-in-modal .form-hint { font-size: 0.8rem; color: var(--text-secondary); margin: 0.35rem 0 0; line-height: 1.4; }
-.create-task-step { margin-bottom: 1rem; }
-.create-task-step-label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.03em; }
-.create-task-step--identity { margin-bottom: 1.25rem; }
-.publish-identity-toggles { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.35rem; }
-.identity-toggle { padding: 0.5rem 1rem; border-radius: 8px; border: 1px solid var(--border-color); background: var(--background-dark); color: var(--text-secondary); font-size: 0.9rem; cursor: pointer; transition: border-color var(--duration-m) var(--ease-apple), background var(--duration-m) var(--ease-apple), color var(--duration-m) var(--ease-apple); }
-.identity-toggle:hover { border-color: var(--primary-color); color: var(--primary-color); }
-.identity-toggle.active { background: rgba(var(--primary-rgb, 34, 197, 94), 0.15); border-color: var(--primary-color); color: var(--primary-color); }
-.form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem 1rem; }
-.form-row-2 .form-group { margin-bottom: 0; }
-@media (max-width: 480px) { .form-row-2 { grid-template-columns: 1fr; } }
-.task-list { display: flex; flex-direction: column; gap: 1rem; }
-.task-list--skeleton .task-manage-skeleton-card { padding: 1.25rem; }
-.task-manage-skeleton-line { display: block; border-radius: 4px; height: 0.875rem; margin-bottom: 0.5rem; }
-.task-manage-skeleton-line:last-child { margin-bottom: 0; }
-.task-manage-skeleton-line--short { width: 30%; }
-.task-manage-skeleton-line--full { width: 100%; }
-.task-manage-skeleton-line--mid { width: 75%; }
-.task-card .card-header { display: flex; justify-content: space-between; align-items: center; }
-.task-card .meta { font-size: 0.875rem; color: var(--muted); margin: 0.25rem 0; }
-
-/* 结构化任务卡片（与首页/website 一致：8px 栅格、typography、.mono） */
-.task-card--structured.task-manage-card {
-  padding: 24px;
-  border-radius: 12px;
-  border: 1px solid var(--border-color, rgba(255,255,255,0.08));
-  background: var(--card-background, var(--card-bg));
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-  transition: box-shadow 0.2s, border-color 0.2s;
-}
-.task-card--structured.task-manage-card:hover {
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-  border-color: var(--border-color, rgba(255,255,255,0.12));
-}
-.task-card--structured.task-manage-card .task-card__top { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
-.task-card--structured.task-manage-card .task-card__type { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.02em; }
-.task-card--structured.task-manage-card .task-card__reward { margin-left: auto; font-size: 0.9rem; font-weight: 600; color: var(--primary, #6366f1); }
-.task-card--structured.task-manage-card .task-card__title { font-size: 1rem; margin: 0 0 8px; font-weight: 600; line-height: 1.35; }
-.task-card--structured.task-manage-card .task-card__desc { font-size: 0.875rem; color: var(--text-secondary, var(--muted)); margin: 0 0 8px; line-height: 1.55; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.task-card--structured.task-manage-card .task-card__tags,
-.task-card--structured.task-manage-card .task-card__attrs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; font-size: 0.8125rem; }
-.task-tag { display: inline-block; font-size: 0.75rem; padding: 0.2rem 0.5rem; border-radius: 999px; background: var(--surface, rgba(255,255,255,0.06)); color: var(--text-secondary, #94a3b8); border: 1px solid var(--border, rgba(255,255,255,0.1)); }
-.task-tag--location { border-color: rgba(34, 197, 94, 0.4); color: #86efac; }
-.task-tag--duration { border-color: rgba(59, 130, 246, 0.4); color: #93c5fd; }
-.task-card__category { font-size: 0.75rem; padding: 0.25rem 0.5rem; background: var(--surface-700, #333); border-radius: 6px; margin-right: 0.35rem; font-weight: 500; }
-.select-input { max-width: 100%; }
-.textarea-input { min-height: 4rem; resize: vertical; }
-.modal--detail { max-width: 28rem; }
-.detail-section { margin-bottom: 1rem; }
-.detail-desc { white-space: pre-wrap; word-break: break-word; color: var(--text-secondary); }
-.detail-meta { margin: 0 0 1rem; font-size: 0.9rem; }
-.detail-meta dt { font-weight: 600; color: var(--text-secondary); margin-top: 0.5rem; margin-bottom: 0.2rem; }
-.detail-meta dd { margin: 0; }
-.detail-requirements { white-space: pre-wrap; word-break: break-word; }
-.detail-footer { font-size: 0.9rem; color: var(--text-secondary); margin-top: 0.75rem; }
-.detail-reward { margin-left: 0.5rem; }
-.detail-btn { margin-right: auto; }
-.task-card__requirements-snippet { font-size: 0.8rem; color: var(--text-secondary); margin: 0 0 0.4rem; padding-left: 0.5rem; border-left: 2px solid var(--surface-700); line-height: 1.35; }
-.task-card__priority { font-size: 0.7rem; padding: 0.15rem 0.4rem; border-radius: 4px; text-transform: uppercase; }
-.task-card__priority.priority--high { background: rgba(234, 179, 8, 0.2); color: #eab308; }
-.task-card__priority.priority--critical { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
-.task-card__priority.priority--low { background: rgba(148, 163, 184, 0.2); color: #94a3b8; }
-.task-tag--skill { border-color: rgba(168, 85, 247, 0.4); color: #e9d5ff; }
-.task-card--structured.task-manage-card .task-card__meta { font-size: 0.8125rem; line-height: 1.5; color: var(--text-secondary, var(--muted)); margin: 0 0 12px; }
-.task-card--structured.task-manage-card .task-card__actions-wrap { padding: 0; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-muted, var(--border-color)); }
-
-.task-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; }
-.empty-state { text-align: center; padding: 2rem; color: var(--muted); }
-.agent-select-list { display: flex; flex-direction: column; gap: 0.5rem; margin: 1rem 0; }
-.modal--create { max-width: 520px; padding: var(--space-6, 1.5rem); }
-.modal--create .form-group { margin-bottom: var(--space-4, 1rem); }
-.modal--create .modal-actions { margin-top: var(--space-5, 1.25rem); }
 </style>
