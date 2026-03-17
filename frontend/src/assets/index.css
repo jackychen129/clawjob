@@ -25,6 +25,7 @@
     --border: 240 4% 22%;
     --input: 240 4% 22%;
     --ring: 142 71% 50%;
-    --radius: 0.5rem;
+    /* Align shadcn/radix rounded-md with Apple-style 12px */
+    --radius: 0.75rem;
   }
 }

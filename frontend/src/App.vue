@@ -4,7 +4,7 @@
     <div class="aura-glow aura-glow--tl" aria-hidden="true"></div>
     <div class="aura-glow aura-glow--br" aria-hidden="true"></div>
 
-    <header class="app-header sticky top-0 z-[50] backdrop-blur-md bg-zinc-900/80 border-b border-zinc-800">
+    <header class="app-header">
       <div class="header-content">
         <a href="https://clawjob.com.cn" class="header-brand" :title="t('common.websiteHome') || '返回官网'" target="_self">
           <h1 class="header-brand-logo">ClawJob <span class="header-brand-website">{{ t('common.websiteShort') || '官网' }}</span></h1>
@@ -57,7 +57,7 @@
       <Button size="sm" type="button" @click="openCreateTaskModalWithDraft">{{ t('task.draftRestore') || '从草稿恢复' }}</Button>
       <Button size="sm" variant="ghost" type="button" @click="clearDraft">{{ t('task.draftDiscard') || '丢弃草稿' }}</Button>
     </div>
-    <main class="main-content relative z-0 px-6 sm:px-8 md:px-12 max-w-7xl mx-auto w-full flex-1 py-8 md:py-12" :key="route.path">
+    <main class="main-content relative z-0" :key="route.path">
       <SkillPage v-if="route.path === '/skill'" />
       <DocsPage v-else-if="route.path === '/docs'" />
       <ManualPage v-else-if="route.path === '/docs/manual'" />
@@ -461,7 +461,19 @@
           <Input v-model="loginForm.password" type="password" :placeholder="t('auth.password')" />
           <Button :disabled="authLoading" @click="doLogin">{{ t('auth.login') }}</Button>
           <div class="oauth-divider">{{ t('auth.or') }}</div>
-          <a :href="googleLoginUrl" class="btn btn-google" :class="{ 'btn-google-unconfigured': !googleOAuthConfigured }" :title="!googleOAuthConfigured ? (googleConfigError || t('oauthError.server_config')) : undefined" target="_self" @click="onGoogleLoginClick">{{ t('auth.loginWithGoogle') }}</a>
+          <Button
+            as="a"
+            :href="googleLoginUrl"
+            target="_self"
+            variant="secondary"
+            class="w-full justify-center"
+            :class="{ 'pointer-events-none opacity-60 cursor-not-allowed': !googleOAuthConfigured }"
+            :title="!googleOAuthConfigured ? (googleConfigError || t('oauthError.server_config')) : undefined"
+            :aria-disabled="(!googleOAuthConfigured).toString()"
+            @click="onGoogleLoginClick"
+          >
+            {{ t('auth.loginWithGoogle') }}
+          </Button>
           <p v-if="!googleOAuthConfigured && googleConfigError" class="hint google-config-hint">{{ googleConfigError }}</p>
         </div>
         <div v-else class="form">
@@ -476,7 +488,19 @@
           <Input v-model="registerForm.password" type="password" :placeholder="t('auth.password')" />
           <Button :disabled="authLoading" @click="doRegister">{{ t('auth.register') }}</Button>
           <div class="oauth-divider">{{ t('auth.or') }}</div>
-          <a :href="googleLoginUrl" class="btn btn-google" :class="{ 'btn-google-unconfigured': !googleOAuthConfigured }" :title="!googleOAuthConfigured ? (googleConfigError || t('oauthError.server_config')) : undefined" target="_self" @click="onGoogleLoginClick">{{ t('auth.loginWithGoogle') }}</a>
+          <Button
+            as="a"
+            :href="googleLoginUrl"
+            target="_self"
+            variant="secondary"
+            class="w-full justify-center"
+            :class="{ 'pointer-events-none opacity-60 cursor-not-allowed': !googleOAuthConfigured }"
+            :title="!googleOAuthConfigured ? (googleConfigError || t('oauthError.server_config')) : undefined"
+            :aria-disabled="(!googleOAuthConfigured).toString()"
+            @click="onGoogleLoginClick"
+          >
+            {{ t('auth.loginWithGoogle') }}
+          </Button>
           <p v-if="!googleOAuthConfigured && googleConfigError" class="hint google-config-hint">{{ googleConfigError }}</p>
         </div>
         <p v-if="authError" class="error-msg">{{ authError }}</p>
