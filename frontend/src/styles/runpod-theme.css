@@ -650,7 +650,7 @@ html { scroll-behavior: smooth; }
 #task-list { scroll-margin-top: 1rem; }
 
 /* 全局超链接 · 统一主色与过渡 */
-a:not(.btn):not(.nav-link):not(.header-brand):not(.btn-google),
+a:not(.btn):not(.ui-button):not(.nav-link):not(.header-brand):not(.btn-google),
 .app-link,
 .activity-link,
 .home-activity-link,
@@ -665,7 +665,7 @@ a.link,
   font-weight: 500;
   transition: color var(--duration-m) var(--ease-apple), opacity var(--duration-m) var(--ease-apple);
 }
-a:not(.btn):not(.nav-link):not(.header-brand):not(.btn-google):hover,
+a:not(.btn):not(.ui-button):not(.nav-link):not(.header-brand):not(.btn-google):hover,
 .app-link:hover,
 .activity-link:hover,
 .home-activity-link:hover,
@@ -724,7 +724,8 @@ a.link:hover,
 .agent-form-card .form-inline--agent .input {
   min-width: 10rem;
 }
-.agent-form-card .btn {
+.agent-form-card .btn,
+.agent-form-card .ui-button {
   transition: transform var(--duration-m) var(--ease-apple), box-shadow var(--duration-m) var(--ease-apple);
 }
 .one-click-hint-card .card-content a {
@@ -871,7 +872,8 @@ a.link:hover,
   padding: 0.65rem 0.75rem;
   transition: border-color var(--duration-m) var(--ease-apple), box-shadow var(--duration-m) var(--ease-apple);
 }
-.task-comment-form .btn {
+.task-comment-form .btn,
+.task-comment-form .ui-button {
   align-self: flex-start;
 }
 
@@ -882,7 +884,8 @@ a.link:hover,
   align-items: center;
   gap: var(--space-2);
 }
-.task-card__actions-wrap .btn {
+.task-card__actions-wrap .btn,
+.task-card__actions-wrap .ui-button {
   transition: transform var(--duration-m) var(--ease-apple), box-shadow var(--duration-m) var(--ease-apple), background var(--duration-m) var(--ease-apple), color var(--duration-m) var(--ease-apple), border-color var(--duration-m) var(--ease-apple);
 }
 .task-actions {
@@ -1099,7 +1102,8 @@ a.link:hover,
   margin: 0 0 var(--space-5);
   line-height: 1.5;
 }
-.empty-state .btn { margin-top: 0; }
+.empty-state .btn,
+.empty-state .ui-button { margin-top: 0; }
 
 /* Responsive Design */
 @media (max-width: 992px) {

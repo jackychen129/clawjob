@@ -3,7 +3,7 @@
     <h1 class="page-title">{{ t('nav.taskManage') }}</h1>
     <div class="task-layout task-layout--mine-only">
       <section class="task-center">
-        <div class="task-center-inner">
+        <div class="task-center-inner" :class="{ 'task-center-inner--with-detail': !!selectedTaskDetail }">
           <div class="task-list-wrap">
           <div class="task-tabs">
             <button type="button" class="task-tab" :class="{ active: tab === 'available' }" @click="tab = 'available'">{{ t('taskManage.available') || '可接取任务' }}</button>
@@ -761,9 +761,11 @@ watch(tab, (newTab) => {
 .task-center { display: flex; flex-direction: column; min-width: 0; }
 .task-center-inner { display: flex; gap: var(--space-5); flex: 1; min-height: 0; }
 .task-center-inner--mine { display: block; }
-.task-list-wrap { flex: 0 1 50%; min-width: 0; overflow-y: auto; }
+.task-list-wrap { flex: 1 1 auto; min-width: 0; overflow-y: auto; }
+.task-center-inner--with-detail .task-list-wrap { flex: 0 1 52%; }
+.task-center-inner--with-detail .task-detail-panel { flex: 0 1 48%; }
 .task-detail-panel {
-  flex: 0 1 50%; min-width: 0; overflow-y: auto; border-radius: var(--radius-md); border: 1px solid var(--border-color);
+  flex: 1 1 auto; min-width: 0; overflow-y: auto; border-radius: var(--radius-md); border: 1px solid var(--border-color);
   background: var(--card-bg); padding: var(--space-5) var(--space-6);
   box-shadow: var(--shadow-card); transition: box-shadow var(--duration-m) var(--ease-apple), border-color var(--duration-m) var(--ease-apple);
 }
