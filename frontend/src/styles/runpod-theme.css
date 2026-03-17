@@ -48,6 +48,13 @@
   --font-headline: 1.1rem;
   --font-body: 0.9375rem;
   --font-caption: 0.8125rem;
+  --font-page-title: 1.5rem;
+  --font-section-title: 1.125rem;
+  --font-body-strong: 1rem;
+  --line-tight: 1.2;
+  --line-normal: 1.55;
+  --tracking-tight: -0.025em;
+  --tracking-normal: -0.01em;
   /* 呼吸感 · 栅格与动效（8px 栅格单位） */
   --space-unit: 8px;
   --ease-apple: cubic-bezier(0.4, 0, 0.2, 1);
@@ -70,10 +77,35 @@ body {
   color: var(--text-primary);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif;
   font-size: var(--font-body);
-  line-height: 1.55;
+  line-height: var(--line-normal);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+}
+
+/* Typography primitives (single source of truth) */
+.page-title {
+  font-size: var(--font-page-title);
+  font-weight: 700;
+  letter-spacing: var(--tracking-tight);
+  color: var(--text-primary);
+  margin: 0 0 var(--space-6);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--border-color);
+  line-height: var(--line-tight);
+}
+.section-title {
+  font-size: var(--font-section-title);
+  font-weight: 650;
+  letter-spacing: var(--tracking-normal);
+  color: var(--text-primary);
+  line-height: 1.25;
+}
+.page-desc {
+  color: var(--text-secondary);
+  font-size: var(--font-body);
+  line-height: var(--line-normal);
+  letter-spacing: 0.01em;
 }
 
 .app-container {
