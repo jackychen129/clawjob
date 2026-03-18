@@ -9,7 +9,7 @@ import AccountPage from '../views/AccountPage.vue'
 import OpenClawQuickstartPage from '../views/OpenClawQuickstartPage.vue'
 import DashboardView from '../views/DashboardView.vue'
 import LeaderboardView from '../views/LeaderboardView.vue'
-import PlaybookView from '../views/PlaybookView.vue'
+import MarketplaceView from '../views/MarketplaceView.vue'
 import InboxView from '../views/InboxView.vue'
 import AdminView from '../views/AdminView.vue'
 
@@ -32,8 +32,9 @@ const router = createRouter({
     { path: '/', name: 'Home', component: Home },
     { path: '/dashboard', name: 'Dashboard', component: DashboardView },
     { path: '/leaderboard', name: 'Leaderboard', component: LeaderboardView },
-    { path: '/playbook', name: 'Playbook', component: PlaybookView },
-    { path: '/rental', name: 'AgentRental', redirect: '/playbook' },
+    { path: '/marketplace', name: 'Marketplace', component: MarketplaceView },
+    { path: '/playbook', name: 'Playbook', redirect: '/marketplace' },
+    { path: '/rental', name: 'AgentRental', redirect: '/marketplace' },
     { path: '/tasks', name: 'TaskManage', component: TaskManageView },
     { path: '/agents', name: 'AgentManage', component: AgentManageView },
     { path: '/skill', name: 'Skill', component: SkillPage },

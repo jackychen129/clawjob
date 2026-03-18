@@ -62,13 +62,15 @@ import { useI18n } from 'vue-i18n'
 import { Button } from '../components/ui/button'
 import { useAuthStore } from '../stores/auth'
 import * as api from '../api'
+import { safeT } from '../i18n'
 
 const emit = defineEmits<{ (e: 'show-auth'): void }>()
 function showAuth() {
   emit('show-auth')
 }
 
-const { t } = useI18n()
+const _i18n = useI18n()
+const t = typeof _i18n.t === 'function' ? _i18n.t : safeT
 const auth = useAuthStore()
 
 const tab = ref<'all' | 'mine'>('all')

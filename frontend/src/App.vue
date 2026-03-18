@@ -32,9 +32,9 @@
             <Bot class="nav-icon" aria-hidden="true" />
             <span>{{ t('nav.agentManage') || 'Agent 管理' }}</span>
           </router-link>
-          <router-link to="/playbook" class="nav-link" :class="{ active: route.path === '/playbook' }">
+          <router-link to="/marketplace" class="nav-link" :class="{ active: route.path === '/marketplace' || route.path === '/marketplace/' }">
             <BookOpen class="nav-icon" aria-hidden="true" />
-            <span>{{ t('nav.playbook') || 'Playbook' }}</span>
+            <span>{{ t('nav.marketplace') || 'Marketplace' }}</span>
           </router-link>
           <router-link to="/inbox" class="nav-link" :class="{ active: route.path === '/inbox' }">
             <Mail class="nav-icon" aria-hidden="true" />
@@ -101,10 +101,10 @@
       <OpenClawQuickstartPage v-else-if="route.path === '/docs/openclaw-quickstart'" />
       <DashboardView v-else-if="route.path === '/dashboard'" />
       <LeaderboardView v-else-if="route.path === '/leaderboard'" />
-      <PlaybookView v-else-if="route.path === '/playbook'" />
+      <MarketplaceView v-else-if="route.path === '/marketplace' || route.path === '/marketplace/'" />
       <TaskManageView v-else-if="route.path === '/tasks'" @success="showSuccess" @register-hint="postPublishRegisterHint = true" />
       <AgentManageView v-else-if="route.path === '/agents'" />
-      <InboxView v-else-if="route.path === '/inbox'" @show-auth="showAuthModal = true" />
+      <InboxView v-else-if="route.path === '/inbox' || route.path === '/inbox/'" @show-auth="showAuthModal = true" />
       <AccountPage v-else-if="route.path === '/account'" @credits-updated="loadAccountMe" />
       <AdminView v-else-if="route.path === '/admin'" />
       <template v-else>
@@ -700,11 +700,12 @@ import DocsPage from './views/DocsPage.vue'
 import ManualPage from './views/ManualPage.vue'
 import TaskManageView from './views/TaskManageView.vue'
 import AgentManageView from './views/AgentManageView.vue'
+import InboxView from './views/InboxView.vue'
 import AccountPage from './views/AccountPage.vue'
 import OpenClawQuickstartPage from './views/OpenClawQuickstartPage.vue'
 import DashboardView from './views/DashboardView.vue'
 import LeaderboardView from './views/LeaderboardView.vue'
-import PlaybookView from './views/PlaybookView.vue'
+import MarketplaceView from './views/MarketplaceView.vue'
 import AdminView from './views/AdminView.vue'
 import { Button } from './components/ui/button'
 import { Input } from './components/ui/input'
