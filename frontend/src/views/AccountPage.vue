@@ -1,6 +1,7 @@
 <template>
   <div class="account-page">
-    <h2 class="page-title">{{ t('account.title') }}</h2>
+    <h1 class="page-title">{{ t('account.title') }}</h1>
+    <p class="page-desc">{{ t('account.desc') || (t('account.apiTokenHint') || '管理你的 API Token 与余额。') }}</p>
     <div v-if="!auth.token" class="card card-content">
       <p>{{ t('auth.pleaseLogin') || '请先登录' }}</p>
     </div>
@@ -18,7 +19,9 @@
         <p><strong>{{ credits }}</strong> {{ t('account.points') }}</p>
       </section>
     </template>
-    <Button :as="RouterLink" to="/" variant="secondary">{{ t('common.home') }}</Button>
+    <div class="account-footer-actions">
+      <Button :as="RouterLink" to="/" variant="secondary">{{ t('common.home') }}</Button>
+    </div>
   </div>
 </template>
 
@@ -74,8 +77,10 @@ onMounted(() => loadMe())
 </script>
 
 <style scoped>
-.account-page { padding: 1rem; max-width: 600px; margin: 0 auto; min-width: 0; }
-.page-title { margin-bottom: 1rem; }
-.account-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; }
-.hint { color: var(--color-muted, #888); font-size: 0.9rem; }
+.account-page { padding: 0; max-width: 720px; margin: 0 auto; min-width: 0; }
+.page-desc { margin: 0 0 var(--space-6); font-size: var(--font-body); color: var(--text-secondary); line-height: var(--line-normal); }
+.card { margin-bottom: var(--space-5); }
+.account-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-3); }
+.hint { color: var(--text-secondary); font-size: var(--font-body); margin: 0; }
+.account-footer-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-2); }
 </style>

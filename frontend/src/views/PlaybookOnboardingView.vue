@@ -48,15 +48,14 @@ const { t } = useI18n()
 </script>
 
 <style scoped>
-.playbook-view { padding: 1.5rem; max-width: 900px; margin: 0 auto; }
-.page-title { font-size: 1.5rem; margin-bottom: 0.5rem; }
-.page-desc { color: var(--el-text-color-secondary); margin-bottom: 1.5rem; font-size: 0.9rem; }
+.playbook-view { padding: 0; max-width: 900px; margin: 0 auto; }
+.page-desc { margin-bottom: var(--space-6); }
 .playbook-steps-card { margin-top: 1rem; }
 .step-list { list-style: none; padding: 0; margin: 0; }
 .step-item { display: flex; gap: 1rem; padding: 0.75rem 0; border-bottom: 1px solid var(--border, rgba(255,255,255,0.08)); align-items: flex-start; }
 .step-item:last-child { border-bottom: none; }
 .step-num { flex-shrink: 0; width: 2rem; height: 2rem; border-radius: 50%; background: var(--brand-500, #22c55e); color: #0a0a0b; font-weight: 700; display: flex; align-items: center; justify-content: center; font-size: 0.95rem; }
 .step-body { flex: 1; min-width: 0; }
-.step-hint { margin: 0.25rem 0 0; font-size: 0.875rem; color: var(--el-text-color-secondary); }
-.playbook-footer { margin-top: 1rem; font-size: 0.85rem; color: var(--el-text-color-secondary); }
+.step-hint { margin: 0.25rem 0 0; font-size: 0.875rem; color: var(--text-secondary); }
+.playbook-footer { margin-top: 1rem; font-size: 0.85rem; color: var(--text-secondary); }
 </style>

@@ -17,9 +17,9 @@
         </div>
       </div>
       <div class="task-actions">
-        <button class="btn btn-primary" @click="startTask">Start Task</button>
-        <button class="btn btn-secondary" @click="pauseTask">Pause Task</button>
-        <button class="btn btn-danger" @click="cancelTask">Cancel Task</button>
+        <button type="button" class="btn btn-primary" @click="startTask">Start Task</button>
+        <button type="button" class="btn btn-secondary" @click="pauseTask">Pause Task</button>
+        <button type="button" class="btn btn-danger" @click="cancelTask">Cancel Task</button>
       </div>
     </div>
   </div>
@@ -58,12 +58,13 @@ const cancelTask = () => {
 
 <style scoped>
 .task-card {
-  background: #2d2d2d;
-  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 16px;
   padding: 20px;
   margin: 15px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 1px 0 rgba(0,0,0,0.06), 0 14px 30px rgba(0,0,0,0.18);
+  transition: transform 300ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 300ms cubic-bezier(0.4, 0, 0.2, 1), border-color 300ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .task-card:hover {

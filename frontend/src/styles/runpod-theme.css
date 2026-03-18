@@ -1,7 +1,6 @@
 /* ClawJob 主题 · Apple Design 原则：清晰、留白、层次、一致性 */
 :root {
   --primary-color: #22c55e;
-  --primary: #22c55e;
   --primary-rgb: 34, 197, 94;
   --secondary-color: #4ade80;
   --brand-400: #4ade80;
@@ -20,9 +19,9 @@
   --surface: rgba(34, 197, 94, 0.08);
   --text-primary: #fafafa;
   --text-secondary: #a1a1aa;
-  --muted: #a1a1aa;
+  /* NOTE: do not override shadcn `--muted` / `--border` / `--primary` (HSL vars in assets/index.css) */
+  --text-tertiary: rgba(161, 161, 170, 0.78);
   --border-color: #3f3f46;
-  --border: #3f3f46;
   /* Subtle borders & layered shadows (do NOT change primary color) */
   --border-muted: rgba(226, 232, 240, 0.08);
   --border-muted-strong: rgba(226, 232, 240, 0.14);
@@ -83,6 +82,17 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* Typography primitives (single source of truth) */
 .page-title {
   font-size: var(--font-page-title);
@@ -100,12 +110,20 @@ body {
   letter-spacing: var(--tracking-normal);
   color: var(--text-primary);
   line-height: 1.25;
+  margin: 0 0 var(--space-5);
 }
 .page-desc {
   color: var(--text-secondary);
   font-size: var(--font-body);
   line-height: var(--line-normal);
   letter-spacing: 0.01em;
+  margin: 0 0 var(--space-6);
+}
+.section-desc {
+  color: var(--text-secondary);
+  font-size: var(--font-body);
+  line-height: var(--line-normal);
+  margin: 0 0 var(--space-4);
 }
 
 .app-container {
@@ -203,7 +221,24 @@ body {
   text-decoration: none;
   font-size: 0.875rem;
   font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
   transition: color var(--duration-m) var(--ease-apple), background var(--duration-m) var(--ease-apple), box-shadow var(--duration-m) var(--ease-apple);
+}
+.header-nav .nav-link .nav-icon,
+.header-actions .btn-icon {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+  color: rgba(161, 161, 170, 0.9);
+}
+.header-nav .nav-link:hover .nav-icon,
+.header-actions .ui-button:hover .btn-icon {
+  color: rgba(250, 250, 250, 0.92);
+}
+.header-nav .nav-link.active .nav-icon {
+  color: rgba(var(--primary-rgb), 0.9);
 }
 .header-nav .nav-link:hover {
   color: var(--text-primary);
@@ -446,7 +481,7 @@ a.btn {
 input.input,
 .input {
   padding: 0.5rem 0.75rem;
-  border-radius: var(--radius-sm, 8px);
+  border-radius: var(--radius-md);
   border: 1px solid var(--border-muted);
   background: var(--background-dark);
   color: var(--text-primary);
@@ -457,8 +492,21 @@ input.input,
 input.input:focus,
 .input:focus {
   outline: none;
-  border-color: var(--primary-color);
-  box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.15);
+  border-color: rgba(var(--primary-rgb), 0.6);
+  box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.16), 0 10px 24px rgba(0,0,0,0.18);
+}
+input.input:focus-visible,
+.input:focus-visible {
+  outline: none;
+}
+input.input:disabled,
+.input:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+input.input:hover:not(:disabled),
+.input:hover:not(:disabled) {
+  border-color: rgba(255,255,255,0.14);
 }
 input.input::placeholder {
   color: var(--text-secondary);
@@ -502,33 +550,50 @@ textarea.input,
 }
 .modal h3,
 .modal .modal-title {
-  font-size: 1.2rem;
+  font-size: var(--font-section-title);
   font-weight: 700;
-  margin: 0 0 var(--space-4, 1rem);
+  margin: 0 0 var(--space-5);
   color: var(--text-primary);
-  letter-spacing: -0.025em;
+  letter-spacing: var(--tracking-tight);
+  line-height: 1.25;
 }
-/* 登录/注册 Tab 切换 */
+/* 登录/注册 Tab 切换 · 分段控件风格 */
 .modal .tabs {
-  display: flex;
-  gap: 0.5rem;
-  margin-bottom: var(--space-4, 1rem);
+  display: inline-flex;
+  gap: 0;
+  margin-bottom: var(--space-5);
+  padding: var(--space-1);
+  border-radius: var(--radius-full);
+  border: var(--border-hairline);
+  background: rgba(255,255,255,0.02);
 }
-.modal .tabs .btn {
+.modal .tabs .btn,
+.modal .tabs .ui-button {
   flex: 1;
+  min-width: 0;
+  border-radius: 0;
 }
-.modal .tabs .btn.active {
-  background: rgba(var(--primary-rgb), 0.18);
-  border-color: var(--primary-color);
-  color: var(--primary-color);
+.modal .tabs .btn:first-child,
+.modal .tabs .ui-button:first-child {
+  border-radius: var(--radius-full) 0 0 var(--radius-full);
+}
+.modal .tabs .btn:last-child,
+.modal .tabs .ui-button:last-child {
+  border-radius: 0 var(--radius-full) var(--radius-full) 0;
+}
+.modal .tabs .btn.active,
+.modal .tabs .ui-button.ring-2 {
+  background: rgba(var(--primary-rgb), 0.14);
+  border-color: rgba(var(--primary-rgb), 0.2);
+  color: var(--text-primary);
 }
 /* 表单：垂直排列、统一间距 */
 .modal .form,
 .form {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  margin-bottom: 1rem;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
 }
 .modal .form .input,
 .form .input {
@@ -544,7 +609,8 @@ textarea.input,
   flex: 1;
   min-width: 0;
 }
-.modal .verification-code-row .btn {
+.modal .verification-code-row .btn,
+.modal .verification-code-row .ui-button {
   flex-shrink: 0;
 }
 /* 分隔线「或」 */
@@ -610,7 +676,7 @@ textarea.input,
 }
 /* 弹窗底部关闭/取消 */
 .modal .close-btn {
-  margin-top: 1rem;
+  margin-top: var(--space-5);
   width: 100%;
 }
 .modal .agent-select-list {
@@ -619,10 +685,12 @@ textarea.input,
   gap: var(--space-3);
   margin-bottom: var(--space-5);
 }
-.modal .agent-select-list .btn {
+.modal .agent-select-list .btn,
+.modal .agent-select-list .ui-button {
   transition: transform var(--duration-m) var(--ease-apple), background var(--duration-m) var(--ease-apple), border-color var(--duration-m) var(--ease-apple);
 }
 .modal .agent-select-list .btn.block,
+.modal .agent-select-list .ui-button.block,
 .btn.block {
   display: block;
   width: 100%;
@@ -886,11 +954,11 @@ a.link:hover,
 }
 .task-comment-time {
   font-size: 0.75rem;
-  color: var(--muted);
+  color: var(--text-tertiary);
 }
 .task-comments-empty {
   font-size: 0.9375rem;
-  color: var(--muted);
+  color: var(--text-tertiary);
   margin: 0 0 var(--space-3);
 }
 .task-comment-form {
@@ -944,34 +1012,14 @@ a.link:hover,
   min-width: 0;
 }
 
-/* Page title · 内页首标题，与内容区顶有间距，Apple 层级 */
-.page-title {
-  font-size: 1.5rem;
-  font-weight: 700;
-  letter-spacing: -0.025em;
-  color: var(--text-primary);
-  margin: 0 0 var(--space-6);
-  padding-bottom: var(--space-4);
-  border-bottom: 1px solid var(--border-color);
-  line-height: 1.25;
-}
-
 /* Page sections · 区块间距统一 */
 .page-section {
-  margin-bottom: 2rem;
+  margin-bottom: var(--space-8);
 }
 @media (min-width: 769px) {
-  .page-section { margin-bottom: 2.5rem; }
+  .page-section { margin-bottom: var(--space-10); }
 }
 .page-section:last-child { margin-bottom: 0; }
-.section-title {
-  font-size: 1.125rem;
-  font-weight: 700;
-  letter-spacing: -0.025em;
-  color: var(--text-primary);
-  margin: 0 0 var(--space-5);
-  line-height: 1.3;
-}
 .section-subtitle {
   font-size: var(--font-body);
   color: var(--text-secondary);
@@ -1121,23 +1169,26 @@ a.link:hover,
 }
 
 /* Empty state · consistent across pages，Apple 留白 */
-.empty-state {
+.empty-state,
+.tw-empty-state {
   text-align: center;
   padding: var(--space-10) var(--space-6);
   background: var(--card-background);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
+  border: var(--border-hairline);
+  border-radius: var(--radius-xl);
   margin: var(--space-4) 0;
   transition: border-color var(--duration-m) var(--ease-apple), box-shadow var(--duration-m) var(--ease-apple);
 }
 .empty-state .empty {
-  font-size: 1rem;
+  font-size: var(--font-body);
   color: var(--text-secondary);
   margin: 0 0 var(--space-5);
-  line-height: 1.5;
+  line-height: var(--line-normal);
 }
 .empty-state .btn,
-.empty-state .ui-button { margin-top: 0; }
+.empty-state .ui-button,
+.tw-empty-state .btn,
+.tw-empty-state .ui-button { margin-top: 0; }
 
 /* Responsive Design */
 @media (max-width: 992px) {

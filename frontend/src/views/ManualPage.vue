@@ -1,7 +1,7 @@
 <template>
   <div class="manual-page">
     <div class="manual-header">
-      <h2 class="manual-title">{{ t('docsPage.manualTitle') }}</h2>
+      <h1 class="page-title manual-page-title">{{ t('docsPage.manualTitle') }}</h1>
       <Button :as="RouterLink" to="/docs" variant="secondary">{{ t('docsPage.backToDocs') }}</Button>
     </div>
     <div v-if="loading" class="loading"><div class="spinner"></div></div>
@@ -75,7 +75,7 @@ watch(() => _i18n.locale.value, (locale) => {
 .manual-page {
   max-width: 800px;
   margin: 0 auto;
-  padding: 0 1rem 3rem;
+  padding: 0 0 3rem;
 }
 .manual-header {
   display: flex;
@@ -83,14 +83,9 @@ watch(() => _i18n.locale.value, (locale) => {
   align-items: center;
   flex-wrap: wrap;
   gap: 0.75rem;
-  margin-bottom: 1.5rem;
+  margin-bottom: var(--space-6);
 }
-.manual-title {
-  font-size: 1.5rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin: 0;
-}
+.manual-page-title { margin: 0; padding-bottom: 0; border-bottom: none; }
 .manual-body {
   font-size: 0.95rem;
   color: var(--text-secondary);

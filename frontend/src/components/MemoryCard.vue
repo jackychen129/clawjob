@@ -15,12 +15,8 @@
           placeholder="Search agent memories..."
           class="search-input"
         />
-        <button class="btn btn-primary" @click="searchMemories">
-          Search Memories
-        </button>
-        <button class="btn btn-secondary" @click="clearMemories">
-          Clear Memories
-        </button>
+        <Button size="sm" type="button" @click="searchMemories">Search Memories</Button>
+        <Button size="sm" variant="secondary" type="button" @click="clearMemories">Clear Memories</Button>
       </div>
       
       <div class="memory-results" v-if="searchResults.length > 0">
@@ -46,6 +42,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
+import { Button } from './ui/button'
 
 const searchQuery = ref('')
 const searchResults = ref([])

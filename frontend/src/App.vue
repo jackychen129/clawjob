@@ -12,14 +12,42 @@
           <p class="header-eyebrow">{{ t('common.heroEyebrow') }}</p>
         </a>
         <nav class="header-nav">
-          <router-link to="/" class="nav-link" :class="{ active: route.path === '/' }">{{ t('common.home') }}</router-link>
-          <router-link to="/dashboard" class="nav-link" :class="{ active: route.path === '/dashboard' }">{{ t('nav.dashboard') || '实况' }}</router-link>
-          <router-link to="/leaderboard" class="nav-link" :class="{ active: route.path === '/leaderboard' }">{{ t('nav.leaderboard') || '排行榜' }}</router-link>
-          <router-link to="/tasks" class="nav-link" :class="{ active: route.path === '/tasks' }">{{ t('nav.taskManage') || '任务管理' }}</router-link>
-          <router-link to="/agents" class="nav-link" :class="{ active: route.path === '/agents' }">{{ t('nav.agentManage') || 'Agent 管理' }}</router-link>
-          <router-link to="/playbook" class="nav-link" :class="{ active: route.path === '/playbook' }">{{ t('nav.playbook') || 'Playbook' }}</router-link>
-          <router-link to="/skill" class="nav-link" :class="{ active: route.path === '/skill' }">{{ t('common.skill') }}</router-link>
-          <router-link v-if="isAdmin" to="/admin" class="nav-link" :class="{ active: route.path === '/admin' }">{{ t('admin.title') || '管理后台' }}</router-link>
+          <router-link to="/" class="nav-link" :class="{ active: route.path === '/' }">
+            <Home class="nav-icon" aria-hidden="true" />
+            <span>{{ t('common.home') }}</span>
+          </router-link>
+          <router-link to="/dashboard" class="nav-link" :class="{ active: route.path === '/dashboard' }">
+            <LayoutGrid class="nav-icon" aria-hidden="true" />
+            <span>{{ t('nav.dashboard') || '实况' }}</span>
+          </router-link>
+          <router-link to="/leaderboard" class="nav-link" :class="{ active: route.path === '/leaderboard' }">
+            <Trophy class="nav-icon" aria-hidden="true" />
+            <span>{{ t('nav.leaderboard') || '排行榜' }}</span>
+          </router-link>
+          <router-link to="/tasks" class="nav-link" :class="{ active: route.path === '/tasks' }">
+            <ListTodo class="nav-icon" aria-hidden="true" />
+            <span>{{ t('nav.taskManage') || '任务管理' }}</span>
+          </router-link>
+          <router-link to="/agents" class="nav-link" :class="{ active: route.path === '/agents' }">
+            <Bot class="nav-icon" aria-hidden="true" />
+            <span>{{ t('nav.agentManage') || 'Agent 管理' }}</span>
+          </router-link>
+          <router-link to="/playbook" class="nav-link" :class="{ active: route.path === '/playbook' }">
+            <BookOpen class="nav-icon" aria-hidden="true" />
+            <span>{{ t('nav.playbook') || 'Playbook' }}</span>
+          </router-link>
+          <router-link to="/inbox" class="nav-link" :class="{ active: route.path === '/inbox' }">
+            <Mail class="nav-icon" aria-hidden="true" />
+            <span>{{ t('nav.inbox') || '站内信' }}</span>
+          </router-link>
+          <router-link to="/skill" class="nav-link" :class="{ active: route.path === '/skill' }">
+            <Sparkles class="nav-icon" aria-hidden="true" />
+            <span>{{ t('common.skill') }}</span>
+          </router-link>
+          <router-link v-if="isAdmin" to="/admin" class="nav-link" :class="{ active: route.path === '/admin' }">
+            <Shield class="nav-icon" aria-hidden="true" />
+            <span>{{ t('admin.title') || '管理后台' }}</span>
+          </router-link>
         </nav>
         <div class="header-actions">
           <select v-model="locale" class="locale-select" @change="onLocaleChange">
@@ -29,11 +57,20 @@
           <template v-if="auth.isLoggedIn">
             <span class="username">{{ auth.username }}</span>
             <span class="credits-badge" :title="t('common.credits')">💰 {{ accountCredits }}</span>
-            <Button :as="RouterLink" to="/account" variant="secondary" :class="{ 'ring-2 ring-primary ring-offset-2 ring-offset-background': route.path === '/account' }">{{ t('common.myAccount') }}</Button>
-            <Button variant="secondary" @click="auth.logout()">{{ t('common.logout') }}</Button>
+            <Button size="sm" :as="RouterLink" to="/account" variant="secondary" :class="{ 'ring-2 ring-primary ring-offset-2 ring-offset-background': route.path === '/account' }">
+              <Wallet class="btn-icon" aria-hidden="true" />
+              {{ t('common.myAccount') }}
+            </Button>
+            <Button size="sm" variant="secondary" @click="auth.logout()">
+              <LogOut class="btn-icon" aria-hidden="true" />
+              {{ t('common.logout') }}
+            </Button>
           </template>
           <template v-else>
-            <Button data-testid="login-btn" @click="showAuthModal = true">{{ t('common.loginOrRegister') }}</Button>
+            <Button size="sm" data-testid="login-btn" @click="showAuthModal = true">
+              <LogIn class="btn-icon" aria-hidden="true" />
+              {{ t('common.loginOrRegister') }}
+            </Button>
           </template>
         </div>
       </div>
@@ -67,6 +104,7 @@
       <PlaybookView v-else-if="route.path === '/playbook'" />
       <TaskManageView v-else-if="route.path === '/tasks'" @success="showSuccess" @register-hint="postPublishRegisterHint = true" />
       <AgentManageView v-else-if="route.path === '/agents'" />
+      <InboxView v-else-if="route.path === '/inbox'" @show-auth="showAuthModal = true" />
       <AccountPage v-else-if="route.path === '/account'" @credits-updated="loadAccountMe" />
       <AdminView v-else-if="route.path === '/admin'" />
       <template v-else>
@@ -227,11 +265,17 @@
               </div>
             </div>
           </div>
-          <div v-if="!tasks.length && !tasksLoading" class="tw-empty-state empty-state">
-            <div class="tw-empty-state__icon" aria-hidden="true">📋</div>
-            <p class="tw-empty-state__text">{{ t('task.emptyTasks') }}</p>
-            <Button class="mt-2" variant="secondary" type="button" @click="showCreateTaskModal = true">{{ t('task.publishFirst') }}</Button>
-          </div>
+          <EmptyState
+            v-if="!tasks.length && !tasksLoading"
+            :title="t('task.emptyTasks') || '暂无任务'"
+            :description="t('taskManage.emptyTaskHint') || '暂无任务，快去发布吧！'"
+            illustration-src="/assets/illustrations/market-empty.svg"
+            size="lg"
+          >
+            <template #actions>
+              <Button variant="secondary" type="button" @click="showCreateTaskModal = true">{{ t('task.publishFirst') }}</Button>
+            </template>
+          </EmptyState>
           <div v-if="tasks.length && homeHasMore" class="home-load-more">
             <Button variant="secondary" type="button" :disabled="tasksLoadingMore" @click="loadMoreTasks">
               {{ tasksLoadingMore ? (t('task.loadingMore') || '加载中…') : (t('task.loadMore') || '加载更多') }}
@@ -666,7 +710,9 @@ import { Button } from './components/ui/button'
 import { Input } from './components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from './components/ui/card'
 import { Textarea } from './components/ui/textarea'
+import EmptyState from './components/EmptyState.vue'
 import { getTemplateById } from './constants/taskTemplates'
+import { BookOpen, Bot, Home, LayoutGrid, ListTodo, LogIn, LogOut, Mail, Shield, Sparkles, Trophy, Wallet } from 'lucide-vue-next'
 
 const route = useRoute()
 const _i18n = useI18n()
@@ -1513,9 +1559,17 @@ onUnmounted(() => {
 @media (min-width: 640px) { .home-kpi { grid-template-columns: repeat(4, 1fr); } }
 .home-kpi-card {
   padding: 1rem 1.25rem;
-  border-radius: var(--radius-md, 12px);
+  border-radius: var(--radius-lg);
   background: rgba(255, 255, 255, 0.03);
-  transition: background var(--duration-m) var(--ease-apple);
+  border: 1px solid rgba(255,255,255,0.06);
+  box-shadow: 0 1px 0 rgba(0,0,0,0.06);
+  transition: background var(--duration-m) var(--ease-apple), transform var(--duration-m) var(--ease-apple), box-shadow var(--duration-m) var(--ease-apple), border-color var(--duration-m) var(--ease-apple);
+}
+.home-kpi-card:hover {
+  background: rgba(255,255,255,0.04);
+  border-color: rgba(255,255,255,0.10);
+  transform: translateY(-1px);
+  box-shadow: 0 1px 0 rgba(0,0,0,0.06), 0 14px 30px rgba(0,0,0,0.18);
 }
 .home-kpi-value { display: block; font-size: 1.5rem; font-weight: 800; letter-spacing: -0.03em; color: var(--primary-color); }
 .home-kpi-label { display: block; margin-top: 0.25rem; font-size: 0.78rem; font-weight: 500; color: var(--text-secondary); }
@@ -1527,9 +1581,17 @@ onUnmounted(() => {
 .home-dash-feed .card-content, .home-dash-leaderboard .card-content, .home-sidebar-feed .card-content { padding: 1rem 1.25rem; }
 .home-dash-feed-title { font-size: 1rem; font-weight: 600; margin: 0 0 0.75rem; }
 .home-activity-list { list-style: none; padding: 0; margin: 0; }
-.home-activity-item { display: grid; grid-template-columns: 4rem 1fr auto; gap: 0.5rem; padding: 0.5rem 0; border-bottom: 1px solid rgba(226,232,240,0.06); font-size: 0.85rem; align-items: start; }
+.home-activity-item {
+  display: grid;
+  grid-template-columns: 4.5rem 1fr auto;
+  gap: 0.6rem;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  font-size: 0.85rem;
+  align-items: start;
+}
 .home-activity-item:last-child { border-bottom: none; }
-.home-activity-time { color: var(--text-secondary); font-size: 0.75rem; }
+.home-activity-time { color: rgba(255,255,255,0.55); font-size: 0.75rem; }
 .home-activity-text { color: var(--text-primary); line-height: 1.35; }
 .home-activity-skeleton .tw-skeleton { background: var(--surface); }
 .home-leaderboard-list { display: flex; flex-direction: column; gap: 0.25rem; }
@@ -1584,6 +1646,12 @@ onUnmounted(() => {
 /* 首页任务卡片：Linear 质感（8px 栅格、typography、meta .mono） */
 .home-task-list--grid .home-task-card {
   padding: 24px; /* 8px 栅格 */
+}
+.home-task-list--grid .home-task-card {
+  border-radius: var(--radius-xl);
+  border: 1px solid rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.02);
+  box-shadow: 0 1px 0 rgba(0,0,0,0.06);
 }
 .home-task-list--grid .home-task-card .task-card__top {
   display: flex;
@@ -1648,8 +1716,9 @@ onUnmounted(() => {
 }
 /* 首页任务卡片 hover：微缩放 + 抬升 + 阴影 */
 .home-task-list--grid .home-task-card.task-card--hover:hover {
-  transform: scale(1.01) translateY(-2px);
-  box-shadow: var(--shadow-card-hover);
+  transform: translateY(-2px);
+  border-color: rgba(255,255,255,0.10);
+  box-shadow: 0 1px 0 rgba(0,0,0,0.06), 0 18px 40px rgba(0,0,0,0.24);
 }
 
 .draft-bar {

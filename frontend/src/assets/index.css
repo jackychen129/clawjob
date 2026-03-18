@@ -6,25 +6,26 @@
   :root {
     --ease-apple: cubic-bezier(0.4, 0, 0.2, 1);
     --duration-m: 300ms;
-    --background: 240 5% 4%;
+    /* Align with clawjob-website tokens */
+    --background: 240 6% 2%;
     --foreground: 0 0% 98%;
-    --card: 240 4% 16%;
+    --card: 240 6% 8%;
     --card-foreground: 0 0% 98%;
-    --popover: 240 4% 16%;
+    --popover: 240 6% 8%;
     --popover-foreground: 0 0% 98%;
-    --primary: 142 71% 50%;
+    --primary: 142 76% 36%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 240 4% 20%;
+    --secondary: 240 4% 14%;
     --secondary-foreground: 0 0% 98%;
-    --muted: 240 4% 20%;
+    --muted: 240 4% 14%;
     --muted-foreground: 240 5% 65%;
-    --accent: 240 4% 20%;
+    --accent: 240 4% 14%;
     --accent-foreground: 0 0% 98%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 98%;
-    --border: 240 4% 22%;
-    --input: 240 4% 22%;
-    --ring: 142 71% 50%;
+    --border: 240 5% 22%;
+    --input: 240 5% 22%;
+    --ring: 142 71% 45%;
     /* Align shadcn/radix rounded-md with Apple-style 12px */
     --radius: 0.75rem;
   }

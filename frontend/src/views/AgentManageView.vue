@@ -1,11 +1,7 @@
 <template>
   <div class="agent-manage-view">
-    <section class="hero-section hero-compact" role="region" aria-label="Agent management">
-      <div class="hero-inner">
-        <h2 class="hero-title">{{ t('nav.agentManage') || 'Agent 管理' }}</h2>
-        <p class="hero-desc">{{ t('agentManage.intro') || '查看已注册的 Agent，以及每个 Agent 接取的任务情况。支持网页配置或通过 OpenClaw Skill / API 接取。' }}</p>
-      </div>
-    </section>
+    <h1 class="page-title">{{ t('nav.agentManage') || 'Agent 管理' }}</h1>
+    <p class="page-desc">{{ t('agentManage.intro') || '查看已注册的 Agent，以及每个 Agent 接取的任务情况。支持网页配置或通过 OpenClaw Skill / API 接取。' }}</p>
 
     <div class="agent-manage-content">
       <div v-if="!auth.isLoggedIn" class="card gate-card gate-card--glass">
@@ -107,6 +103,14 @@
                   class="agent-card__btn agent-card__btn--secondary"
                   @click="openPublishModal(a)"
                 >{{ t('agentManage.publishAsTemplate') || '发布为模板' }}</Button>
+                <Button
+                  v-if="(a.completed_task_count || 0) >= 1"
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  class="agent-card__btn agent-card__btn--secondary"
+                  @click.stop="openCertificate(a)"
+                >{{ t('certificate.download') || '证书' }}</Button>
               </div>
 
               <Transition name="expand">
@@ -128,19 +132,30 @@
 
           <!-- 空状态 · 设计感占位 -->
           <Transition name="fade-slide">
-            <div v-if="myAgents.length === 0 && !agentsLoading" class="tw-empty-state empty-state empty-state--agent">
-              <div class="tw-empty-state__icon" aria-hidden="true">◇</div>
-              <h3 class="tw-empty-state__title">{{ t('agent.emptyAgents') }}</h3>
-              <p class="tw-empty-state__text">{{ t('agent.emptyStateDownload') || '通过 OpenClaw Skill 一键注册 Agent，或在本页上方直接填写名称注册。' }}</p>
-              <div class="tw-empty-state__actions">
+            <EmptyState
+              v-if="myAgents.length === 0 && !agentsLoading"
+              :title="t('agent.emptyAgents')"
+              :description="t('agent.emptyStateDownload') || '通过 OpenClaw Skill 一键注册 Agent，或在本页上方直接填写名称注册。'"
+              illustration-src="/assets/illustrations/agent-empty.svg"
+              size="lg"
+            >
+              <template #actions>
                 <Button :as="RouterLink" to="/skill">{{ t('agent.downloadOpenClaw') || '下载 OpenClaw / 配置 Skill' }}</Button>
                 <Button as="a" href="https://github.com/buape/openclaw" target="_blank" rel="noopener noreferrer" variant="secondary">{{ t('agent.openClawRepo') || 'OpenClaw 仓库' }}</Button>
-              </div>
-            </div>
+              </template>
+            </EmptyState>
           </Transition>
         </section>
       </template>
     </div>
+
+    <CertificateModal
+      :show="!!certificateAgent"
+      :agent-name="certificateAgent?.name ?? ''"
+      :tasks-completed="certificateAgent?.completed_task_count ?? 0"
+      :certified="false"
+      @close="certificateAgent = null"
+    />
 
     <!-- 发布为模板弹窗 -->
     <div v-if="showPublishModal" class="modal-mask" @click.self="closePublishModal">
@@ -190,6 +205,8 @@ import { ref, reactive, onMounted, watch, computed } from 'vue'
 import { RouterLink } from 'vue-router'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
+import CertificateModal from '../components/CertificateModal.vue'
+import EmptyState from '../components/EmptyState.vue'
 import { useI18n } from 'vue-i18n'
 import { safeT } from '../i18n'
 import { useAuthStore } from '../stores/auth'
@@ -225,6 +242,7 @@ const agentTasksLoading = ref<number | null>(null)
 const justRegisteredAgent = ref<number | null>(null)
 const showPublishModal = ref(false)
 const publishAgent = ref<{ id: number; name: string; description: string } | null>(null)
+const certificateAgent = ref<AgentItem | null>(null)
 const publishForm = reactive({ name: '', description: '', download_agent_url: '', download_skill_url: '' })
 const publishLoading = ref(false)
 const publishError = ref('')
@@ -342,6 +360,10 @@ watch(expandedAgent, (id) => {
   if (id != null) loadAgentTasks(id)
 })
 
+function openCertificate(a: AgentItem) {
+  certificateAgent.value = a
+}
+
 function openPublishModal(a: { id: number; name: string; description: string }) {
   publishAgent.value = a
   publishForm.name = a.name || ''
@@ -382,35 +404,39 @@ function submitPublish() {
 <style scoped>
 .agent-manage-view { padding: 0; width: 100%; }
 
-/* Gate / 表单 / 一键注册 · 极细边框 + 大圆角 + 毛玻璃感 */
+/* Gate / 表单 / 一键注册 · 设计 token 统一 */
 .gate-card--glass,
 .agent-form-card--glass,
 .one-click-hint-card--glass {
-  border: 1px solid var(--border-muted);
-  border-radius: var(--radius-lg);
+  border: var(--border-hairline);
+  border-radius: var(--radius-xl);
   box-shadow: var(--shadow-card);
   background: var(--card-background);
+  transition: border-color var(--duration-m) var(--ease-apple), box-shadow var(--duration-m) var(--ease-apple);
 }
 .one-click-hint-card--glass {
-  background: rgba(34, 197, 94, 0.06);
+  background: rgba(var(--primary-rgb), 0.06);
   border-color: rgba(var(--primary-rgb), 0.2);
   margin-bottom: var(--space-6);
 }
 .one-click-hint-card .card-content { padding: var(--space-6); }
-.one-click-hint-title { font-weight: 600; font-size: var(--font-headline); margin: 0 0 var(--space-2); letter-spacing: -0.025em; color: var(--text-primary); }
+.one-click-hint-title { font-weight: 700; font-size: var(--font-section-title); margin: 0 0 var(--space-2); letter-spacing: var(--tracking-tight); color: var(--text-primary); line-height: 1.25; }
 .one-click-hint-desc { font-size: var(--font-caption); color: var(--text-secondary); margin: 0 0 var(--space-4); line-height: 1.5; }
 .one-click-hint-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); }
 
-.gate-card { margin: var(--space-5) 0; }
-.agent-form-card { margin-bottom: var(--space-5); }
+.gate-card { margin: var(--space-6) 0; }
+.gate-card .card-content { padding: var(--space-6); }
+.agent-form-card { margin-bottom: var(--space-6); }
+.agent-form-card .card-content { padding: var(--space-6); }
 .form-inline { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; }
 .form-inline .input { min-width: 0; flex: 1 1 140px; max-width: 100%; }
-.form-inline .btn { flex-shrink: 0; }
-.form-hint { font-size: var(--font-caption); color: var(--text-secondary); margin: 0.5rem 0 0; line-height: 1.4; }
-.register-requirement-hint { margin-top: 0.35rem; }
+.form-inline .ui-button { flex-shrink: 0; }
+.form-hint { font-size: var(--font-caption); color: var(--text-secondary); margin: var(--space-2) 0 0; line-height: 1.4; }
+.register-requirement-hint { margin-top: var(--space-2); }
 
-.onboarding-card--glass { border: 1px solid var(--border-muted); border-radius: var(--radius-lg); border-color: rgba(var(--primary-rgb), 0.25); margin-bottom: var(--space-5); }
-.onboarding-title { font-weight: 600; font-size: 1.05rem; margin-bottom: var(--space-2); letter-spacing: -0.02em; color: var(--text-primary); }
+.onboarding-card--glass { border: var(--border-hairline); border-radius: var(--radius-xl); border-color: rgba(var(--primary-rgb), 0.25); margin-bottom: var(--space-6); }
+.onboarding-card--glass .card-content { padding: var(--space-6); }
+.onboarding-title { font-weight: 650; font-size: var(--font-section-title); margin: 0 0 var(--space-2); letter-spacing: var(--tracking-normal); color: var(--text-primary); line-height: 1.25; }
 .onboarding-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-4); }
 
 /* Agent 列表 · 呼吸感间距 */
@@ -454,9 +480,9 @@ function submitPublish() {
 }
 .agent-card__identity { min-width: 0; }
 .agent-card__name {
-  font-size: var(--font-body);
-  font-weight: 600;
-  letter-spacing: -0.02em;
+  font-size: var(--font-body-strong);
+  font-weight: 650;
+  letter-spacing: var(--tracking-normal);
   color: var(--text-primary);
   margin: 0 0 var(--space-1);
   line-height: 1.3;
@@ -481,7 +507,7 @@ function submitPublish() {
   margin: 0 0 var(--space-4);
   font-weight: 500;
 }
-.agent-card__desc--muted { color: var(--muted); }
+.agent-card__desc--muted { color: var(--text-tertiary); }
 
 .agent-card__meta {
   display: flex;
@@ -562,8 +588,10 @@ function submitPublish() {
   padding: 0 var(--space-6) var(--space-5);
   padding-top: 0;
 }
-.agent-card__btn--primary { flex-shrink: 0; }
-.agent-card__btn--secondary { flex-shrink: 0; }
+.agent-card__actions { border-top: 1px solid rgba(255,255,255,0.06); padding-top: var(--space-4); }
+.agent-card__btn { flex: 1 1 auto; min-width: 120px; }
+.agent-card__btn--primary { flex: 1 1 160px; }
+.agent-card__btn--secondary { flex: 0 1 auto; }
 
 .agent-card__detail {
   border-top: 1px solid var(--border-muted);
@@ -590,8 +618,8 @@ function submitPublish() {
 }
 .agent-card__task-row:last-child { border-bottom: none; }
 .agent-card__task-title { flex: 1; min-width: 120px; font-weight: 500; color: var(--text-primary); }
-.agent-card__task-meta { color: var(--muted); font-weight: 500; }
-.agent-card__detail-empty { font-size: var(--font-caption); color: var(--muted); margin: var(--space-3) 0 0; }
+.agent-card__task-meta { color: var(--text-tertiary); font-weight: 500; }
+.agent-card__detail-empty { font-size: var(--font-caption); color: var(--text-tertiary); margin: var(--space-3) 0 0; }
 
 /* 空状态 · 视觉增强 */
 .tw-empty-state.empty-state--agent {

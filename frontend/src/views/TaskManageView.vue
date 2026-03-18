@@ -9,16 +9,8 @@
             <button type="button" class="task-tab" :class="{ active: tab === 'available' }" @click="tab = 'available'">{{ t('taskManage.available') || '可接取任务' }}</button>
             <button type="button" class="task-tab" :class="{ active: tab === 'mine' }" @click="tab = 'mine'">{{ t('taskManage.myAccepted') || '我接取的任务' }}</button>
           </div>
-          <div v-if="!auth.isLoggedIn" class="tw-empty-state empty-state empty-state--task">
-            <div class="tw-empty-state__icon" aria-hidden="true">◇</div>
-            <p class="tw-empty-state__title">{{ t('taskManage.loginToSeeMine') || '请先登录查看我接取的任务' }}</p>
-            <div class="tw-empty-state__actions">
-              <Button type="button" @click="showAuthModal = true">{{ t('common.loginOrRegister') }}</Button>
-            </div>
-          </div>
-          <template v-else>
-            <!-- 可接取任务 -->
-            <template v-if="tab === 'available'">
+          <!-- 可接取任务：未登录也允许浏览 -->
+          <template v-if="tab === 'available'">
               <div class="task-filter-row">
                 <select v-model="categoryFilter" class="input select-input task-filter-select">
                   <option value="">{{ t('taskManage.categoryAll') || '全部' }}</option>
@@ -32,37 +24,59 @@
                   <div class="tw-skeleton task-manage-skeleton-line task-manage-skeleton-line--mid"></div>
                 </div>
               </div>
-              <TransitionGroup v-else name="task-list" tag="div" class="task-list">
-                <article
-                  v-for="task in filteredTasks"
-                  :key="task.id"
-                  :class="cn('task-row', 'task-row--available', `task-row--${task.status}`)"
-                >
-                  <div class="task-row__head">
-                    <span v-if="task.category" class="task-row__category">{{ taskCategoryLabel(task.category) }}</span>
-                    <span :class="taskStatusPillClass(task.status)">{{ t('status.' + task.status) || task.status }}</span>
-                    <span v-if="task.reward_points" class="task-row__reward mono">{{ t('task.reward', { n: task.reward_points }) }}</span>
-                  </div>
-                  <h3 class="task-row__title">{{ task.title }}</h3>
-                  <p class="task-row__desc">{{ (task.description || t('common.noDescription')).slice(0, 120) }}{{ (task.description || '').length > 120 ? '…' : '' }}</p>
-                  <p class="task-row__meta">{{ t('task.publisher') }}：{{ task.publisher_name }}<span v-if="task.creator_agent_name"> · {{ t('task.publishedByAgent') }}：{{ task.creator_agent_name }}</span><span v-if="task.subscription_count != null"> · {{ task.subscription_count }}{{ t('task.subscribers') }}</span></p>
-                  <div class="task-row__actions">
-                    <Button size="sm" variant="ghost" type="button" class="task-row__btn" @click="openTaskDetail(task)">{{ t('task.viewDetail') }}</Button>
-                    <Button v-if="task.status === 'open' && auth.isLoggedIn && myAgents.length" size="sm" :disabled="subscribeLoading === task.id" class="task-row__btn task-row__btn--primary" @click="openSubscribeModal(task)">{{ t('task.subscribe') }}</Button>
-                    <Button v-else-if="task.status === 'open' && !auth.isLoggedIn" size="sm" variant="secondary" type="button" class="task-row__btn" @click="showAuthModal = true">{{ t('task.loginToAccept') }}</Button>
-                  </div>
-                </article>
-              </TransitionGroup>
-              <div v-if="!filteredTasks.length && !tasksLoading" class="tw-empty-state empty-state empty-state--task">
-                <div class="tw-empty-state__icon" aria-hidden="true">◇</div>
-                <p class="tw-empty-state__title">{{ categoryFilter ? (t('taskManage.noTasksInCategory') || '该分类下暂无任务') : (t('task.emptyTasks') || '暂无任务') }}</p>
-                <p class="tw-empty-state__text">{{ t('taskManage.emptyTaskHint') || '切换分类或前往首页浏览更多任务' }}</p>
-                <div class="tw-empty-state__actions">
-                  <Button :as="RouterLink" to="/" variant="secondary">{{ t('common.home') }}</Button>
+              <div v-else class="task-list task-list--virtual" v-bind="virtualAvailable.containerProps">
+                <div v-bind="virtualAvailable.wrapperProps">
+                  <article
+                    v-for="item in virtualAvailableItems"
+                    :key="item.index"
+                    :class="cn('task-row', 'task-row--available', `task-row--${item.data!.status}`, { 'task-row--selected': selectedTaskDetail?.id === item.data!.id })"
+                    role="button"
+                    tabindex="0"
+                    @click="openTaskDetail(item.data!)"
+                    @keydown.enter.prevent="openTaskDetail(item.data!)"
+                    @keydown.space.prevent="openTaskDetail(item.data!)"
+                  >
+                    <div class="task-row__head">
+                      <span v-if="item.data!.category" class="task-row__category">{{ taskCategoryLabel(item.data!.category) }}</span>
+                      <span :class="taskStatusPillClass(item.data!.status)">{{ t('status.' + item.data!.status) || item.data!.status }}</span>
+                      <span v-if="item.data!.reward_points" class="task-row__reward mono">{{ t('task.reward', { n: item.data!.reward_points }) }}</span>
+                    </div>
+                    <h3 class="task-row__title">{{ item.data!.title }}</h3>
+                    <p class="task-row__desc">{{ (item.data!.description || t('common.noDescription')).slice(0, 120) }}{{ (item.data!.description || '').length > 120 ? '…' : '' }}</p>
+                    <p class="task-row__meta">{{ t('task.publisher') }}：{{ item.data!.publisher_name }}<span v-if="item.data!.creator_agent_name"> · {{ t('task.publishedByAgent') }}：{{ item.data!.creator_agent_name }}</span><span v-if="item.data!.subscription_count != null"> · {{ item.data!.subscription_count }}{{ t('task.subscribers') }}</span></p>
+                    <div class="task-row__actions" @click.stop>
+                      <Button size="sm" variant="ghost" type="button" class="task-row__btn" @click="openTaskDetail(item.data!)">{{ t('task.viewDetail') }}</Button>
+                      <Button v-if="item.data!.status === 'open' && auth.isLoggedIn && myAgents.length" size="sm" :disabled="subscribeLoading === item.data!.id" class="task-row__btn task-row__btn--primary" @click="openSubscribeModal(item.data!)">{{ t('task.subscribe') }}</Button>
+                      <Button v-else-if="item.data!.status === 'open' && !auth.isLoggedIn" size="sm" variant="secondary" type="button" class="task-row__btn" @click="showAuthModal = true">{{ t('task.loginToAccept') }}</Button>
+                    </div>
+                  </article>
                 </div>
               </div>
-            </template>
-            <!-- 我接取的任务 -->
+              <EmptyState
+                v-if="!filteredTasks.length && !tasksLoading"
+                :title="categoryFilter ? (t('taskManage.noTasksInCategory') || '该分类下暂无任务') : (t('task.emptyTasks') || '暂无任务')"
+                :description="t('taskManage.emptyTaskHint') || '切换分类或前往首页浏览更多任务'"
+                illustration-src="/assets/illustrations/market-empty.svg"
+              >
+                <template #actions>
+                  <Button :as="RouterLink" to="/" variant="secondary">{{ t('common.home') }}</Button>
+                </template>
+              </EmptyState>
+          </template>
+
+          <!-- 我接取的任务：未登录提示登录 -->
+          <template v-else>
+            <EmptyState
+              v-if="!auth.isLoggedIn"
+              :title="t('taskManage.loginToSeeMine') || '请先登录查看我接取的任务'"
+              :description="t('taskManage.emptyTaskHint') || '登录后可接取任务并参与评论讨论'"
+              illustration-src="/assets/illustrations/market-empty.svg"
+              size="lg"
+            >
+              <template #actions>
+                <Button type="button" @click="showAuthModal = true">{{ t('common.loginOrRegister') }}</Button>
+              </template>
+            </EmptyState>
             <template v-else>
             <div v-if="myTasksLoading" class="task-list task-list--skeleton">
               <div v-for="i in 4" :key="i" class="task-row task-row--skeleton">
@@ -71,54 +85,63 @@
                 <div class="tw-skeleton task-manage-skeleton-line task-manage-skeleton-line--mid"></div>
               </div>
             </div>
-            <TransitionGroup v-else name="task-list" tag="div" class="task-list">
-              <article
-                v-for="task in myTasks"
-                :key="task.id"
-                :class="cn('task-row', 'task-row--mine', `task-row--${task.status}`)"
-              >
-                <div class="task-row__head">
-                  <span v-if="task.category" class="task-row__category">{{ taskCategoryLabel(task.category) }}</span>
-                  <span v-if="task.task_type" class="task-row__type">{{ task.task_type }}</span>
-                  <span :class="taskStatusPillClass(task.status)">{{ t('status.' + task.status) || task.status }}</span>
-                  <span v-if="task.reward_points" class="task-row__reward mono">{{ t('task.reward', { n: task.reward_points }) }}</span>
-                </div>
-                <h3 class="task-row__title">{{ task.title }}</h3>
-                <p class="task-row__desc">{{ (task.description || t('common.noDescription')).slice(0, 120) }}{{ (task.description || '').length > 120 ? '…' : '' }}</p>
-                <div v-if="task.location || task.duration_estimate || (getTaskSkills(task).length)" class="task-row__tags">
-                  <span v-if="task.location" class="task-tag task-tag--location">{{ task.location }}</span>
-                  <span v-if="task.duration_estimate" class="task-tag task-tag--duration">{{ task.duration_estimate }}</span>
-                  <span v-for="s in getTaskSkills(task)" :key="s" class="task-tag task-tag--skill">{{ s }}</span>
-                </div>
-                <p class="task-row__meta">{{ t('task.publisher') }}：{{ task.publisher_name }}<span v-if="task.creator_agent_name"> · {{ t('task.publishedByAgent') }}：{{ task.creator_agent_name }}</span> · {{ t('task.acceptor') || '接取者' }}：{{ task.agent_name }}</p>
-                <div class="task-row__actions">
-                  <Button size="sm" variant="ghost" type="button" class="task-row__btn" @click="openTaskDetail(task)">{{ t('task.viewDetail') }}</Button>
-                  <div class="task-actions">
-                    <Button
-                      v-if="isExecutor(task) && task.status === 'open'"
-                      size="sm"
-                      :disabled="submitCompletionLoading === task.id"
-                      class="task-row__btn task-row__btn--primary"
-                      @click="openSubmitModal(task)"
-                    >
-                      {{ t('task.submitCompletion') }}
-                    </Button>
-                    <template v-if="task.owner_id === auth.userId && task.status === 'pending_verification'">
-                      <Button size="sm" :disabled="confirmLoading === task.id" class="task-row__btn task-row__btn--primary" @click="doConfirm(task.id)">{{ t('task.confirmPass') }}</Button>
-                      <Button size="sm" variant="secondary" :disabled="rejectLoading === task.id" class="task-row__btn" @click="openRejectModal(task.id)">{{ t('task.reject') }}</Button>
-                    </template>
+            <div v-else class="task-list task-list--virtual" v-bind="virtualMine.containerProps">
+              <div v-bind="virtualMine.wrapperProps">
+                <article
+                  v-for="item in virtualMineItems"
+                  :key="item.index"
+                  :class="cn('task-row', 'task-row--mine', `task-row--${item.data!.status}`, { 'task-row--selected': selectedTaskDetail?.id === item.data!.id })"
+                  role="button"
+                  tabindex="0"
+                  @click="openTaskDetail(item.data!)"
+                  @keydown.enter.prevent="openTaskDetail(item.data!)"
+                  @keydown.space.prevent="openTaskDetail(item.data!)"
+                >
+                  <div class="task-row__head">
+                    <span v-if="item.data!.category" class="task-row__category">{{ taskCategoryLabel(item.data!.category) }}</span>
+                    <span v-if="item.data!.task_type" class="task-row__type">{{ item.data!.task_type }}</span>
+                    <span :class="taskStatusPillClass(item.data!.status)">{{ t('status.' + item.data!.status) || item.data!.status }}</span>
+                    <span v-if="item.data!.reward_points" class="task-row__reward mono">{{ t('task.reward', { n: item.data!.reward_points }) }}</span>
                   </div>
-                </div>
-              </article>
-            </TransitionGroup>
-            <div v-if="!myTasks.length && !myTasksLoading" class="tw-empty-state empty-state empty-state--task">
-              <div class="tw-empty-state__icon" aria-hidden="true">◇</div>
-              <p class="tw-empty-state__title">{{ t('taskManage.noMyTasks') || '暂无接取的任务' }}</p>
-              <p class="tw-empty-state__text">{{ t('taskManage.goAcceptHint') || '前往首页或可接取任务列表接取第一个任务' }}</p>
-              <div class="tw-empty-state__actions">
-                <Button :as="RouterLink" to="/">{{ t('taskManage.goAccept') || '去接取' }}</Button>
+                  <h3 class="task-row__title">{{ item.data!.title }}</h3>
+                  <p class="task-row__desc">{{ (item.data!.description || t('common.noDescription')).slice(0, 120) }}{{ (item.data!.description || '').length > 120 ? '…' : '' }}</p>
+                  <div v-if="item.data!.location || item.data!.duration_estimate || (getTaskSkills(item.data!).length)" class="task-row__tags">
+                    <span v-if="item.data!.location" class="task-tag task-tag--location">{{ item.data!.location }}</span>
+                    <span v-if="item.data!.duration_estimate" class="task-tag task-tag--duration">{{ item.data!.duration_estimate }}</span>
+                    <span v-for="s in getTaskSkills(item.data!)" :key="s" class="task-tag task-tag--skill">{{ s }}</span>
+                  </div>
+                  <p class="task-row__meta">{{ t('task.publisher') }}：{{ item.data!.publisher_name }}<span v-if="item.data!.creator_agent_name"> · {{ t('task.publishedByAgent') }}：{{ item.data!.creator_agent_name }}</span> · {{ t('task.acceptor') || '接取者' }}：{{ item.data!.agent_name }}</p>
+                  <div class="task-row__actions" @click.stop>
+                    <Button size="sm" variant="ghost" type="button" class="task-row__btn" @click="openTaskDetail(item.data!)">{{ t('task.viewDetail') }}</Button>
+                    <div class="task-actions" @click.stop>
+                      <Button
+                        v-if="isExecutor(item.data!) && item.data!.status === 'open'"
+                        size="sm"
+                        :disabled="submitCompletionLoading === item.data!.id"
+                        class="task-row__btn task-row__btn--primary"
+                        @click="openSubmitModal(item.data!)"
+                      >
+                        {{ t('task.submitCompletion') }}
+                    </Button>
+                      <template v-if="item.data!.owner_id === auth.userId && item.data!.status === 'pending_verification'">
+                        <Button size="sm" :disabled="confirmLoading === item.data!.id" class="task-row__btn task-row__btn--primary" @click="doConfirm(item.data!.id)">{{ t('task.confirmPass') }}</Button>
+                        <Button size="sm" variant="secondary" :disabled="rejectLoading === item.data!.id" class="task-row__btn" @click="openRejectModal(item.data!.id)">{{ t('task.reject') }}</Button>
+                      </template>
+                    </div>
+                  </div>
+                </article>
               </div>
             </div>
+            <EmptyState
+              v-if="!myTasks.length && !myTasksLoading"
+              :title="t('taskManage.noMyTasks') || '暂无接取的任务'"
+              :description="t('taskManage.goAcceptHint') || '前往首页或可接取任务列表接取第一个任务'"
+              illustration-src="/assets/illustrations/market-empty.svg"
+            >
+              <template #actions>
+                <Button :as="RouterLink" to="/">{{ t('taskManage.goAccept') || '去接取' }}</Button>
+              </template>
+            </EmptyState>
             </template>
           </template>
           </div>
@@ -296,8 +319,14 @@
           </div>
           <p class="hint">{{ t('task.balanceHint', { n: accountCredits }) }}</p>
           <p v-if="publishError" class="error-msg" role="alert">{{ publishError }}</p>
+          <div v-if="hasTaskDraft" class="draft-banner">
+            <span class="draft-banner-text">{{ t('task.draftExists') || '您有未完成的草稿' }}</span>
+            <Button type="button" size="sm" variant="ghost" @click="restoreDraft">{{ t('task.draftRestore') || '从草稿恢复' }}</Button>
+            <Button type="button" size="sm" variant="ghost" @click="discardDraft">{{ t('task.draftDiscard') || '丢弃草稿' }}</Button>
+          </div>
           <div class="modal-actions">
             <Button type="button" :disabled="publishLoading" @click="doPublishAndClose">{{ publishLoading ? t('task.publishBtnLoading') : t('task.publishBtn') }}</Button>
+            <Button type="button" variant="secondary" :disabled="publishLoading" @click="saveDraft">{{ t('task.draftSave') || '保存草稿' }}</Button>
             <Button type="button" variant="secondary" @click="closeCreateModal">{{ t('common.cancel') }}</Button>
           </div>
         </div>
@@ -381,11 +410,13 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { useVirtualList } from '@vueuse/core'
 import { useRoute, RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Textarea } from '../components/ui/textarea'
+import EmptyState from '../components/EmptyState.vue'
 import { cn } from '../lib/utils'
 import { safeT } from '../i18n'
 import { useAuthStore } from '../stores/auth'
@@ -446,6 +477,12 @@ const filteredTasks = computed(() => {
   if (!categoryFilter.value) return tasks.value
   return tasks.value.filter((t) => t.category === categoryFilter.value)
 })
+
+const TASK_ROW_ITEM_HEIGHT = 168
+const virtualAvailable = useVirtualList(filteredTasks, { itemHeight: TASK_ROW_ITEM_HEIGHT, overscan: 6 })
+const virtualMine = useVirtualList(myTasks, { itemHeight: TASK_ROW_ITEM_HEIGHT, overscan: 6 })
+const virtualAvailableItems = computed(() => (virtualAvailable.list.value || []).filter((x) => !!x.data))
+const virtualMineItems = computed(() => (virtualMine.list.value || []).filter((x) => !!x.data))
 
 function doLogin() {
   authError.value = ''
@@ -583,12 +620,91 @@ function closeTaskDetail() {
   taskComments.value = []
 }
 
+const TASK_DRAFT_KEY = 'clawjob_task_draft'
+
+function getTaskDraft(): typeof publishForm | null {
+  try {
+    const raw = localStorage.getItem(TASK_DRAFT_KEY)
+    if (!raw) return null
+    const o = JSON.parse(raw) as Record<string, unknown>
+    return {
+      title: String(o.title ?? ''),
+      description: String(o.description ?? ''),
+      category: String(o.category ?? ''),
+      requirements: String(o.requirements ?? ''),
+      reward_points: Number(o.reward_points) || 0,
+      completion_webhook_url: String(o.completion_webhook_url ?? ''),
+      discord_webhook_url: String(o.discord_webhook_url ?? ''),
+      invited_agent_ids: Array.isArray(o.invited_agent_ids) ? (o.invited_agent_ids as number[]) : [],
+      creator_agent_id: typeof o.creator_agent_id === 'number' ? o.creator_agent_id : null,
+      location: String(o.location ?? ''),
+      duration_estimate: String(o.duration_estimate ?? ''),
+      skills_text: String(o.skills_text ?? ''),
+    }
+  } catch {
+    return null
+  }
+}
+
+const hasTaskDraft = ref(false)
+
+function saveDraft() {
+  try {
+    hasTaskDraft.value = true
+    const payload = {
+      title: publishForm.title,
+      description: publishForm.description,
+      category: publishForm.category,
+      requirements: publishForm.requirements,
+      reward_points: publishForm.reward_points,
+      completion_webhook_url: publishForm.completion_webhook_url,
+      discord_webhook_url: publishForm.discord_webhook_url,
+      invited_agent_ids: publishForm.invited_agent_ids,
+      creator_agent_id: publishForm.creator_agent_id,
+      location: publishForm.location,
+      duration_estimate: publishForm.duration_estimate,
+      skills_text: publishForm.skills_text,
+    }
+    localStorage.setItem(TASK_DRAFT_KEY, JSON.stringify(payload))
+    showSuccessLocal(t('task.draftSaved') || '草稿已保存')
+  } catch {
+    showSuccessLocal(t('task.draftSaveFailed') || '草稿保存失败')
+  }
+}
+
+function restoreDraft() {
+  const d = getTaskDraft()
+  if (!d) return
+  publishForm.title = d.title
+  publishForm.description = d.description
+  publishForm.category = d.category
+  publishForm.requirements = d.requirements
+  publishForm.reward_points = d.reward_points
+  publishForm.completion_webhook_url = d.completion_webhook_url
+  publishForm.discord_webhook_url = d.discord_webhook_url
+  publishForm.invited_agent_ids = [...d.invited_agent_ids]
+  publishForm.creator_agent_id = d.creator_agent_id
+  publishForm.location = d.location
+  publishForm.duration_estimate = d.duration_estimate
+  publishForm.skills_text = d.skills_text
+  showSuccessLocal(t('task.draftRestored') || '已恢复草稿')
+}
+
+function discardDraft() {
+  try {
+    localStorage.removeItem(TASK_DRAFT_KEY)
+  } catch {}
+  hasTaskDraft.value = false
+  showSuccessLocal(t('task.draftDiscard') || '已丢弃草稿')
+}
+
 function openCreateModal() {
   if (!auth.isLoggedIn) {
     showAuthModal.value = true
     return
   }
   publishError.value = ''
+  hasTaskDraft.value = !!getTaskDraft()
   showCreateModal.value = true
 }
 function closeCreateModal() {
@@ -624,6 +740,8 @@ function doPublish() {
     skills,
     discord_webhook_url: publishForm.discord_webhook_url.trim() || undefined,
   }).then(() => {
+    try { localStorage.removeItem(TASK_DRAFT_KEY) } catch {}
+    hasTaskDraft.value = false
     publishForm.title = ''
     publishForm.description = ''
     publishForm.category = ''
@@ -748,46 +866,151 @@ watch(tab, (newTab) => {
 
 <style scoped>
 .task-manage-view { width: 100%; }
-.task-layout { display: grid; grid-template-columns: 160px 1fr 200px; gap: var(--space-4) var(--space-6); align-items: start; min-height: 60vh; }
+.task-layout { display: grid; grid-template-columns: 160px 1fr 220px; gap: var(--space-6) var(--space-8); align-items: start; min-height: 60vh; }
 .task-left { padding-top: 0.25rem; }
-.task-categories { display: flex; flex-direction: column; gap: 0.25rem; }
+.task-categories { display: flex; flex-direction: column; gap: 0.35rem; }
 .category-item {
-  padding: 0.5rem 0.75rem; border-radius: 8px; border: 1px solid var(--border, #333); background: transparent; color: var(--text-secondary);
-  font-size: 0.9rem; text-align: left; cursor: pointer; transition: border-color 0.2s, background 0.2s, color 0.2s;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  border: var(--border-hairline);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-body);
+  letter-spacing: var(--tracking-normal);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--duration-m) var(--ease-apple), background var(--duration-m) var(--ease-apple), color var(--duration-m) var(--ease-apple), transform var(--duration-m) var(--ease-apple);
 }
-.category-item:hover { border-color: var(--primary-color); color: var(--text-primary); }
-.category-item.active { background: rgba(var(--primary-rgb, 34, 197, 94), 0.12); border-color: var(--primary-color); color: var(--primary-color); }
+.category-item:hover { border-color: rgba(255,255,255,0.10); color: var(--text-primary); background: rgba(255,255,255,0.02); }
+.category-item:active { transform: scale(0.99); }
+.category-item:focus-visible { outline: none; box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.22); }
+.category-item.active { background: rgba(var(--primary-rgb), 0.12); border-color: var(--primary-color); color: var(--text-primary); }
 .category-item--mine { margin-top: 0.5rem; font-weight: 500; }
 .task-center { display: flex; flex-direction: column; min-width: 0; }
-.task-center-inner { display: flex; gap: var(--space-5); flex: 1; min-height: 0; }
+.task-center-inner { display: flex; gap: var(--space-6); flex: 1; min-height: 0; }
 .task-center-inner--mine { display: block; }
 .task-list-wrap { flex: 1 1 auto; min-width: 0; overflow-y: auto; }
+.task-list-wrap {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 16px, #000 calc(100% - 16px), transparent);
+  mask-image: linear-gradient(to bottom, transparent, #000 16px, #000 calc(100% - 16px), transparent);
+}
+.task-list--virtual {
+  height: min(65vh, 720px);
+  overflow: auto;
+  display: block;
+}
+.draft-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  margin-bottom: var(--space-4);
+  border-radius: var(--radius-md);
+  border: var(--border-hairline);
+  background: rgba(var(--primary-rgb), 0.06);
+  font-size: var(--font-body);
+}
+.draft-banner-text { color: var(--text-secondary); margin-right: var(--space-2); }
 .task-center-inner--with-detail .task-list-wrap { flex: 0 1 52%; }
 .task-center-inner--with-detail .task-detail-panel { flex: 0 1 48%; }
 .task-detail-panel {
-  flex: 1 1 auto; min-width: 0; overflow-y: auto; border-radius: var(--radius-md); border: 1px solid var(--border-color);
-  background: var(--card-bg); padding: var(--space-5) var(--space-6);
-  box-shadow: var(--shadow-card); transition: box-shadow var(--duration-m) var(--ease-apple), border-color var(--duration-m) var(--ease-apple);
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-y: auto;
+  border-radius: var(--radius-xl);
+  border: var(--border-hairline);
+  background: rgba(255, 255, 255, 0.02);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  padding: var(--space-6) var(--space-8);
+  box-shadow: 0 1px 0 rgba(0,0,0,0.08), 0 18px 40px rgba(0,0,0,0.22);
+  transition: box-shadow var(--duration-m) var(--ease-apple), border-color var(--duration-m) var(--ease-apple), background var(--duration-m) var(--ease-apple);
 }
-.task-detail-panel__head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: var(--space-4); }
-.task-detail-panel__title { font-size: 1.05rem; margin: 0; font-weight: 600; letter-spacing: -0.02em; line-height: 1.3; word-break: break-word; min-width: 0; color: var(--text-primary); }
-.task-detail-panel__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-4); }
+.task-detail-panel {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 18px, #000 calc(100% - 18px), transparent);
+  mask-image: linear-gradient(to bottom, transparent, #000 18px, #000 calc(100% - 18px), transparent);
+}
+.task-detail-panel__head { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-4); margin-bottom: var(--space-5); }
+.task-detail-panel__title { font-size: var(--font-section-title); margin: 0; font-weight: 700; letter-spacing: var(--tracking-tight); line-height: 1.25; word-break: break-word; min-width: 0; color: var(--text-primary); }
+.task-detail-panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+  padding-top: var(--space-5);
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+
+.task-comments-title {
+  font-size: var(--font-section-title);
+  font-weight: 650;
+  letter-spacing: var(--tracking-normal);
+  color: var(--text-primary);
+  margin: 0 0 var(--space-4);
+  line-height: 1.25;
+}
+.task-comments { margin-top: var(--space-8); padding-top: var(--space-6); border-top: var(--border-hairline); }
+.task-comments-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: var(--space-4); }
+.task-comment-item {
+  display: flex;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  border: var(--border-hairline);
+  background: rgba(255,255,255,0.02);
+  transition: background var(--duration-m) var(--ease-apple), border-color var(--duration-m) var(--ease-apple);
+}
+.task-comment-item.comment-kind-status { border-left: 3px solid rgba(var(--primary-rgb), 0.35); }
+.task-comment-avatar {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--radius-md);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: rgba(255,255,255,0.06);
+  border: var(--border-hairline);
+  color: var(--text-primary);
+  font-weight: 700;
+  font-size: var(--font-caption);
+}
+.task-comment-body { min-width: 0; flex: 1; }
+.task-comment-header { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-1); }
+.task-comment-author { font-size: var(--font-body-strong); font-weight: 650; color: var(--text-primary); letter-spacing: var(--tracking-normal); }
+.task-comment-by-user { font-size: var(--font-caption); color: var(--text-secondary); }
+.task-comment-time { margin-left: auto; font-size: var(--font-caption); color: var(--text-secondary); }
+.task-comment-kind-badge { font-size: 0.6875rem; padding: 0.12rem 0.45rem; border-radius: var(--radius-full); border: var(--border-hairline); background: rgba(255,255,255,0.04); color: var(--text-secondary); }
+.task-comment-content { margin: 0; white-space: pre-wrap; word-break: break-word; font-size: var(--font-body); color: var(--text-secondary); line-height: var(--line-normal); }
+.task-comments-empty { margin: 0; color: var(--text-secondary); font-size: var(--font-caption); }
+.task-comment-form { margin-top: var(--space-5); display: flex; flex-direction: column; gap: var(--space-3); }
 
 /* 任务行 · 极细分隔、背景层级、状态过渡 */
 .task-list { display: flex; flex-direction: column; gap: 0; }
 .task-row {
-  padding: var(--space-5) var(--space-6);
-  border-radius: var(--radius-md);
-  background: var(--card-background);
-  border: none;
-  border-bottom: var(--border-hairline);
-  box-shadow: none;
-  transition: background var(--duration-m) var(--ease-apple), box-shadow var(--duration-m) var(--ease-apple), transform var(--duration-m) var(--ease-apple);
-}
-.task-row:last-child { border-bottom: none; }
-.task-row:hover {
+  padding: var(--space-6) var(--space-8);
+  border-radius: var(--radius-lg);
   background: rgba(255, 255, 255, 0.02);
-  box-shadow: var(--shadow-card);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 1px 0 rgba(0,0,0,0.06);
+  transition: background var(--duration-m) var(--ease-apple), box-shadow var(--duration-m) var(--ease-apple), transform var(--duration-m) var(--ease-apple), border-color var(--duration-m) var(--ease-apple);
+}
+.task-row + .task-row { margin-top: var(--space-4); }
+.task-row:hover {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.09);
+  box-shadow: 0 1px 0 rgba(0,0,0,0.06), 0 14px 30px rgba(0,0,0,0.18);
+  transform: translateY(-1px);
+}
+.task-row--selected {
+  border-color: rgba(var(--primary-rgb), 0.28);
+  box-shadow: 0 1px 0 rgba(0,0,0,0.06), 0 0 0 1px rgba(var(--primary-rgb), 0.12) inset, 0 16px 36px rgba(0,0,0,0.18);
+}
+.task-row--selected:hover { border-color: rgba(var(--primary-rgb), 0.34); }
+.task-row:focus-visible {
+  outline: none;
+  box-shadow: 0 1px 0 rgba(0,0,0,0.06), 0 0 0 2px rgba(var(--primary-rgb), 0.28);
 }
 .task-row--open { background: var(--card-background); }
 .task-row--pending_verification { background: rgba(234, 179, 8, 0.03); }
@@ -808,7 +1031,7 @@ watch(tab, (newTab) => {
   color: var(--text-secondary);
   font-weight: 500;
 }
-.task-row__type { font-size: 0.6875rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
+.task-row__type { font-size: 0.6875rem; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.03em; }
 .task-row__reward {
   margin-left: auto;
   font-size: 1rem;
@@ -817,12 +1040,12 @@ watch(tab, (newTab) => {
   letter-spacing: -0.02em;
 }
 .task-row__title {
-  font-size: var(--font-body);
-  font-weight: 500;
-  letter-spacing: -0.02em;
+  font-size: var(--font-body-strong);
+  font-weight: 650;
+  letter-spacing: var(--tracking-normal);
   color: var(--text-primary);
   margin: 0 0 var(--space-2);
-  line-height: 1.35;
+  line-height: 1.3;
   word-break: break-word;
 }
 .task-row__desc {
@@ -842,7 +1065,7 @@ watch(tab, (newTab) => {
 .task-tag--skill { border-color: rgba(168, 85, 247, 0.35); color: rgba(233, 213, 255, 0.95); }
 .task-row__meta {
   font-size: var(--font-caption);
-  color: var(--muted);
+  color: var(--text-tertiary);
   line-height: 1.5;
   margin: 0 0 var(--space-4);
 }
@@ -852,7 +1075,7 @@ watch(tab, (newTab) => {
   align-items: center;
   gap: var(--space-2);
   padding-top: var(--space-4);
-  border-top: var(--border-hairline);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 .task-row__btn {
   transition: background var(--duration-m) var(--ease-apple), transform var(--duration-m) var(--ease-apple), box-shadow var(--duration-m) var(--ease-apple);
@@ -908,24 +1131,51 @@ watch(tab, (newTab) => {
 .task-detail-completion-submission { margin-top: var(--space-5); padding: var(--space-4); background: var(--surface); border-radius: var(--radius-sm); }
 .task-detail-completion-submission .completion-summary { margin: 0 0 0.5rem; white-space: pre-wrap; font-size: 0.9rem; color: var(--text-secondary); }
 .task-detail-completion-submission .completion-link { margin: 0; font-size: 0.9rem; }
-.task-tabs { display: flex; gap: var(--space-2); margin-bottom: var(--space-5); }
-.task-tab { padding: 0.5rem 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: transparent; color: var(--text-secondary); font-size: 0.9rem; font-weight: 500; cursor: pointer; transition: border-color var(--duration-m) var(--ease-apple), background var(--duration-m) var(--ease-apple), color var(--duration-m) var(--ease-apple); }
-.task-tab:hover { border-color: var(--primary-color); color: var(--primary-color); }
-.task-tab.active { background: rgba(var(--primary-rgb), 0.12); border-color: var(--primary-color); color: var(--primary-color); }
+.task-tabs {
+  display: inline-flex;
+  gap: 0;
+  margin-bottom: var(--space-5);
+  border-radius: var(--radius-full);
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.02);
+  padding: 0.25rem;
+  box-shadow: 0 1px 0 rgba(0,0,0,0.12);
+}
+.task-tab {
+  padding: 0.45rem 0.9rem;
+  border-radius: var(--radius-full);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: var(--tracking-normal);
+  cursor: pointer;
+  transition: border-color var(--duration-m) var(--ease-apple), background var(--duration-m) var(--ease-apple), color var(--duration-m) var(--ease-apple), transform var(--duration-m) var(--ease-apple), box-shadow var(--duration-m) var(--ease-apple);
+}
+.task-tab:hover { color: var(--text-primary); background: rgba(255,255,255,0.03); }
+.task-tab:active { transform: scale(0.99); }
+.task-tab:focus-visible { outline: none; box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.22); }
+.task-tab.active {
+  background: rgba(var(--primary-rgb), 0.14);
+  border-color: rgba(var(--primary-rgb), 0.2);
+  color: var(--text-primary);
+  box-shadow: 0 1px 0 rgba(0,0,0,0.06), 0 0 0 1px rgba(var(--primary-rgb), 0.12) inset;
+}
 .task-filter-row { margin-bottom: var(--space-4); }
-.task-filter-select { max-width: 180px; }
-.task-layout--mine-only { grid-template-columns: minmax(0, 1fr) 220px; }
+.task-filter-select { max-width: 200px; border-radius: var(--radius-md); border: var(--border-hairline); padding: var(--space-2) var(--space-3); font-size: var(--font-body); }
+.task-layout--mine-only { grid-template-columns: minmax(0, 1fr) 260px; }
 .task-layout--mine-only .task-center { min-width: 0; }
-.task-right { display: flex; flex-direction: column; gap: var(--space-5); }
+.task-right { display: flex; flex-direction: column; gap: var(--space-6); position: sticky; top: 92px; }
 .task-right-card {
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl);
+  border: var(--border-hairline);
   background: var(--card-background);
-  padding: var(--space-5) var(--space-6);
+  padding: var(--space-6);
   box-shadow: var(--shadow-card);
   transition: box-shadow var(--duration-m) var(--ease-apple), border-color var(--duration-m) var(--ease-apple);
 }
-.task-right-create .btn { width: 100%; }
+.task-right-create .ui-button { width: 100%; }
 .task-right-title { font-size: 0.95rem; font-weight: 600; margin: 0 0 var(--space-4); color: var(--text-primary); letter-spacing: -0.02em; }
 .task-right-hint { font-size: 0.85rem; color: var(--text-secondary); line-height: 1.4; }
 .task-right-hint--no-agent .task-right-hint-text { margin: 0 0 0.75rem; }
@@ -946,13 +1196,36 @@ watch(tab, (newTab) => {
 .task-right-agent-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .task-right-more { padding: 0.25rem 0; margin-top: 0.25rem; }
 
-.detail-section { margin-bottom: var(--space-5); }
-.detail-desc { white-space: pre-wrap; word-break: break-word; color: var(--text-secondary); font-size: var(--font-body); line-height: 1.55; }
-.detail-meta { margin: 0 0 var(--space-5); font-size: var(--font-caption); }
-.detail-meta dt { font-weight: 600; color: var(--text-secondary); margin-top: 0.5rem; margin-bottom: 0.2rem; }
-.detail-meta dd { margin: 0; }
+.detail-section { margin-bottom: var(--space-6); }
+.detail-desc {
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: rgba(255,255,255,0.74);
+  font-size: var(--font-body);
+  line-height: 1.65;
+  letter-spacing: 0.005em;
+}
+.detail-meta {
+  margin: 0 0 var(--space-6);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(255,255,255,0.06);
+  background: rgba(0,0,0,0.14);
+  font-size: var(--font-caption);
+}
+.detail-meta dt {
+  font-weight: 650;
+  color: rgba(255,255,255,0.62);
+  margin-top: 0.65rem;
+  margin-bottom: 0.2rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  font-size: 0.6875rem;
+}
+.detail-meta dt:first-child { margin-top: 0; }
+.detail-meta dd { margin: 0; color: rgba(255,255,255,0.82); }
 .detail-requirements { white-space: pre-wrap; word-break: break-word; }
-.detail-footer { font-size: var(--font-caption); color: var(--text-secondary); margin-top: var(--space-4); }
+.detail-footer { font-size: var(--font-caption); color: rgba(255,255,255,0.58); margin-top: var(--space-5); }
 .detail-reward { margin-left: 0.5rem; font-weight: 700; color: var(--primary-color); }
 
 .select-input { max-width: 100%; }
@@ -982,7 +1255,7 @@ watch(tab, (newTab) => {
 .modal--create .modal-actions { margin-top: var(--space-5); }
 
 @media (max-width: 1024px) {
-  .task-layout { grid-template-columns: 1fr 200px; }
+  .task-layout { grid-template-columns: 1fr 240px; }
   .task-left { order: 1; grid-column: 1 / -1; }
   .task-categories { flex-direction: row; flex-wrap: wrap; }
   .task-center-inner { flex-direction: column; }

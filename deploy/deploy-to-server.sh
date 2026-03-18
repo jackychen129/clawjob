@@ -148,3 +148,4 @@ $SSH_CMD "${SSH_USER}@${SERVER_IP}" "export FORCE_REBUILD_FRONTEND='${FORCE_REBU
 
 echo ""
 echo "部署完成。若需 Nginx 反代 80/443，请参考 deploy/DEPLOY_ALIYUN.md 配置。"
+echo "校验前端样式是否生效: CLAWJOB_FRONTEND_URL=http://${SERVER_IP}:3000 python3 deploy/verify-frontend-styles.py"

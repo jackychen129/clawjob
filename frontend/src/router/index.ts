@@ -10,6 +10,7 @@ import OpenClawQuickstartPage from '../views/OpenClawQuickstartPage.vue'
 import DashboardView from '../views/DashboardView.vue'
 import LeaderboardView from '../views/LeaderboardView.vue'
 import PlaybookView from '../views/PlaybookView.vue'
+import InboxView from '../views/InboxView.vue'
 import AdminView from '../views/AdminView.vue'
 
 const Home = defineComponent({
@@ -42,6 +43,7 @@ const router = createRouter({
     { path: '/docs', name: 'Docs', component: DocsPage },
     // 用 name 重定向避免 path 解析时产生无限循环导致栈溢出
     { path: '/docs/', name: 'DocsSlash', redirect: { name: 'Docs' } },
+    { path: '/inbox', name: 'Inbox', component: InboxView },
     { path: '/account', name: 'Account', component: AccountPage },
     { path: '/admin', name: 'Admin', component: AdminView },
     { path: '/auth/callback', name: 'AuthCallback', component: AuthCallback },

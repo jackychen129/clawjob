@@ -1,12 +1,10 @@
 <template>
   <section class="admin-wrap">
-    <div class="section-head">
-      <h2 class="section-title">{{ t('admin.title') || '管理后台' }}</h2>
-      <div class="admin-actions">
-        <Button type="button" variant="secondary" :disabled="loading" @click="reloadAll">
-          {{ t('common.retry') || '刷新' }}
-        </Button>
-      </div>
+    <h1 class="page-title">{{ t('admin.title') || '管理后台' }}</h1>
+    <div class="admin-head-actions">
+      <Button type="button" variant="secondary" :disabled="loading" @click="reloadAll">
+        {{ t('common.retry') || '刷新' }}
+      </Button>
     </div>
 
     <div v-if="denied" class="card admin-card">
@@ -185,14 +183,22 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.admin-wrap { display: flex; flex-direction: column; gap: 1rem; }
-.admin-actions { display: flex; gap: 0.5rem; }
-.admin-metrics { display: grid; grid-template-columns: 1fr; gap: 1rem; }
+.admin-wrap { display: flex; flex-direction: column; gap: var(--space-6); }
+.admin-head-actions { display: flex; gap: var(--space-2); margin-bottom: var(--space-2); }
+.admin-metrics { display: grid; grid-template-columns: 1fr; gap: var(--space-4); }
 @media (min-width: 768px) { .admin-metrics { grid-template-columns: repeat(4, 1fr); } }
-.admin-metric-card { padding: 1rem; }
-.admin-metric-title { color: var(--text-secondary); font-size: 0.9rem; }
-.admin-metric-value { font-size: 1.8rem; font-weight: 700; margin-top: 0.25rem; }
-.admin-metric-hint { margin-top: 0.35rem; font-size: 0.85rem; color: var(--text-secondary); }
+.admin-metric-card {
+  padding: var(--space-5);
+  border-radius: var(--radius-lg);
+  border: var(--border-hairline);
+  background: var(--card-background);
+  box-shadow: var(--shadow-card);
+  transition: box-shadow var(--duration-m) var(--ease-apple), border-color var(--duration-m) var(--ease-apple);
+}
+.admin-metric-card:hover { box-shadow: var(--shadow-card-hover); border-color: rgba(255,255,255,0.08); }
+.admin-metric-title { color: var(--text-secondary); font-size: var(--font-caption); font-weight: 600; letter-spacing: var(--tracking-normal); }
+.admin-metric-value { font-size: 1.75rem; font-weight: 700; margin-top: var(--space-2); letter-spacing: var(--tracking-tight); color: var(--text-primary); }
+.admin-metric-hint { margin-top: var(--space-2); font-size: var(--font-caption); color: var(--text-secondary); line-height: 1.4; }
 
 .admin-metrics--skeleton .admin-metric-card { display: flex; flex-direction: column; gap: 0.6rem; }
 .admin-skel-line { height: 0.9rem; }
@@ -200,29 +206,35 @@ onMounted(() => {
 .admin-skel-line--value { width: 65%; height: 1.6rem; }
 .admin-skel-line--hint { width: 85%; }
 
-.admin-card { padding: 1rem; }
-.admin-logs { margin-top: 0.5rem; }
-.admin-logs-head { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
-.admin-logs-title { margin: 0; font-size: 1.1rem; }
-.admin-logs-filters { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.admin-card {
+  padding: var(--space-6);
+  border-radius: var(--radius-xl);
+  border: var(--border-hairline);
+  background: var(--card-background);
+  box-shadow: var(--shadow-card);
+}
+.admin-logs { margin-top: 0; }
+.admin-logs-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; margin-bottom: var(--space-4); }
+.admin-logs-title { margin: 0; font-size: var(--font-section-title); font-weight: 650; letter-spacing: var(--tracking-normal); color: var(--text-primary); }
+.admin-logs-filters { display: flex; gap: var(--space-2); flex-wrap: wrap; }
 .admin-filter { min-width: 10rem; }
 
 .admin-log-table { width: 100%; }
-.admin-log-row { display: grid; grid-template-columns: 11rem 5rem 7rem 1fr; gap: 0.75rem; padding: 0.6rem 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
-.admin-log-row--head { color: var(--text-secondary); font-size: 0.85rem; padding-top: 0; }
-.admin-log-time { color: var(--text-secondary); font-size: 0.85rem; }
-.admin-log-level, .admin-log-cat { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 0.85rem; }
-.admin-log-msg-main { font-size: 0.9rem; }
-.admin-log-msg-sub { margin-top: 0.15rem; color: var(--text-secondary); font-size: 0.8rem; display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.admin-log-row { display: grid; grid-template-columns: 11rem 5rem 7rem 1fr; gap: var(--space-3); padding: var(--space-3) 0; border-bottom: var(--border-hairline); }
+.admin-log-row--head { color: var(--text-secondary); font-size: var(--font-caption); font-weight: 600; padding-top: 0; }
+.admin-log-time { color: var(--text-secondary); font-size: var(--font-caption); }
+.admin-log-level, .admin-log-cat { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: var(--font-caption); }
+.admin-log-msg-main { font-size: var(--font-body); }
+.admin-log-msg-sub { margin-top: var(--space-1); color: var(--text-secondary); font-size: var(--font-caption); display: flex; gap: var(--space-2); flex-wrap: wrap; }
 .admin-log-row.lvl-error .admin-log-level { color: var(--danger-color); }
 .admin-log-row.lvl-warning .admin-log-level { color: var(--warning-color); }
 .admin-log-row.lvl-info .admin-log-level { color: var(--primary-color); }
 
-.admin-logs-skeleton { display: flex; flex-direction: column; gap: 0.5rem; }
-.admin-log-skel-row { height: 1rem; border-radius: 6px; }
+.admin-logs-skeleton { display: flex; flex-direction: column; gap: var(--space-2); }
+.admin-log-skel-row { height: 1rem; border-radius: var(--radius-sm); }
 
-.admin-pagination { display: flex; justify-content: flex-end; align-items: center; gap: 0.75rem; margin-top: 0.75rem; }
-.admin-page-meta { color: var(--text-secondary); font-size: 0.85rem; }
+.admin-pagination { display: flex; justify-content: flex-end; align-items: center; gap: var(--space-3); margin-top: var(--space-4); }
+.admin-page-meta { color: var(--text-secondary); font-size: var(--font-caption); }
 
 @media (max-width: 900px) {
   .admin-log-row { grid-template-columns: 9rem 4.5rem 6rem 1fr; }

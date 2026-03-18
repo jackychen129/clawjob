@@ -1,13 +1,11 @@
 <template>
   <div class="skill-page">
-    <div class="skill-hero">
-      <h2 class="skill-page-title">{{ t('skillPage.title') }}</h2>
-      <p class="skill-page-intro">{{ t('skillPage.intro') }}</p>
-    </div>
+    <h1 class="page-title">{{ t('skillPage.title') }}</h1>
+    <p class="page-desc skill-page-desc">{{ t('skillPage.intro') }}</p>
 
     <section class="skill-section card skill-oneclick-card">
       <div class="card-content">
-        <h3 class="skill-section-title">{{ t('skillPage.oneClickTitle') }}</h3>
+        <h2 class="section-title">{{ t('skillPage.oneClickTitle') }}</h2>
         <p class="skill-section-desc">{{ t('skillPage.oneClickDesc') }}</p>
         <p class="skill-md-link-wrap">
           <a :href="skillMdUrl" target="_blank" rel="noopener noreferrer" class="skill-md-link">{{ t('skillPage.skillMdLink') }}</a>
@@ -32,7 +30,7 @@
 
     <section class="skill-section card">
       <div class="card-content">
-        <h3 class="skill-section-title">{{ t('skillPage.downloadTitle') }}</h3>
+        <h2 class="section-title">{{ t('skillPage.downloadTitle') }}</h2>
         <p class="skill-section-desc">{{ t('skillPage.downloadDesc') }}</p>
         <div class="skill-download-actions">
           <Button as="a" :href="skillRepoUrl" target="_blank" rel="noopener noreferrer" class="skill-download-btn">
@@ -54,7 +52,7 @@
 
     <section class="skill-section card">
       <div class="card-content">
-        <h3 class="skill-section-title">{{ t('skillPage.installOpenClawTitle') }}</h3>
+        <h2 class="section-title">{{ t('skillPage.installOpenClawTitle') }}</h2>
         <p class="skill-section-desc">{{ t('skillPage.installOpenClawDesc') }}</p>
         <ol class="skill-steps">
           <li v-for="(key, i) in installStepKeys" :key="i">{{ t(key) }}</li>
@@ -65,7 +63,7 @@
 
     <section class="skill-section card">
       <div class="card-content">
-        <h3 class="skill-section-title">{{ t('skillPage.useAfterLoadTitle') }}</h3>
+        <h2 class="section-title">{{ t('skillPage.useAfterLoadTitle') }}</h2>
         <p class="skill-section-desc">{{ t('skillPage.useAfterLoadDesc') }}</p>
         <ul class="skill-steps">
           <li v-for="(key, i) in useAfterLoadKeys" :key="i">{{ t(key) }}</li>
@@ -75,7 +73,7 @@
 
     <section class="skill-section card">
       <div class="card-content">
-        <h3 class="skill-section-title">{{ t('skillPage.installOtherTitle') }}</h3>
+        <h2 class="section-title">{{ t('skillPage.installOtherTitle') }}</h2>
         <p class="skill-section-desc">{{ t('skillPage.installOtherDesc') }}</p>
         <p class="skill-note">{{ t('skillPage.installOtherNote') }}</p>
       </div>
@@ -83,7 +81,7 @@
 
     <section class="skill-section card">
       <div class="card-content">
-        <h3 class="skill-section-title">{{ t('skillPage.configTitle') }}</h3>
+        <h2 class="section-title">{{ t('skillPage.configTitle') }}</h2>
         <div class="skill-config-row">
           <label class="skill-config-label">CLAWJOB_API_URL</label>
           <div class="skill-config-value-wrap">
@@ -191,126 +189,111 @@ function copyOneClickPrompt() {
 
 <style scoped>
 .skill-page {
-  max-width: 720px;
+  max-width: 820px;
   margin: 0 auto;
-  padding: 0 1rem 3rem;
+  padding: 0 0 3rem;
 }
-.skill-hero {
-  margin-bottom: 2rem;
-  text-align: center;
-}
-.skill-page-title {
-  font-size: 1.75rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 0.75rem;
-}
-.skill-page-intro {
-  font-size: 1rem;
-  color: var(--text-secondary);
-  line-height: 1.6;
-}
+.skill-page-desc { margin: calc(-1 * var(--space-2)) 0 var(--space-8); }
 .skill-section {
-  margin-bottom: 1.5rem;
-}
-.skill-section-title {
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 0.5rem;
+  margin-bottom: var(--space-6);
 }
 .skill-section-desc {
-  font-size: 0.95rem;
+  font-size: var(--font-body);
   color: var(--text-secondary);
-  margin-bottom: 1rem;
-  line-height: 1.5;
+  margin: 0 0 var(--space-5);
+  line-height: var(--line-normal);
 }
 .skill-download-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.75rem;
-  margin-bottom: 0.75rem;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
 }
 .skill-download-btn { flex-shrink: 0; }
-.skill-copy-btn { font-size: 0.9rem; }
+.skill-copy-btn { font-size: var(--font-body); }
 .skill-note {
-  font-size: 0.85rem;
+  font-size: var(--font-caption);
   color: var(--text-secondary);
   margin: 0;
   line-height: 1.5;
 }
 .skill-steps {
-  margin: 0 0 1rem 1.25rem;
+  margin: 0 0 var(--space-4) var(--space-5);
   padding: 0;
   color: var(--text-secondary);
-  font-size: 0.95rem;
-  line-height: 1.6;
+  font-size: var(--font-body);
+  line-height: var(--line-normal);
 }
-.skill-steps li { margin-bottom: 0.35rem; }
+.skill-steps li { margin-bottom: var(--space-2); }
 .skill-config-row {
-  margin-bottom: 1.25rem;
+  margin-bottom: var(--space-5);
 }
 .skill-config-row:last-of-type { margin-bottom: 0; }
 .skill-config-label {
   display: block;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 0.35rem;
+  font-size: var(--font-caption);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-2);
 }
 .skill-config-value-wrap {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--space-2);
   flex-wrap: wrap;
 }
 .skill-config-value {
-  font-size: 0.9rem;
-  background: var(--background-darker);
-  padding: 0.4rem 0.6rem;
-  border-radius: 6px;
+  font-size: var(--font-body);
+  background: rgba(0,0,0,0.22);
+  border: var(--border-hairline);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
   word-break: break-all;
   flex: 1;
   min-width: 0;
 }
 .skill-copy-inline { flex-shrink: 0; }
 .skill-config-hint {
-  font-size: 0.8rem;
+  font-size: var(--font-caption);
   color: var(--text-secondary);
-  margin: 0.35rem 0 0;
+  margin: var(--space-2) 0 0;
 }
 .skill-quick-register {
-  margin-top: 1.25rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--border-color);
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: var(--border-hairline);
 }
 .skill-pre {
-  background: var(--background-darker);
-  padding: 0.75rem 1rem;
-  border-radius: 8px;
-  font-size: 0.85rem;
+  background: rgba(0,0,0,0.2);
+  border: var(--border-hairline);
+  padding: var(--space-5);
+  border-radius: var(--radius-lg);
+  font-size: var(--font-caption);
   overflow-x: auto;
-  margin: 0.5rem 0 0.75rem;
+  margin: var(--space-2) 0 var(--space-3);
   white-space: pre-wrap;
   word-break: break-all;
 }
-.skill-pre code { color: var(--text-primary); }
+.skill-pre code { color: var(--text-primary); font-family: ui-monospace, monospace; }
 .skill-oneclick-card {
-  border-color: var(--primary);
+  border-color: rgba(var(--primary-rgb), 0.25);
   background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.06) 0%, transparent 50%);
 }
 .skill-oneclick-wrap {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  margin-bottom: 0.75rem;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
 }
 .skill-oneclick-pre {
-  background: var(--background-darker);
-  padding: 0.75rem 1rem;
-  border-radius: 8px;
-  font-size: 0.85rem;
+  background: rgba(0,0,0,0.2);
+  border: var(--border-hairline);
+  padding: var(--space-5);
+  border-radius: var(--radius-lg);
+  font-size: var(--font-caption);
   overflow-x: auto;
   margin: 0;
   white-space: pre-wrap;
@@ -319,31 +302,31 @@ function copyOneClickPrompt() {
 .skill-oneclick-pre code { color: var(--text-primary); font-family: ui-monospace, monospace; }
 .skill-oneclick-btn { align-self: flex-start; }
 .skill-md-link-wrap {
-  margin: 0 0 0.75rem;
-  font-size: 0.9rem;
+  margin: 0 0 var(--space-3);
+  font-size: var(--font-body);
 }
 .skill-md-url {
   color: var(--text-secondary);
-  font-size: 0.85rem;
+  font-size: var(--font-caption);
   word-break: break-all;
-  margin-left: 0.35rem;
+  margin-left: var(--space-2);
 }
 .skill-what-ai {
-  font-size: 0.9rem;
+  font-size: var(--font-body);
   font-weight: 600;
   color: var(--text-primary);
-  margin: 0 0 0.35rem;
+  margin: 0 0 var(--space-2);
 }
 .skill-ai-steps {
-  margin: 0 0 1rem 1.25rem;
+  margin: 0 0 var(--space-4) var(--space-5);
   padding: 0;
-  font-size: 0.9rem;
+  font-size: var(--font-body);
   color: var(--text-secondary);
   line-height: 1.55;
 }
-.skill-ai-steps li { margin-bottom: 0.25rem; }
+.skill-ai-steps li { margin-bottom: var(--space-1); }
 .skill-back-wrap {
-  margin-top: 2rem;
+  margin-top: var(--space-8);
   text-align: center;
 }
 .skill-back-btn {

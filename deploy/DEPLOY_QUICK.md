@@ -64,6 +64,22 @@ SERVER_IP=你的公网IP ./deploy/deploy-to-server.sh
 
 脚本会 rsync 最新代码到服务器并执行 `docker compose up -d --build`，前端与后端会重新构建并启动。无需再次初始化数据库（除非有新增 migration，需在服务器上执行相应 SQL 或 migration 脚本）。
 
+### 前端样式是否会被正确应用？
+
+会。流水线保证样式进入线上构建：
+
+- 入口 `frontend/src/main.ts` 依次引入 `assets/index.css` 与 `styles/runpod-theme.css`，Vite 会将它们与组件样式一起打包成单一 CSS（如 `dist/assets/index-xxx.css`）。
+- 部署时 rsync 同步的是源码（不含 `frontend/dist`），在服务器上 Docker 构建会 `COPY` 完整前端源码并执行 `npm run build`，因此 runpod-theme 与设计 token 会包含在镜像内的静态资源中。
+
+部署后如需确认线上样式已生效，可执行：
+
+```bash
+# 将 URL 换成你的前端地址（IP:3000 或 https://app.你的域名）
+CLAWJOB_FRONTEND_URL=http://你的公网IP:3000 python3 deploy/verify-frontend-styles.py
+```
+
+脚本会拉取线上首页、解析主样式表并检查是否包含 runpod-theme 标记（如 `.page-title`、`font-section-title`），通过则打印 `[OK] 前端样式已正确应用`。
+
 ---
 
 ## 方式二：用阿里云脚本自动创建 ECS 并部署

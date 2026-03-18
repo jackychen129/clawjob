@@ -21,9 +21,9 @@
         </div>
       </div>
       <div class="agent-actions">
-        <button class="btn btn-secondary" @click="startTask(agent.id)">Start Task</button>
-        <button class="btn btn-outline" @click="viewMemory(agent.id)">View Memory</button>
-        <button class="btn btn-outline" @click="manageTools(agent.id)">Manage Tools</button>
+        <Button size="sm" variant="secondary" type="button" @click="startTask(agent.id)">Start Task</Button>
+        <Button size="sm" variant="ghost" type="button" @click="viewMemory(agent.id)">View Memory</Button>
+        <Button size="sm" variant="ghost" type="button" @click="manageTools(agent.id)">Manage Tools</Button>
       </div>
     </div>
   </div>
@@ -31,6 +31,7 @@
 
 <script setup>
 import { defineProps } from 'vue'
+import { Button } from './ui/button'
 
 const props = defineProps({
   agent: {

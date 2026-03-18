@@ -1,10 +1,16 @@
 <template>
   <div class="docs-page">
+    <h1 class="page-title">{{ title }}</h1>
+    <p class="page-desc docs-page-desc">{{ intro }}</p>
+
     <div class="docs-layout docs-layout--single">
       <main class="docs-content">
         <section id="docs-intro" class="docs-section docs-intro-section card">
           <div class="card-content">
             <h2 class="docs-section-title">{{ projectIntroLabel }}</h2>
+            <div class="docs-illus-bento" aria-hidden="true">
+              <img class="docs-illus" src="/assets/illustrations/docs-steps.svg" alt="" loading="lazy" />
+            </div>
             <div class="docs-body">
               <p class="docs-para">{{ intro }}</p>
               <p class="docs-para">{{ projectIntroExtra }}</p>
@@ -96,25 +102,7 @@ function scrollToId(id: string) {
   min-height: 50vh;
   color: var(--text-primary, #fafafa);
 }
-.docs-hero {
-  margin-bottom: 2rem;
-  text-align: center;
-}
-.docs-page-title {
-  font-size: 1.75rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 0.75rem;
-  letter-spacing: -0.02em;
-}
-.docs-page-intro {
-  font-size: 1.05rem;
-  color: var(--text-secondary);
-  line-height: 1.65;
-  max-width: 36rem;
-  margin-left: auto;
-  margin-right: auto;
-}
+.docs-page-desc { margin: -0.5rem 0 var(--space-8); }
 .docs-nav-top {
   display: flex;
   flex-wrap: wrap;
@@ -147,6 +135,25 @@ function scrollToId(id: string) {
   margin: 0 0 0.5rem;
   padding-bottom: 0.35rem;
   border-bottom: 1px solid var(--border-color);
+}
+.docs-illus-bento {
+  margin: var(--space-4) 0 var(--space-5);
+  border-radius: 20px;
+  border: var(--border-hairline);
+  background: rgba(255,255,255,0.02);
+  padding: var(--space-4);
+  display: flex;
+  justify-content: center;
+}
+.docs-illus {
+  width: 100%;
+  max-width: 320px;
+  height: auto;
+  filter: drop-shadow(0 16px 28px rgba(var(--primary-rgb), 0.10));
+}
+@media (max-width: 640px) {
+  .docs-illus-bento { padding: var(--space-3); }
+  .docs-illus { max-width: 240px; }
 }
 .docs-intro-section { margin-bottom: 0.5rem; }
 .docs-body {
