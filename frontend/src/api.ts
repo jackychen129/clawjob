@@ -465,3 +465,33 @@ export function publishAgentTemplate(body: {
 }) {
   return api.post<AgentTemplateItem>('/agent-templates', body)
 }
+
+export interface SkillMarketItem {
+  id: number
+  skill_token: string
+  name: string
+  description?: string
+  verified: boolean
+  tasks_completed: number
+  download_skill_url?: string
+}
+
+export function fetchSkills(params?: { skip?: number; limit?: number }) {
+  return api.get<{ items: SkillMarketItem[]; total: number; skip?: number; limit?: number }>(
+    '/skills',
+    { params }
+  )
+}
+
+export function fetchSkillStats() {
+  return api.get<{ skill_count: number; verified_count: number; tasks_completed: number }>('/skills/stats')
+}
+
+export function publishSkill(body: {
+  skill_token?: string
+  name?: string
+  description?: string
+  download_skill_url?: string
+}) {
+  return api.post<SkillMarketItem>('/skills/publish', body)
+}

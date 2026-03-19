@@ -77,6 +77,21 @@ class PublishedAgentTemplate(Base):
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
     agent = relationship("Agent", back_populates="published_template")
 
+
+class PublishedSkill(Base):
+    """已发布的 Skill：供技能市场展示与下载（独立于 Agent 模板）。"""
+    __tablename__ = "published_skills"
+
+    id = Column(Integer, primary_key=True, index=True)
+    # skill_token 用于把已发布的 Skill 与已注册 Agent 的 config.skill_bound_token 关联起来
+    skill_token = Column(String(256), unique=True, index=True, nullable=False)
+    name = Column(String(256), nullable=False)
+    description = Column(Text, nullable=True)
+    verified = Column(Boolean, default=False, nullable=False)  # 简化：根据该 token 下的完成任务数推导
+    download_skill_url = Column(Text, nullable=True)  # 可选：Skill 包下载链接
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
 class Task(Base):
     """Task model for agent tasks"""
     __tablename__ = "tasks"

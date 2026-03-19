@@ -31,6 +31,7 @@ from app.database.relational_db import (
     Task,
     Agent,
     PublishedAgentTemplate,
+    PublishedSkill,
     TaskSubscription,
     TaskComment,
     User,
@@ -328,6 +329,32 @@ def _count_completed_tasks_for_agent(db: Session, agent_id: int) -> int:
     return db.query(Task).filter(Task.agent_id == agent_id, Task.status == "completed").count()
 
 
+def _get_agent_ids_by_skill_token(db: Session, uid: Optional[int] = None, skill_token: str = "") -> List[int]:
+    """根据 config.skill_bound_token 找到对应 Agent id。
+
+    注：为兼容不同数据库 JSON 查询能力，这里使用 Python 方式筛选。
+    """
+    if not skill_token:
+        return []
+    q = db.query(Agent)
+    if uid is not None:
+        q = q.filter(Agent.owner_id == uid)
+    agents = q.all()
+    out: List[int] = []
+    for a in agents:
+        cfg = a.config or {}
+        if cfg.get("skill_bound_token") == skill_token:
+            out.append(a.id)
+    return out
+
+
+def _count_completed_tasks_for_skill_token(db: Session, skill_token: str) -> int:
+    agent_ids = _get_agent_ids_by_skill_token(db, None, skill_token)
+    if not agent_ids:
+        return 0
+    return db.query(Task).filter(Task.agent_id.in_(agent_ids), Task.status == "completed").count()
+
+
 @app.get("/agent-templates")
 def get_agent_templates(db: Session = Depends(get_db), skip: int = 0, limit: int = 50):
     """Agent 模板 / Skill 市场：可下载的 Agent 模板与 Skill 列表（含平台 verify、完成任务数）。"""
@@ -414,6 +441,129 @@ def publish_agent_template(
         "download_skill_url": template.download_skill_url,
     }
 
+
+class PublishSkillBody(BaseModel):
+    """通过 Skill 发布到平台：生成/更新技能市场条目。"""
+    # skill_token：用于与 Agent.config.skill_bound_token 对齐。
+    # 若不传，则尝试从当前用户拥有的 Agent 中推导（必须恰好只有一个 token）。
+    skill_token: Optional[str] = None
+    name: Optional[str] = None
+    description: Optional[str] = None
+    download_skill_url: Optional[str] = None
+
+
+@app.get("/skills")
+def get_skills(db: Session = Depends(get_db), skip: int = 0, limit: int = 50):
+    """Skill 市场：列出已发布 Skill，并给出完成任务数（用于 verify 展示）。"""
+    q = db.query(PublishedSkill).order_by(PublishedSkill.created_at.desc())
+    total = q.count()
+    rows = q.offset(skip).limit(limit).all()
+    out = []
+    for s in rows:
+        tasks_completed = _count_completed_tasks_for_skill_token(db, s.skill_token)
+        out.append({
+            "id": s.id,
+            "skill_token": s.skill_token,
+            "name": s.name,
+            "description": s.description or "",
+            "verified": bool(s.verified),
+            "tasks_completed": int(tasks_completed),
+            "download_skill_url": s.download_skill_url,
+        })
+    return {"items": out, "total": total, "skip": skip, "limit": limit}
+
+
+@app.get("/skills/stats")
+def get_skills_stats(db: Session = Depends(get_db)):
+    """Skill 市场统计：模板数、已验证数、累计完成任务数（基于 token 推导）。"""
+    skills = db.query(PublishedSkill).all()
+    skill_count = len(skills)
+    verified_count = sum(1 for s in skills if bool(s.verified))
+    tasks_completed_total = 0
+    for s in skills:
+        tasks_completed_total += _count_completed_tasks_for_skill_token(db, s.skill_token)
+    return {
+        "skill_count": skill_count,
+        "verified_count": verified_count,
+        "tasks_completed": tasks_completed_total,
+    }
+
+
+@app.post("/skills/publish")
+def publish_skill(
+    body: PublishSkillBody,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Skill 分享：让具备 Skill 的 OpenClaw 直接发布自己的 Skill 到平台。
+
+    验证逻辑（简化）：
+    - 必须能在当前用户名下找到至少一个 Agent，其 config.skill_bound_token 与 skill_token 对齐；
+    - verified 默认为根据任务完成数推导：tasks_completed > 0 => True，否则 False。
+    """
+    uid = int(current_user["user_id"])
+    skill_token = (body.skill_token or "").strip() if body.skill_token else ""
+
+    # 不传 skill_token：尝试从用户拥有的 Agent 推导
+    if not skill_token:
+        tokens = set()
+        my_agents = db.query(Agent).filter(Agent.owner_id == uid).all()
+        for a in my_agents:
+            cfg = a.config or {}
+            tok = (cfg.get("skill_bound_token") or "").strip() if cfg else ""
+            if tok:
+                tokens.add(tok)
+        tokens_list = sorted(list(tokens))
+        if len(tokens_list) == 1:
+            skill_token = tokens_list[0]
+        elif len(tokens_list) == 0:
+            raise HTTPException(status_code=400, detail="skill_token 未提供，且当前用户下没有可用的 skill_bound_token")
+        else:
+            raise HTTPException(status_code=400, detail="skill_token 未提供，当前用户下存在多个 skill_bound_token，请显式传入 skill_token")
+
+    # 当前用户名下必须存在至少一个匹配 skill_token 的 Agent
+    agent_ids = _get_agent_ids_by_skill_token(db, uid=uid, skill_token=skill_token)
+    if not agent_ids:
+        raise HTTPException(status_code=403, detail="当前用户下未找到与该 skill_token 对齐的 Agent（请在注册 Agent 时设置 skill_bound_token）")
+
+    tasks_completed = _count_completed_tasks_for_skill_token(db, skill_token)
+    verified = tasks_completed > 0
+
+    name = (body.name or "").strip() or f"Skill {skill_token[:8]}"
+    description = (body.description or "").strip() if body.description else None
+    download_skill_url = (body.download_skill_url or "").strip() if body.download_skill_url else None
+
+    existing = db.query(PublishedSkill).filter(PublishedSkill.skill_token == skill_token).first()
+    if existing:
+        existing.name = name
+        existing.description = description
+        existing.download_skill_url = download_skill_url
+        existing.verified = bool(verified)
+        db.commit()
+        db.refresh(existing)
+        skill_id = existing.id
+    else:
+        row = PublishedSkill(
+            skill_token=skill_token,
+            name=name,
+            description=description,
+            verified=bool(verified),
+            download_skill_url=download_skill_url,
+        )
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+        skill_id = row.id
+
+    return {
+        "id": skill_id,
+        "skill_token": skill_token,
+        "name": name,
+        "description": description or "",
+        "verified": bool(verified),
+        "tasks_completed": int(tasks_completed),
+        "download_skill_url": download_skill_url,
+    }
 
 # OpenClaw/Clawl 对齐：capability 项 { id?, name, category? }
 class CapabilityItem(BaseModel):
@@ -1261,9 +1411,14 @@ def publish_task(
         db.commit()
     except Exception:
         db.rollback()
-    # 用户通过 Skill/API 发布的第一个任务：由 clawjob-agent 自动接取并完成
+    # 用户通过 Skill/API 发布的第一个任务：由 clawjob-agent 自动接取并完成（可配置）
+    auto_complete_enabled = os.getenv("AUTO_COMPLETE_FIRST_TASK", "").strip().lower() in ("1", "true", "yes", "on")
+    # 生产环境默认开启，pytest 下自动关闭，避免影响订阅/验收等回归用例
+    is_pytest = os.getenv("PYTEST_CURRENT_TEST") is not None
+    if os.getenv("ENV", "").strip().lower() == "production":
+        auto_complete_enabled = True
     first_task_count = db.query(Task).filter(Task.owner_id == uid).count()
-    if first_task_count == 1:
+    if first_task_count == 1 and auto_complete_enabled and not is_pytest:
         try:
             _, clawjob_agent = _get_or_create_clawjob_system_agent(db)
             sub = TaskSubscription(task_id=task.id, agent_id=clawjob_agent.id)

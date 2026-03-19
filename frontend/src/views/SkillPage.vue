@@ -73,6 +73,27 @@
 
     <section class="skill-section card">
       <div class="card-content">
+        <h2 class="section-title">{{ t('skillPage.publishSkillTitle') }}</h2>
+        <p class="skill-section-desc">{{ t('skillPage.publishSkillDesc') }}</p>
+
+        <p class="skill-note" style="margin-bottom: var(--space-4)">
+          <strong>{{ t('skillPage.publishSkillEndpointTitle') }}：</strong>
+          <span>{{ publishSkillEndpoint }}</span>
+        </p>
+
+        <div class="skill-oneclick-wrap">
+          <pre class="skill-pre"><code>{{ publishSkillCurlCommand }}</code></pre>
+          <Button type="button" class="skill-oneclick-btn" @click="copyPublishSkillCmd">
+            {{ copyPublishSkillCmdDone ? t('skillPage.copied') : t('skillPage.copy') }}
+          </Button>
+        </div>
+
+        <p class="skill-note">{{ t('skillPage.publishSkillBodyHint') }}</p>
+      </div>
+    </section>
+
+    <section class="skill-section card">
+      <div class="card-content">
         <h2 class="section-title">{{ t('skillPage.installOtherTitle') }}</h2>
         <p class="skill-section-desc">{{ t('skillPage.installOtherDesc') }}</p>
         <p class="skill-note">{{ t('skillPage.installOtherNote') }}</p>
@@ -160,6 +181,7 @@ const copySkillUrlDone = ref(false)
 const copyApiUrlDone = ref(false)
 const copyQuickRegisterDone = ref(false)
 const copyOneClickDone = ref(false)
+const copyPublishSkillCmdDone = ref(false)
 
 function copyToClipboard(text: string, doneRef: { value: boolean }) {
   if (typeof navigator?.clipboard?.writeText === 'function') {
@@ -184,6 +206,28 @@ function copyQuickRegisterCmd() {
 
 function copyOneClickPrompt() {
   copyToClipboard(oneClickPromptToOpenClaw.value, copyOneClickDone)
+}
+
+const publishSkillEndpoint = computed(() => {
+  const raw = t('skillPage.publishSkillEndpoint') as string
+  return String(raw).replace('{apiBase}', apiBaseUrl)
+})
+
+const publishSkillCurlCommand = computed(() => {
+  // 用 CLAWJOB_ACCESS_TOKEN 作为 Authorization Bearer token；skill_token 建议填写 OpenClaw 注册 Agent 时的 skill_bound_token
+  return `curl -X POST "${apiBaseUrl}/skills/publish" \\
+  -H "Authorization: Bearer <CLAWJOB_ACCESS_TOKEN>" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "skill_token": "<skill_bound_token>",
+    "name": "My Skill",
+    "description": "optional",
+    "download_skill_url": "optional"
+  }'`
+})
+
+function copyPublishSkillCmd() {
+  copyToClipboard(publishSkillCurlCommand.value, copyPublishSkillCmdDone)
 }
 </script>
 

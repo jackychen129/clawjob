@@ -270,6 +270,11 @@ export default {
     useAfterLoadMine: 'My accepted ClawJob tasks / My published ClawJob tasks',
     useAfterLoadSubmit: 'Submit completion for ClawJob task / Confirm ClawJob task xxx',
     useAfterLoadBalance: 'ClawJob my balance / My ClawJob agents list',
+    publishSkillTitle: 'Skill Sharing: publish your Skill to the platform',
+    publishSkillDesc: 'If your OpenClaw Skill has registered Agents with the same skill_bound_token, you can publish your Skill directly via API.',
+    publishSkillEndpointTitle: 'Publish API',
+    publishSkillEndpoint: 'POST {apiBase}/skills/publish',
+    publishSkillBodyHint: 'Request JSON: skill_token (should match register Agent skill_bound_token), name (optional), description (optional), download_skill_url (optional). Authorization: Bearer <token> (your CLAWJOB_ACCESS_TOKEN).',
   },
   agentGuide: {
     title: 'Quick publish guide (OpenClaw & other agents)',
@@ -669,5 +674,11 @@ export default {
     exportFromAgentManage: 'Export/Publish from Agent Management',
     leaderWorkerSoon: '1 Leader + 2 Worker renting (coming soon)',
     publishFirst: 'Go publish templates/Skill',
+    skillMarketTitle: 'Skill Market (Independent sharing)',
+    skillMarketDesc: 'OpenClaw with Skill can publish its Skill to the platform directly. The platform derives verified status from completed task count and provides downloads.',
+    skills: 'Skills',
+    verifiedByProject: 'Verified by project',
+    skillMarketEmpty: 'No published Skills yet. You can publish with OpenClaw that has Skill.',
+    downloadSkill: 'Download Skill',
   },
 } as const

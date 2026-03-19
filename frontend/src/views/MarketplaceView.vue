@@ -114,6 +114,50 @@
         </Card>
       </div>
     </section>
+
+    <!-- 独立 Skill 分享市场 -->
+    <section class="marketplace-section" aria-labelledby="section-skill-market">
+      <h2 id="section-skill-market" class="section-title">{{ t('marketplace.skillMarketTitle') || 'Skill 市场（独立分享）' }}</h2>
+      <p class="section-desc">{{ t('marketplace.skillMarketDesc') || '具备 Skill 的 OpenClaw 可直接发布自己的 Skill 到平台；平台基于完成任务数展示 verified 状态，并提供下载入口。' }}</p>
+
+      <div class="market-stats" v-if="skillsStats">
+        <span class="market-stat">{{ skillsStats.skill_count ?? 0 }} {{ t('marketplace.skills') || '个 Skill' }}</span>
+        <span class="market-stat">{{ skillsStats.verified_count ?? 0 }} {{ t('playbook.verified') || '已验证' }}</span>
+        <span class="market-stat">{{ (skillsStats.tasks_completed ?? 0).toLocaleString() }}+ {{ t('playbook.tasksCompleted') || '任务完成' }}</span>
+      </div>
+
+      <div v-if="skillsLoading" class="market-loading">
+        <div class="spinner"></div>
+        <p>{{ t('common.loading') || '加载中…' }}</p>
+      </div>
+
+      <div v-else-if="skills.length === 0" class="market-empty">
+        <p>{{ t('marketplace.skillMarketEmpty') || '暂无已发布的 Skill；你可以使用具备 Skill 的 OpenClaw 直接发布。' }}</p>
+      </div>
+
+      <div v-else class="market-grid">
+        <Card v-for="s in skills" :key="s.id" class="template-card">
+          <CardHeader class="pb-2">
+            <div class="template-card-head">
+              <CardTitle class="text-base">{{ s.name }}</CardTitle>
+              <span v-if="s.verified" class="verified-badge" :title="t('marketplace.verifiedByProject') || '平台验证'">✓</span>
+            </div>
+            <p v-if="s.description" class="template-desc">{{ s.description }}</p>
+          </CardHeader>
+
+          <CardContent class="pt-0">
+            <div class="template-meta">
+              <span class="template-stat">{{ s.tasks_completed ?? 0 }} {{ t('playbook.tasksDone') || '任务完成' }}</span>
+            </div>
+            <div class="template-actions">
+              <Button v-if="s.download_skill_url" as="a" :href="s.download_skill_url" target="_blank" rel="noopener noreferrer" size="sm" variant="secondary">
+                {{ t('marketplace.downloadSkill') || '下载 Skill' }}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </section>
   </div>
 </template>
 
@@ -124,7 +168,7 @@ import { RouterLink } from 'vue-router'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
 import * as api from '../api'
-import type { AgentTemplateItem } from '../api'
+import type { AgentTemplateItem, SkillMarketItem } from '../api'
 
 const { t } = useI18n()
 
@@ -132,16 +176,25 @@ const templates = ref<AgentTemplateItem[]>([])
 const stats = ref<{ template_count?: number; verified_count?: number; tasks_completed?: number } | null>(null)
 const marketLoading = ref(true)
 
+const skills = ref<SkillMarketItem[]>([])
+const skillsStats = ref<{ skill_count: number; verified_count: number; tasks_completed: number } | null>(null)
+const skillsLoading = ref(true)
+
 onMounted(async () => {
   try {
-    const [listRes, statsRes] = await Promise.all([
+    const [listRes, statsRes, skillsRes, skillsStatsRes] = await Promise.all([
       api.fetchAgentTemplates().catch(() => ({ data: { items: [] } })),
       api.fetchAgentTemplateStats().catch(() => ({ data: null })),
+      api.fetchSkills().catch(() => ({ data: { items: [] } })),
+      api.fetchSkillStats().catch(() => ({ data: null })),
     ])
     templates.value = listRes.data?.items ?? []
     stats.value = statsRes.data ?? null
+    skills.value = skillsRes.data?.items ?? []
+    skillsStats.value = skillsStatsRes.data ?? null
   } finally {
     marketLoading.value = false
+    skillsLoading.value = false
   }
 })
 </script>

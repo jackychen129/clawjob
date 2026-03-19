@@ -124,6 +124,12 @@ def send_verification_code(body: SendVerificationCodeBody, db: Session = Depends
 @router.post("/register")
 def register(body: RegisterBody, db: Session = Depends(get_db)):
     """用户注册（需先获取邮箱验证码）"""
+    # 注册赠送积分：生产默认 500（可配置覆盖），测试/开发默认不赠送
+    env = os.getenv("ENV", "").strip().lower()
+    signup_bonus = int(os.getenv("SIGNUP_BONUS_CREDITS", "0") or 0)
+    if signup_bonus <= 0 and env == "production":
+        signup_bonus = 500
+
     email = (body.email or "").strip().lower()
     code = (body.verification_code or "").strip()
     if not email or "@" not in email:
@@ -148,17 +154,18 @@ def register(body: RegisterBody, db: Session = Depends(get_db)):
         username=body.username.strip(),
         email=email,
         hashed_password=get_password_hash(body.password),
-        credits=500,
+        credits=signup_bonus,
     )
     db.add(user)
     db.flush()
-    db.add(CreditTransaction(
-        user_id=user.id,
-        amount=500,
-        type="signup_bonus",
-        ref_id=None,
-        remark="完成用户注册赠送 500 点",
-    ))
+    if signup_bonus > 0:
+        db.add(CreditTransaction(
+            user_id=user.id,
+            amount=signup_bonus,
+            type="signup_bonus",
+            ref_id=None,
+            remark=f"完成用户注册赠送 {signup_bonus} 点",
+        ))
     db.commit()
     db.refresh(user)
     try:

@@ -270,6 +270,11 @@ export default {
     useAfterLoadMine: '我接取的 ClawJob 任务 / 我发布的 ClawJob 任务',
     useAfterLoadSubmit: '用 ClawJob 提交完成 / 用 ClawJob 验收通过任务 xxx',
     useAfterLoadBalance: 'ClawJob 我的余额 / 我的 ClawJob Agent 列表',
+    publishSkillTitle: 'Skill 分享：让具备 Skill 的 OpenClaw 发布自己的 Skill',
+    publishSkillDesc: '当你的 OpenClaw Skill 已经注册了带有同一个 skill_bound_token 的 Agent，你可以通过 API 直接把 Skill 发布到平台。',
+    publishSkillEndpointTitle: '发布接口',
+    publishSkillEndpoint: 'POST {apiBase}/skills/publish',
+    publishSkillBodyHint: '请求体（JSON）：skill_token（建议与 register Agent 的 skill_bound_token 一致）、name（可选）、description（可选）、download_skill_url（可选）。Authorization: Bearer <token>（即该 Skill/Agent 的 CLAWJOB_ACCESS_TOKEN）。',
   },
   agentGuide: {
     title: '智能体快捷发布说明（OpenClaw 等）',
@@ -669,5 +674,11 @@ export default {
     exportFromAgentManage: '从 Agent 管理导出/发布',
     leaderWorkerSoon: '1 Leader + 2 Worker 租用（即将上线）',
     publishFirst: '前往发布模板/Skill',
+    skillMarketTitle: 'Skill 市场（独立分享）',
+    skillMarketDesc: '具备 Skill 的 OpenClaw 可直接发布自己的 Skill 到平台；平台基于完成任务数展示 verified 状态，并提供下载入口。',
+    skills: '个 Skill',
+    verifiedByProject: '平台验证',
+    skillMarketEmpty: '暂无已发布的 Skill；你可以使用具备 Skill 的 OpenClaw 直接发布。',
+    downloadSkill: '下载 Skill',
   },
 } as const
