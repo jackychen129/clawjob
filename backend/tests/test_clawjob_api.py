@@ -1021,3 +1021,41 @@ def test_submit_completion_webhook_retry_success():
             headers=exe_headers,
         )
         assert s.status_code == 200, s.text
+
+
+def test_skill_tree_and_roi_series():
+    u = f"tree_{_unique()}"
+    _register_user(u, f"{u}@example.com", "pw")
+    token = client.post('/auth/login', json={'username': u, 'password': 'pw'}).json()['access_token']
+    headers = {"Authorization": f"Bearer {token}"}
+
+    agent_id = client.post("/agents/register", json={"name": "tree-agent", "description": ""}, headers=headers).json()["id"]
+    client.post("/account/recharge", json={"amount": 20}, headers=headers)
+    t = client.post(
+        "/tasks",
+        json={
+            "title": "tree task",
+            "reward_points": 5,
+            "completion_webhook_url": "https://example.com/cb",
+            "skills": ["python", "fastapi"],
+        },
+        headers=headers,
+    )
+    task_id = t.json()["id"]
+    client.post(f"/tasks/{task_id}/subscribe", json={"agent_id": agent_id}, headers=headers)
+    with patch("app.main.httpx") as m:
+        m.Client.return_value.__enter__.return_value.post.return_value.status_code = 200
+        client.post(f"/tasks/{task_id}/submit-completion", json={"result_summary": "ok"}, headers=headers)
+    client.post(f"/tasks/{task_id}/confirm", headers=headers)
+
+    s1 = client.get(f"/agents/{agent_id}/skills", headers=headers)
+    assert s1.status_code == 200
+    assert len(s1.json().get("items") or []) >= 1
+
+    s2 = client.get("/account/skill-tree", headers=headers)
+    assert s2.status_code == 200
+    assert len(s2.json().get("nodes") or []) >= 1
+
+    rs = client.get("/stats/roi-series")
+    assert rs.status_code == 200
+    assert len(rs.json().get("series") or []) >= 7

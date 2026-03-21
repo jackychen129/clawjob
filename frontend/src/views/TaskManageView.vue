@@ -162,6 +162,16 @@
                 <template v-if="getTaskSkills(selectedTaskDetail).length"><dt>{{ t('task.detailSkills') }}</dt><dd><span v-for="s in getTaskSkills(selectedTaskDetail)" :key="s" class="task-tag task-tag--skill">{{ s }}</span></dd></template>
                 <template v-if="selectedTaskDetail.location"><dt>{{ t('task.detailLocation') }}</dt><dd>{{ selectedTaskDetail.location }}</dd></template>
               </dl>
+              <div v-if="skillProgress.length" class="detail-skill-progress">
+                <h4 class="section-subtitle">技能进度</h4>
+                <div v-for="sp in skillProgress" :key="sp.name" class="detail-skill-progress__row">
+                  <div class="detail-skill-progress__head">
+                    <span>{{ sp.name }}</span>
+                    <span class="mono">Lv.{{ sp.level }} · {{ sp.xp_current }}/{{ sp.xp_next }}</span>
+                  </div>
+                  <div class="detail-skill-progress__bar"><span :style="{ width: (sp.progress * 100).toFixed(1) + '%' }"></span></div>
+                </div>
+              </div>
               <p class="detail-footer">
                 {{ t('task.publisher') }}：{{ selectedTaskDetail.publisher_name }}
                 <span v-if="selectedTaskDetail.creator_agent_name"> · {{ t('task.publishedByAgent') }}：{{ selectedTaskDetail.creator_agent_name }}</span>
@@ -810,13 +820,23 @@ const taskComments = ref<TaskCommentItem[]>([])
 const taskCommentsLoading = ref(false)
 const newCommentContent = ref('')
 const postCommentLoading = ref(false)
+const skillProgress = ref<api.SkillNode[]>([])
 
 function openTaskDetail(task: TaskListItem) {
   selectedTaskDetail.value = { ...task }
   detailLoading.value = true
   taskComments.value = []
+  skillProgress.value = []
   api.getTaskDetail(task.id).then((res) => {
     selectedTaskDetail.value = res.data as TaskListItem
+    const detail = res.data as TaskListItem
+    const hasSkills = getTaskSkills(detail).length > 0
+    if (hasSkills && detail.agent_id) {
+      api.fetchAgentSkills(Number(detail.agent_id)).then((r) => {
+        const map = new Map((r.data.items || []).map((x) => [x.name, x]))
+        skillProgress.value = getTaskSkills(detail).map((n) => map.get(n)).filter(Boolean) as api.SkillNode[]
+      }).catch(() => { skillProgress.value = [] })
+    }
   }).catch(() => {}).finally(() => { detailLoading.value = false })
   loadTaskComments(task.id)
 }
@@ -852,6 +872,7 @@ function postComment() {
 function closeTaskDetail() {
   selectedTaskDetail.value = null
   taskComments.value = []
+  skillProgress.value = []
 }
 
 const TASK_DRAFT_KEY = 'clawjob_task_draft'
@@ -1587,6 +1608,11 @@ watch(tab, (newTab) => {
 .detail-meta dt:first-child { margin-top: 0; }
 .detail-meta dd { margin: 0; color: rgba(255,255,255,0.82); }
 .detail-requirements { white-space: pre-wrap; word-break: break-word; }
+.detail-skill-progress { margin: var(--space-4) 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.detail-skill-progress__row { border: var(--border-hairline); border-radius: var(--radius-md); padding: var(--space-2) var(--space-3); background: rgba(255,255,255,0.02); }
+.detail-skill-progress__head { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); margin-bottom: var(--space-1); }
+.detail-skill-progress__bar { height: 0.5rem; border-radius: 999px; background: rgba(148,163,184,0.25); overflow: hidden; }
+.detail-skill-progress__bar span { display: block; height: 100%; background: linear-gradient(90deg, #22c55e, #a855f7); }
 .detail-footer { font-size: var(--font-caption); color: rgba(255,255,255,0.58); margin-top: var(--space-5); }
 .detail-reward { margin-left: 0.5rem; font-weight: 700; color: var(--primary-color); }
 

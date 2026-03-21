@@ -17,6 +17,7 @@ import os
 import time
 import uuid
 import httpx
+import asyncio
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -333,6 +334,94 @@ def get_leaderboard(skip: int = 0, limit: int = 50, db: Session = Depends(get_db
             "certified": False,  # 预留：Playbook 验证后为 True
         })
     return {"items": out, "total": len(out)}
+
+
+def _task_skills_for_xp(t: Task) -> List[str]:
+    d = getattr(t, "input_data", None) or {}
+    out: List[str] = []
+    if isinstance(d, dict):
+        skills = d.get("skills")
+        if isinstance(skills, list):
+            out.extend([str(s).strip() for s in skills if str(s).strip()])
+    if not out and getattr(t, "category", None):
+        out.append(str(getattr(t, "category")).strip())
+    return list(dict.fromkeys(out))
+
+
+def _level_from_xp(xp: int) -> dict:
+    # 线性递增阈值：L1=100, L2=120, L3=140 ...
+    level = 1
+    remain = max(0, int(xp or 0))
+    need = 100
+    while remain >= need:
+        remain -= need
+        level += 1
+        need = 100 + (level - 1) * 20
+    progress = (remain / need) if need > 0 else 0
+    return {"level": level, "xp_current": int(remain), "xp_next": int(need), "progress": round(progress, 4)}
+
+
+def _agent_skill_xp_map(db: Session, agent_id: int) -> dict:
+    tasks = db.query(Task).filter(Task.agent_id == agent_id, Task.status == "completed").all()
+    xp_map: dict = {}
+    for t in tasks:
+        reward = int(getattr(t, "reward_points", 0) or 0)
+        base_xp = max(10, min(80, reward // 2 if reward > 0 else 10))
+        for s in _task_skills_for_xp(t):
+            xp_map[s] = int(xp_map.get(s, 0) or 0) + base_xp
+    return xp_map
+
+
+@app.get("/agents/{agent_id}/skills")
+def get_agent_skills(agent_id: int, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    uid = int(current_user["user_id"])
+    agent = db.query(Agent).filter(Agent.id == agent_id).first()
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent 不存在")
+    if agent.owner_id != uid:
+        raise HTTPException(status_code=403, detail="仅 Agent 拥有者可查看技能进度")
+    xp_map = _agent_skill_xp_map(db, agent_id)
+    items = []
+    for name, xp in sorted(xp_map.items(), key=lambda kv: (-kv[1], kv[0])):
+        lv = _level_from_xp(int(xp))
+        items.append({"name": name, "xp": int(xp), **lv})
+    return {"agent_id": agent_id, "items": items}
+
+
+@app.get("/account/skill-tree")
+def get_my_skill_tree(db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    uid = int(current_user["user_id"])
+    my_agents = db.query(Agent).filter(Agent.owner_id == uid).all()
+    total: dict = {}
+    for a in my_agents:
+        xp_map = _agent_skill_xp_map(db, a.id)
+        for k, v in xp_map.items():
+            total[k] = int(total.get(k, 0) or 0) + int(v or 0)
+    nodes = []
+    for name, xp in sorted(total.items(), key=lambda kv: (-kv[1], kv[0])):
+        lv = _level_from_xp(int(xp))
+        nodes.append({"name": name, "xp": int(xp), **lv})
+    return {"nodes": nodes[:24], "total_skills": len(nodes)}
+
+
+@app.get("/stats/roi-series")
+def get_roi_series(days: int = 14, db: Session = Depends(get_db)):
+    # 收益时序（K 线简化版）：按天统计已完成任务总奖励与完成数
+    d = max(7, min(90, int(days or 14)))
+    start = datetime.utcnow() - timedelta(days=d - 1)
+    tasks = db.query(Task).filter(Task.status == "completed", Task.completed_at.isnot(None), Task.completed_at >= start).all()
+    bucket = {}
+    for t in tasks:
+        key = (t.completed_at or datetime.utcnow()).strftime("%Y-%m-%d")
+        obj = bucket.get(key) or {"date": key, "rewards": 0, "tasks": 0}
+        obj["rewards"] += int(getattr(t, "reward_points", 0) or 0)
+        obj["tasks"] += 1
+        bucket[key] = obj
+    out = []
+    for i in range(d):
+        day = (start + timedelta(days=i)).strftime("%Y-%m-%d")
+        out.append(bucket.get(day) or {"date": day, "rewards": 0, "tasks": 0})
+    return {"series": out, "days": d}
 
 
 def _count_completed_tasks_for_agent(db: Session, agent_id: int) -> int:
@@ -2187,9 +2276,22 @@ def a2a_list_messages(
 
 
 @app.post("/tasks/{task_id}/execute")
-async def execute_task(task_id: str, current_user: str = Depends(get_current_user)):
-    """Execute a task using available agents"""
-    return await task_system.execute_task(task_id, current_user)
+async def execute_task(task_id: str, retry_count: int = 0, current_user: str = Depends(get_current_user)):
+    """Execute a task using available agents（支持失败自动重试）。"""
+    retries = max(0, min(3, int(retry_count or 0)))
+    last_err: Optional[str] = None
+    for attempt in range(retries + 1):
+        try:
+            result = await task_system.execute_task(task_id, current_user)
+            if attempt > 0 and isinstance(result, dict):
+                result["retried"] = attempt
+            return result
+        except Exception as e:
+            last_err = str(e)
+            if attempt < retries:
+                await asyncio.sleep(0.2 * (attempt + 1))
+                continue
+            raise HTTPException(status_code=500, detail=f"执行失败：{last_err}（已重试 {retries} 次）")
 
 
 # ---------- 平台中转账户（手续费/佣金，关联支付宝）----------

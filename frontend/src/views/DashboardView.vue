@@ -40,17 +40,34 @@
         <div class="card-content">
           <div class="dash-bento-head">
             <h2 class="section-title">{{ t('dashboard.roiCurve') }}</h2>
-            <span class="dash-bento-sub">{{ t('dashboard.placeholder') }}</span>
+            <span class="dash-bento-sub">近 {{ roiSeries.length || 0 }} 天</span>
           </div>
-          <div class="dash-roi-wrap" aria-hidden="true">
-            <div class="dash-roi-chart">
-              <span class="dash-roi-y">{{ t('dashboard.roiYLabel') || '收益' }}</span>
-              <div class="dash-roi-bars">
-                <div v-for="i in 7" :key="i" class="dash-roi-bar" :style="{ height: (30 + Math.abs((i * 17) % 50)) + '%' }"></div>
+          <div class="dash-roi-wrap">
+            <svg class="roi-line" viewBox="0 0 640 180" preserveAspectRatio="none" aria-hidden="true">
+              <polyline :points="roiPoints" fill="none" stroke="rgba(34,197,94,0.95)" stroke-width="3" stroke-linecap="round" />
+            </svg>
+            <div class="dash-roi-x"><span v-for="p in roiSeries.slice(-7)" :key="p.date">{{ p.date.slice(5) }}</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="dash-card bento bento--tree">
+        <div class="card-content">
+          <div class="dash-bento-head">
+            <h2 class="section-title">技能进化树</h2>
+            <span class="dash-bento-sub">Top {{ skillTree.length }}</span>
+          </div>
+          <div v-if="skillTree.length" class="skill-tree-grid">
+            <div v-for="n in skillTree" :key="n.name" class="skill-tree-node">
+              <div class="skill-tree-node__head">
+                <strong>{{ n.name }}</strong>
+                <span class="mono">Lv.{{ n.level }}</span>
               </div>
+              <div class="skill-tree-node__bar"><span :style="{ width: (n.progress * 100).toFixed(1) + '%' }"></span></div>
+              <div class="skill-tree-node__meta mono">{{ n.xp_current }}/{{ n.xp_next }} XP</div>
             </div>
-            <div class="dash-roi-x"><span v-for="d in 7" :key="d">{{ d }}</span></div>
           </div>
+          <p v-else class="dash-feed-empty-hint">暂无技能数据（完成带技能标签的任务后自动累积）</p>
         </div>
       </section>
 
@@ -109,6 +126,8 @@ const stats = ref<Record<string, number>>({})
 const statsLoading = ref(true)
 const activityEvents = ref<api.ActivityEvent[]>([])
 const activityLoading = ref(true)
+const roiSeries = ref<Array<{ date: string; rewards: number; tasks: number }>>([])
+const skillTree = ref<api.SkillNode[]>([])
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
 const openJobsCount = computed(() => {
@@ -132,6 +151,17 @@ const kpiLabels = computed(() => [
   t('dashboard.rewardsPaid'),
   t('dashboard.agentsActive'),
 ])
+
+const roiPoints = computed(() => {
+  const arr = roiSeries.value
+  if (!arr.length) return ''
+  const max = Math.max(...arr.map((x) => Number(x.rewards || 0)), 1)
+  return arr.map((p, i) => {
+    const x = (i / Math.max(1, arr.length - 1)) * 640
+    const y = 170 - (Number(p.rewards || 0) / max) * 150
+    return `${x.toFixed(1)},${y.toFixed(1)}`
+  }).join(' ')
+})
 
 function getEventWho(ev: api.ActivityEvent): string {
   if (ev.type === 'task_created') return ev.publisher_name ?? ''
@@ -204,6 +234,18 @@ async function reloadAll() {
     activityEvents.value = []
   } finally {
     activityLoading.value = false
+  }
+  try {
+    const rs = await api.fetchRoiSeries(14)
+    roiSeries.value = rs.data.series || []
+  } catch {
+    roiSeries.value = []
+  }
+  try {
+    const st = await api.fetchMySkillTree()
+    skillTree.value = (st.data.nodes || []).slice(0, 12)
+  } catch {
+    skillTree.value = []
   }
 }
 </script>
@@ -357,6 +399,14 @@ async function reloadAll() {
   padding: var(--space-4) 0;
   margin-bottom: var(--space-2);
 }
+.roi-line { width: 100%; height: 180px; display: block; }
+.skill-tree-grid { display: grid; grid-template-columns: 1fr; gap: var(--space-3); }
+@media (min-width: 768px) { .skill-tree-grid { grid-template-columns: repeat(2, 1fr); } }
+.skill-tree-node { border: var(--border-hairline); border-radius: var(--radius-md); padding: var(--space-3); background: rgba(255,255,255,0.02); }
+.skill-tree-node__head { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-2); }
+.skill-tree-node__bar { height: 0.5rem; border-radius: 999px; background: rgba(148,163,184,0.25); overflow: hidden; }
+.skill-tree-node__bar span { display: block; height: 100%; background: linear-gradient(90deg, #22c55e, #a855f7); }
+.skill-tree-node__meta { margin-top: var(--space-1); color: var(--text-secondary); font-size: var(--font-caption); }
 .dash-roi-chart {
   display: flex;
   align-items: stretch;

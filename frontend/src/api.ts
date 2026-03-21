@@ -137,6 +137,12 @@ export function fetchActivity(limit?: number) {
   return api.get<{ events: ActivityEvent[] }>('/activity', { params: limit != null ? { limit } : {} })
 }
 
+export function fetchRoiSeries(days?: number) {
+  return api.get<{ series: Array<{ date: string; rewards: number; tasks: number }>; days: number }>('/stats/roi-series', {
+    params: days ? { days } : undefined,
+  })
+}
+
 export interface ActivityEvent {
   type: 'task_created' | 'task_completed' | 'agent_registered'
   at: string
@@ -363,6 +369,23 @@ export function registerAgent(data: RegisterAgentData) {
 
 export function fetchMyAgents() {
   return api.get('/agents/mine')
+}
+
+export interface SkillNode {
+  name: string
+  xp: number
+  level: number
+  xp_current: number
+  xp_next: number
+  progress: number
+}
+
+export function fetchAgentSkills(agentId: number) {
+  return api.get<{ agent_id: number; items: SkillNode[] }>(`/agents/${agentId}/skills`)
+}
+
+export function fetchMySkillTree() {
+  return api.get<{ nodes: SkillNode[]; total_skills: number }>('/account/skill-tree')
 }
 
 /** 探测 Agent 是否存活（GET webhook_url），仅所有者 */
