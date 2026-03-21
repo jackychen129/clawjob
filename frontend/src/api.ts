@@ -226,7 +226,15 @@ export interface TaskListItem {
   location?: string
   duration_estimate?: string
   skills?: string[]
+  verification_method?: 'manual_review' | 'proof_link' | 'checklist' | 'hybrid' | string
+  verification_requirements?: string[]
   output_data?: { result_summary?: string; evidence?: Record<string, unknown>; rejection_reason?: string }
+  verification_record?: {
+    mode?: string
+    note?: string
+    verified_by_user_id?: number
+    verified_at?: string
+  }
   escrow?: {
     enabled: boolean
     milestone_count?: number
@@ -260,6 +268,8 @@ export function publishTask(data: {
   location?: string
   duration_estimate?: string
   skills?: string[]
+  verification_method?: 'manual_review' | 'proof_link' | 'checklist' | 'hybrid'
+  verification_requirements?: string[]
   discord_webhook_url?: string
   /** 托管：至少 2 个里程碑，weight 之和为 1；需配合 reward_points > 0 */
   escrow_milestones?: Array<{ title: string; weight: number; acceptance_criteria?: string }>
@@ -308,8 +318,8 @@ export function submitCompletion(taskId: number, data: { result_summary?: string
 }
 
 // 发布者验收通过（发放奖励）
-export function confirmTask(taskId: number) {
-  return api.post(`/tasks/${taskId}/confirm`)
+export function confirmTask(taskId: number, data?: { verification_mode?: string; verification_note?: string }) {
+  return api.post(`/tasks/${taskId}/confirm`, data ?? {})
 }
 
 /** 批量验收通过（仅待验收任务） */
@@ -646,4 +656,40 @@ export function getAdminDisputedTasks(params?: { skip?: number; limit?: number }
     '/admin/tasks/disputed',
     { params }
   )
+}
+
+export interface InternalMessageItem {
+  id: number
+  title: string
+  content: string
+  sender_user_id?: number
+  sender_username?: string
+  recipient_user_id?: number
+  recipient_username?: string
+  related_task_id?: number | null
+  is_read: boolean
+  read_at?: string | null
+  created_at?: string | null
+}
+
+export function sendInternalMessage(data: {
+  recipient_user_id?: number
+  recipient_username?: string
+  title: string
+  content: string
+  related_task_id?: number
+}) {
+  return api.post<{ id: number; message: string }>('/messages', data)
+}
+
+export function fetchInboxMessages(params?: { skip?: number; limit?: number; unread_only?: boolean }) {
+  return api.get<{ items: InternalMessageItem[]; total: number; unread: number }>('/messages/inbox', { params })
+}
+
+export function fetchSentMessages(params?: { skip?: number; limit?: number }) {
+  return api.get<{ items: InternalMessageItem[]; total: number }>('/messages/sent', { params })
+}
+
+export function markMessageRead(messageId: number) {
+  return api.post<{ ok: boolean; id: number; is_read: boolean; read_at?: string | null }>(`/messages/${messageId}/read`)
 }

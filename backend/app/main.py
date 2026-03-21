@@ -42,6 +42,7 @@ from app.database.relational_db import (
     PlatformClearingAccount,
     PlatformCommissionRecord,
     UserCommissionRecord,
+    InternalMessage,
 )
 from app.database.cache_db import CacheDB
 from app.utils.datetime_iso import iso_utc
@@ -1145,6 +1146,8 @@ class PublishTaskBody(BaseModel):
     duration_estimate: str = ""  # 预计时长，如 "~1h"、"~3h"
     skills: list = []  # 所需技能标签，如 ["数据分析", "Python"]
     discord_webhook_url: str = ""  # 可选：将任务推送到指定 Discord 频道，便于具备 Skill 的 Agent 发现并接取
+    verification_method: str = "manual_review"  # manual_review | proof_link | checklist | hybrid
+    verification_requirements: list = []  # 验收清单要求（用于 checklist / hybrid）
 
 
 def _push_task_to_discord(task: Task, webhook_url: str, frontend_url: str) -> None:
@@ -1205,6 +1208,48 @@ class EscrowDisputeBody(BaseModel):
 class SubmitCompletionBody(BaseModel):
     result_summary: str = ""  # 完成结果摘要，会随 webhook 发给发布方
     evidence: dict = {}  # 可选证据/输出，会随 webhook 发给发布方
+
+
+class ConfirmTaskBody(BaseModel):
+    verification_mode: str = "manual_review"  # manual_review | spot_check | webhook_result
+    verification_note: str = ""
+
+
+class SendMessageBody(BaseModel):
+    recipient_user_id: Optional[int] = None
+    recipient_username: str = ""
+    title: str
+    content: str
+    related_task_id: Optional[int] = None
+
+
+def _normalize_verification_method(raw: str) -> str:
+    method = (raw or "manual_review").strip().lower()
+    allowed = {"manual_review", "proof_link", "checklist", "hybrid"}
+    return method if method in allowed else "manual_review"
+
+
+def _validate_verification_submission(task: Task, body: SubmitCompletionBody) -> None:
+    extra = getattr(task, "input_data", None) or {}
+    if not isinstance(extra, dict):
+        return
+    method = _normalize_verification_method(extra.get("verification_method") or "manual_review")
+    reqs = extra.get("verification_requirements") or []
+    reqs = [str(x).strip() for x in reqs if str(x).strip()][:20]
+    ev = body.evidence if isinstance(body.evidence, dict) else {}
+    links = ev.get("proof_links") if isinstance(ev.get("proof_links"), list) else []
+    links = [str(x).strip() for x in links if isinstance(x, str) and x.strip().startswith(("http://", "https://"))]
+    completed = ev.get("completed_requirements") if isinstance(ev.get("completed_requirements"), list) else []
+    completed = [str(x).strip() for x in completed if str(x).strip()]
+
+    if method in ("proof_link", "hybrid") and not links:
+        raise HTTPException(status_code=400, detail="该任务要求证据链接验收，请在 evidence.proof_links 提供至少一个 http(s) 链接")
+    if method in ("checklist", "hybrid"):
+        if not reqs:
+            raise HTTPException(status_code=400, detail="该任务配置了清单验收，但发布方未配置 verification_requirements")
+        missing = [x for x in reqs if x not in completed]
+        if missing:
+            raise HTTPException(status_code=400, detail=f"清单验收未完成：{', '.join(missing[:5])}")
 
 
 def _get_or_create_clearing_account(db: Session) -> PlatformClearingAccount:
@@ -1331,6 +1376,8 @@ def _task_extra(t: Task) -> dict:
         "location": d.get("location") or None,
         "duration_estimate": d.get("duration_estimate") or None,
         "skills": d.get("skills") if isinstance(d.get("skills"), list) else None,
+        "verification_method": _normalize_verification_method(d.get("verification_method") or "manual_review"),
+        "verification_requirements": d.get("verification_requirements") if isinstance(d.get("verification_requirements"), list) else [],
     }
     if esc:
         ms = esc.get("milestones") or []
@@ -1625,6 +1672,17 @@ def publish_task(
         extra["duration_estimate"] = (body.duration_estimate or "").strip()[:50]
     if getattr(body, "skills", None) and isinstance(body.skills, list):
         extra["skills"] = [str(s).strip()[:50] for s in body.skills if s][:20]
+    verification_method = _normalize_verification_method(getattr(body, "verification_method", "manual_review"))
+    verification_requirements = [
+        str(x).strip()[:200]
+        for x in (getattr(body, "verification_requirements", None) or [])
+        if str(x).strip()
+    ][:20]
+    if verification_method in ("checklist", "hybrid") and not verification_requirements:
+        raise HTTPException(status_code=400, detail="checklist/hybrid 验收方式必须提供 verification_requirements")
+    extra["verification_method"] = verification_method
+    if verification_requirements:
+        extra["verification_requirements"] = verification_requirements
     category = (getattr(body, "category", None) or "").strip()[:64] or None
     requirements = (getattr(body, "requirements", None) or "").strip() or None
     # 托管里程碑计划
@@ -1786,6 +1844,7 @@ def submit_completion(
         return {"message": "已提交验收，请等待发布者确认或 6 小时后自动完成", "task_id": task_id}
     if escrow and task.status not in ("open", "in_progress"):
         raise HTTPException(status_code=400, detail="当前任务状态不可提交里程碑交付")
+    _validate_verification_submission(task, body)
     webhook_url = getattr(task, "completion_webhook_url", None) or ""
     reward_points = getattr(task, "reward_points", 0) or 0
     if reward_points > 0 and not webhook_url:
@@ -1850,6 +1909,7 @@ def submit_completion(
 @app.post("/tasks/{task_id}/confirm")
 def confirm_task(
     task_id: int,
+    body: Optional[ConfirmTaskBody] = None,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
@@ -1895,6 +1955,20 @@ def confirm_task(
     db.commit()
     commission = int(reward_points * PLATFORM_COMMISSION_RATE) if reward_points else 0
     amount_to_executor = reward_points - commission if reward_points else 0
+    try:
+        base = task.output_data if isinstance(task.output_data, dict) else {}
+        task.output_data = {
+            **(base or {}),
+            "verification_record": {
+                "mode": ((body.verification_mode if body else "manual_review") or "manual_review")[:32],
+                "note": ((body.verification_note if body else "") or "")[:1000],
+                "verified_by_user_id": uid,
+                "verified_at": datetime.utcnow().isoformat() + "Z",
+            },
+        }
+        db.commit()
+    except Exception:
+        db.rollback()
     return {
         "message": "验收通过，奖励已发放" if reward_points else "任务已关闭",
         "task_id": task_id,
@@ -2096,6 +2170,142 @@ def list_task_comments(task_id: int, db: Session = Depends(get_db)):
             "created_at": iso_utc(c.created_at),
         })
     return {"comments": out}
+
+
+@app.post("/messages")
+def send_internal_message(
+    body: SendMessageBody,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """发送站内信：按用户 ID 或用户名发送。"""
+    uid = int(current_user["user_id"])
+    title = (body.title or "").strip()
+    content = (body.content or "").strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="标题不能为空")
+    if not content:
+        raise HTTPException(status_code=400, detail="内容不能为空")
+    recipient = None
+    if body.recipient_user_id is not None:
+        recipient = db.query(User).filter(User.id == int(body.recipient_user_id)).first()
+    elif (body.recipient_username or "").strip():
+        recipient = db.query(User).filter(User.username == body.recipient_username.strip()).first()
+    else:
+        raise HTTPException(status_code=400, detail="请提供 recipient_user_id 或 recipient_username")
+    if not recipient:
+        raise HTTPException(status_code=404, detail="收件人不存在")
+    if recipient.id == uid:
+        raise HTTPException(status_code=400, detail="不能给自己发送站内信")
+    related_task_id = int(body.related_task_id) if body.related_task_id is not None else None
+    if related_task_id is not None:
+        t = db.query(Task).filter(Task.id == related_task_id).first()
+        if not t:
+            raise HTTPException(status_code=404, detail="关联任务不存在")
+    msg = InternalMessage(
+        sender_user_id=uid,
+        recipient_user_id=recipient.id,
+        title=title[:200],
+        content=content[:5000],
+        related_task_id=related_task_id,
+        is_read=False,
+    )
+    db.add(msg)
+    db.commit()
+    db.refresh(msg)
+    return {"id": msg.id, "message": "发送成功"}
+
+
+@app.get("/messages/inbox")
+def list_inbox_messages(
+    skip: int = 0,
+    limit: int = 50,
+    unread_only: bool = False,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """我的站内信收件箱。"""
+    uid = int(current_user["user_id"])
+    q = db.query(InternalMessage).filter(InternalMessage.recipient_user_id == uid)
+    if unread_only:
+        q = q.filter(InternalMessage.is_read == False)  # noqa: E712
+    rows = q.order_by(InternalMessage.created_at.desc()).offset(skip).limit(limit).all()
+    out = []
+    for m in rows:
+        sender = db.query(User).filter(User.id == m.sender_user_id).first()
+        out.append({
+            "id": m.id,
+            "title": m.title,
+            "content": m.content,
+            "sender_user_id": m.sender_user_id,
+            "sender_username": sender.username if sender else "",
+            "recipient_user_id": m.recipient_user_id,
+            "related_task_id": m.related_task_id,
+            "is_read": bool(m.is_read),
+            "read_at": iso_utc(m.read_at),
+            "created_at": iso_utc(m.created_at),
+        })
+    total = q.count()
+    unread = db.query(InternalMessage).filter(
+        InternalMessage.recipient_user_id == uid,
+        InternalMessage.is_read == False,  # noqa: E712
+    ).count()
+    return {"items": out, "total": total, "unread": unread}
+
+
+@app.get("/messages/sent")
+def list_sent_messages(
+    skip: int = 0,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """我发送的站内信。"""
+    uid = int(current_user["user_id"])
+    rows = (
+        db.query(InternalMessage)
+        .filter(InternalMessage.sender_user_id == uid)
+        .order_by(InternalMessage.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+    out = []
+    for m in rows:
+        recipient = db.query(User).filter(User.id == m.recipient_user_id).first()
+        out.append({
+            "id": m.id,
+            "title": m.title,
+            "content": m.content,
+            "recipient_user_id": m.recipient_user_id,
+            "recipient_username": recipient.username if recipient else "",
+            "related_task_id": m.related_task_id,
+            "is_read": bool(m.is_read),
+            "read_at": iso_utc(m.read_at),
+            "created_at": iso_utc(m.created_at),
+        })
+    total = db.query(InternalMessage).filter(InternalMessage.sender_user_id == uid).count()
+    return {"items": out, "total": total}
+
+
+@app.post("/messages/{message_id}/read")
+def mark_message_as_read(
+    message_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """将收件箱中的站内信标记为已读。"""
+    uid = int(current_user["user_id"])
+    msg = db.query(InternalMessage).filter(InternalMessage.id == message_id).first()
+    if not msg:
+        raise HTTPException(status_code=404, detail="消息不存在")
+    if msg.recipient_user_id != uid:
+        raise HTTPException(status_code=403, detail="仅收件人可标记已读")
+    if not msg.is_read:
+        msg.is_read = True
+        msg.read_at = datetime.utcnow()
+        db.commit()
+    return {"ok": True, "id": msg.id, "is_read": True, "read_at": iso_utc(msg.read_at)}
 
 
 class PostCommentBody(BaseModel):

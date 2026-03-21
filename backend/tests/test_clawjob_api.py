@@ -491,6 +491,78 @@ def test_submit_completion_and_confirm():
     assert r.json()["credits"] == 5
 
 
+def test_verification_methods_checklist_and_proof_link():
+    """验收方式：hybrid 要求 proof_links + completed_requirements。"""
+    pub = f"vpub_{_unique()}"
+    exe = f"vexe_{_unique()}"
+    _register_user(pub, f"{pub}@example.com", "pub")
+    _register_user(exe, f"{exe}@example.com", "exe")
+    pub_headers = {"Authorization": f"Bearer {client.post('/auth/login', json={'username': pub, 'password': 'pub'}).json()['access_token']}"}
+    exe_headers = {"Authorization": f"Bearer {client.post('/auth/login', json={'username': exe, 'password': 'exe'}).json()['access_token']}"}
+    r = client.post(
+        "/tasks",
+        json={
+            "title": "混合验收任务",
+            "description": "需要链接和清单",
+            "verification_method": "hybrid",
+            "verification_requirements": ["交付代码", "补充文档"],
+        },
+        headers=pub_headers,
+    )
+    assert r.status_code == 200, r.text
+    task_id = r.json()["id"]
+    ag = client.post("/agents/register", json={"name": "verify-agent", "description": ""}, headers=exe_headers).json()["id"]
+    assert client.post(f"/tasks/{task_id}/subscribe", json={"agent_id": ag}, headers=exe_headers).status_code == 200
+
+    with patch("app.main.httpx") as m:
+        m.Client.return_value.__enter__.return_value.post.return_value.status_code = 200
+        bad = client.post(
+            f"/tasks/{task_id}/submit-completion",
+            json={"result_summary": "done", "evidence": {"proof_links": ["https://example.com/a"]}},
+            headers=exe_headers,
+        )
+        assert bad.status_code == 400
+        good = client.post(
+            f"/tasks/{task_id}/submit-completion",
+            json={
+                "result_summary": "done",
+                "evidence": {
+                    "proof_links": ["https://example.com/a"],
+                    "completed_requirements": ["交付代码", "补充文档"],
+                },
+            },
+            headers=exe_headers,
+        )
+    assert good.status_code == 200, good.text
+
+
+def test_internal_messages_send_inbox_and_read():
+    """站内信：用户可互发、查看收件箱并标记已读。"""
+    a = f"msg_a_{_unique()}"
+    b = f"msg_b_{_unique()}"
+    _register_user(a, f"{a}@example.com", "pw")
+    _register_user(b, f"{b}@example.com", "pw")
+    a_headers = {"Authorization": f"Bearer {client.post('/auth/login', json={'username': a, 'password': 'pw'}).json()['access_token']}"}
+    b_headers = {"Authorization": f"Bearer {client.post('/auth/login', json={'username': b, 'password': 'pw'}).json()['access_token']}"}
+
+    s = client.post(
+        "/messages",
+        json={"recipient_username": b, "title": "你好", "content": "这是站内信"},
+        headers=a_headers,
+    )
+    assert s.status_code == 200, s.text
+    msg_id = s.json()["id"]
+
+    inbox = client.get("/messages/inbox", headers=b_headers)
+    assert inbox.status_code == 200
+    items = inbox.json().get("items") or []
+    assert any(int(x.get("id")) == int(msg_id) for x in items)
+    assert (inbox.json().get("unread") or 0) >= 1
+
+    mark = client.post(f"/messages/{msg_id}/read", headers=b_headers)
+    assert mark.status_code == 200
+    assert mark.json().get("is_read") is True
+
 def test_reject_requires_reason():
     """拒绝验收时必须填写拒绝理由"""
     # 创建待验收任务需完整流程，这里仅测 400：无 body 或 reason 为空

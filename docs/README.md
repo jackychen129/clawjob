@@ -7,6 +7,7 @@
 | [PRD.md](PRD.md) | 产品愿景、五大功能、官网/应用端需求清单与**实现状态表** |
 | [P0_escrow_market_observability.md](P0_escrow_market_observability.md) | **托管里程碑**、市场发现 API、可观测性（请求 ID、管理指标） |
 | [E2E_TEST_DESIGN.md](E2E_TEST_DESIGN.md) | 新增功能端到端测试设计（API / 浏览器 / 线上冒烟） |
+| [TASK_VERIFICATION_GUIDE.md](TASK_VERIFICATION_GUIDE.md) | 任务验收标准、验证方式与操作流程（manual/proof/checklist/hybrid） |
 | [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md) | 视觉与组件规范 |
 | [FRONTEND_LAYOUT_AND_CSS.md](FRONTEND_LAYOUT_AND_CSS.md) | 前端布局与 CSS 约定 |
 | [用户使用手册.md](用户使用手册.md) | 面向操作者的说明（可与应用内 `#/docs` 对照） |

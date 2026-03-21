@@ -124,7 +124,7 @@
                         {{ t('task.submitCompletion') }}
                     </Button>
                       <template v-if="item.data!.owner_id === auth.userId && item.data!.status === 'pending_verification'">
-                        <Button size="sm" :disabled="confirmLoading === item.data!.id" class="task-row__btn task-row__btn--primary" @click="doConfirm(item.data!.id)">{{ t('task.confirmPass') }}</Button>
+                        <Button size="sm" :disabled="confirmLoading === item.data!.id" class="task-row__btn task-row__btn--primary" @click="openConfirmModal(item.data!.id)">{{ t('task.confirmPass') }}</Button>
                         <Button size="sm" variant="secondary" :disabled="rejectLoading === item.data!.id" class="task-row__btn" @click="openRejectModal(item.data!.id)">{{ t('task.reject') }}</Button>
                       </template>
                     </div>
@@ -155,12 +155,14 @@
               <div class="detail-section">
                 <p class="detail-desc">{{ selectedTaskDetail.description || t('common.noDescription') }}</p>
               </div>
-              <dl class="detail-meta" v-if="selectedTaskDetail.category || selectedTaskDetail.requirements || selectedTaskDetail.duration_estimate || (getTaskSkills(selectedTaskDetail).length) || selectedTaskDetail.location">
+              <dl class="detail-meta" v-if="selectedTaskDetail.category || selectedTaskDetail.requirements || selectedTaskDetail.duration_estimate || (getTaskSkills(selectedTaskDetail).length) || selectedTaskDetail.location || selectedTaskDetail.verification_method">
                 <template v-if="selectedTaskDetail.category"><dt>{{ t('task.detailCategory') }}</dt><dd>{{ taskCategoryLabel(selectedTaskDetail.category) }}</dd></template>
                 <template v-if="selectedTaskDetail.requirements"><dt>{{ t('task.detailRequirements') }}</dt><dd class="detail-requirements">{{ selectedTaskDetail.requirements }}</dd></template>
                 <template v-if="selectedTaskDetail.duration_estimate"><dt>{{ t('task.detailDuration') }}</dt><dd>{{ selectedTaskDetail.duration_estimate }}</dd></template>
                 <template v-if="getTaskSkills(selectedTaskDetail).length"><dt>{{ t('task.detailSkills') }}</dt><dd><span v-for="s in getTaskSkills(selectedTaskDetail)" :key="s" class="task-tag task-tag--skill">{{ s }}</span></dd></template>
                 <template v-if="selectedTaskDetail.location"><dt>{{ t('task.detailLocation') }}</dt><dd>{{ selectedTaskDetail.location }}</dd></template>
+                <template v-if="selectedTaskDetail.verification_method"><dt>{{ t('task.verificationMethod') || '验收方式' }}</dt><dd class="mono">{{ selectedTaskDetail.verification_method }}</dd></template>
+                <template v-if="selectedTaskDetail.verification_requirements?.length"><dt>{{ t('task.verificationRequirements') || '验收清单' }}</dt><dd><span v-for="(r, idx) in selectedTaskDetail.verification_requirements" :key="idx" class="task-tag">{{ r }}</span></dd></template>
               </dl>
               <div v-if="skillProgress.length" class="detail-skill-progress">
                 <h4 class="section-subtitle">{{ t('task.skills') || '技能进度' }}</h4>
@@ -219,7 +221,7 @@
                   @click="openSubmitModal(selectedTaskDetail)"
                 >{{ t('task.submitCompletion') }}</Button>
                 <template v-if="auth.isLoggedIn && selectedTaskDetail.owner_id === auth.userId && selectedTaskDetail.status === 'pending_verification'">
-                  <Button size="sm" :disabled="confirmLoading === selectedTaskDetail.id" @click="doConfirm(selectedTaskDetail.id)">{{ t('task.confirmPass') }}</Button>
+                  <Button size="sm" :disabled="confirmLoading === selectedTaskDetail.id" @click="openConfirmModal(selectedTaskDetail.id)">{{ t('task.confirmPass') }}</Button>
                   <Button size="sm" variant="secondary" :disabled="rejectLoading === selectedTaskDetail.id" @click="openRejectModal(selectedTaskDetail.id)">{{ t('task.reject') }}</Button>
                 </template>
                 <Button
@@ -253,6 +255,20 @@
                 <p v-if="selectedTaskDetail.output_data.evidence && selectedTaskDetail.output_data.evidence.link" class="completion-link">
                   <a :href="String(selectedTaskDetail.output_data.evidence.link)" target="_blank" rel="noopener noreferrer" class="app-link">{{ t('task.completionLink') }}：{{ selectedTaskDetail.output_data.evidence.link }}</a>
                 </p>
+                <div v-if="Array.isArray(selectedTaskDetail.output_data?.evidence?.proof_links) && (selectedTaskDetail.output_data?.evidence?.proof_links as unknown[]).length" class="completion-links">
+                  <p class="completion-links-title">{{ t('task.proofLinks') || '证据链接' }}</p>
+                  <ul>
+                    <li v-for="(lnk, idx) in (selectedTaskDetail.output_data?.evidence?.proof_links as string[])" :key="idx">
+                      <a :href="lnk" target="_blank" rel="noopener noreferrer" class="app-link">{{ lnk }}</a>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+              <div v-if="selectedTaskDetail.verification_record" class="task-detail-verification-record">
+                <h4 class="task-comments-title">{{ t('task.verificationRecord') || '验收记录' }}</h4>
+                <p class="mono">{{ t('task.verificationMode') || '方式' }}：{{ selectedTaskDetail.verification_record.mode || 'manual_review' }}</p>
+                <p v-if="selectedTaskDetail.verification_record.note" class="completion-summary">{{ selectedTaskDetail.verification_record.note }}</p>
+                <p class="completion-link">{{ t('task.verifiedAt') || '验收时间' }}：{{ selectedTaskDetail.verification_record.verified_at || '-' }}</p>
               </div>
               <div class="task-comments">
                 <h4 class="task-comments-title">{{ t('task.comments') }}</h4>
@@ -375,6 +391,22 @@
           <div class="create-task-step">
             <span class="create-task-step-label">{{ t('taskManage.stepReward') || '3. 奖励与回调' }}</span>
           </div>
+          <div class="create-task-step">
+            <span class="create-task-step-label">{{ t('task.verificationMethod') || '4. 验收方式' }}</span>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="publish-verification-method">{{ t('task.verificationMethod') || '验收方式' }}</label>
+            <select id="publish-verification-method" v-model="publishForm.verification_method" class="input select-input">
+              <option value="manual_review">manual_review（人工验收）</option>
+              <option value="proof_link">proof_link（证据链接）</option>
+              <option value="checklist">checklist（清单验收）</option>
+              <option value="hybrid">hybrid（链接+清单）</option>
+            </select>
+          </div>
+          <div v-if="publishForm.verification_method === 'checklist' || publishForm.verification_method === 'hybrid'" class="form-group">
+            <label class="form-label" for="publish-verification-reqs">{{ t('task.verificationRequirements') || '验收清单（每行一条）' }}</label>
+            <Textarea id="publish-verification-reqs" v-model="publishForm.verification_requirements_text" rows="4" :placeholder="'示例：\n交付代码\n补充文档\n提供演示链接'" />
+          </div>
           <div class="form-group form-inline">
             <label class="form-label" for="publish-reward">{{ t('agentGuide.fieldRewardPoints') }}</label>
             <input id="publish-reward" v-model.number="publishForm.reward_points" type="number" min="0" class="input input-num" />
@@ -456,6 +488,8 @@
         <div class="form">
           <Textarea v-model="submitCompletionForm.result_summary" rows="3" :placeholder="t('task.resultSummaryPlaceholder')" />
           <Input v-model="submitCompletionForm.completion_link" type="url" :placeholder="t('task.completionLinkPlaceholder')" />
+          <Textarea v-model="submitCompletionForm.proof_links_text" rows="2" :placeholder="t('task.proofLinksHint') || '证据链接（每行一个）'" />
+          <Textarea v-model="submitCompletionForm.completed_requirements_text" rows="3" :placeholder="t('task.completedRequirementsHint') || '已完成清单（每行一条）'" />
           <Button :disabled="submitCompletionLoading" @click="doSubmitCompletion">{{ t('task.submitCompletion') }}</Button>
         </div>
         <Button variant="secondary" class="close-btn w-full" @click="submitCompletionTask = null">{{ t('common.cancel') }}</Button>
@@ -504,6 +538,23 @@
           <Button :disabled="rejectLoading === rejectTaskId || !rejectReason.trim()" @click="doRejectWithReason">{{ t('task.reject') }}</Button>
         </div>
         <Button variant="secondary" class="close-btn w-full" @click="rejectTaskId = null; rejectReason = ''">{{ t('common.cancel') }}</Button>
+      </div>
+    </div>
+
+    <div v-if="confirmTaskId" class="modal-mask" @click.self="closeConfirmModal">
+      <div class="modal">
+        <h3>{{ t('task.confirmPass') }}</h3>
+        <p class="hint">{{ t('task.confirmHint') || '请选择验收方式并可填写备注。' }}</p>
+        <div class="form">
+          <select v-model="confirmForm.verification_mode" class="input select-input">
+            <option value="manual_review">manual_review</option>
+            <option value="spot_check">spot_check</option>
+            <option value="webhook_result">webhook_result</option>
+          </select>
+          <Textarea v-model="confirmForm.verification_note" rows="3" :placeholder="t('task.confirmNotePlaceholder') || '验收备注（可选）'" />
+          <Button :disabled="confirmLoading === confirmTaskId" @click="doConfirm">{{ t('task.confirmPass') }}</Button>
+        </div>
+        <Button variant="secondary" class="close-btn w-full" @click="closeConfirmModal">{{ t('common.cancel') }}</Button>
       </div>
     </div>
 
@@ -595,6 +646,8 @@ const publishForm = reactive<{
   location: string
   duration_estimate: string
   skills_text: string
+  verification_method: 'manual_review' | 'proof_link' | 'checklist' | 'hybrid'
+  verification_requirements_text: string
   escrow_enabled: boolean
   escrow_rows: EscrowRow[]
 }>({
@@ -610,6 +663,8 @@ const publishForm = reactive<{
   location: '',
   duration_estimate: '',
   skills_text: '',
+  verification_method: 'manual_review',
+  verification_requirements_text: '',
   escrow_enabled: false,
   escrow_rows: defaultEscrowRows(),
 })
@@ -636,7 +691,12 @@ const accountCredits = ref(0)
 const subscribeTaskItem = ref<{ id: number; title: string } | null>(null)
 const subscribeLoading = ref<number | null>(null)
 const submitCompletionTask = ref<{ id: number; title: string } | null>(null)
-const submitCompletionForm = reactive({ result_summary: '', completion_link: '' })
+const submitCompletionForm = reactive({
+  result_summary: '',
+  completion_link: '',
+  proof_links_text: '',
+  completed_requirements_text: '',
+})
 const submitCompletionLoading = ref(false)
 const escrowDisputeTask = ref<{ id: number; title: string } | null>(null)
 const escrowDisputeForm = reactive({ reason: '', evidence_summary: '', evidence_link: '' })
@@ -652,6 +712,8 @@ const confirmLoading = ref<number | null>(null)
 const rejectLoading = ref<number | null>(null)
 const rejectTaskId = ref<number | null>(null)
 const rejectReason = ref('')
+const confirmTaskId = ref<number | null>(null)
+const confirmForm = reactive({ verification_mode: 'manual_review', verification_note: '' })
 const categoryFilter = ref('')
 const categoryFilterOptions = [
   { value: 'development', labelKey: 'task.categoryDevelopment' },
@@ -899,6 +961,8 @@ function getTaskDraft(): typeof publishForm | null {
       location: String(o.location ?? ''),
       duration_estimate: String(o.duration_estimate ?? ''),
       skills_text: String(o.skills_text ?? ''),
+      verification_method: (String(o.verification_method ?? 'manual_review') as any),
+      verification_requirements_text: String(o.verification_requirements_text ?? ''),
       escrow_enabled: Boolean(o.escrow_enabled),
       escrow_rows: rows.map((r) => ({
         title: String(r.title ?? ''),
@@ -935,6 +999,8 @@ function saveDraft() {
       location: publishForm.location,
       duration_estimate: publishForm.duration_estimate,
       skills_text: publishForm.skills_text,
+      verification_method: publishForm.verification_method,
+      verification_requirements_text: publishForm.verification_requirements_text,
       escrow_enabled: publishForm.escrow_enabled,
       escrow_rows: publishForm.escrow_rows.map((r) => ({ ...r })),
       updated_at: Date.now(),
@@ -962,6 +1028,8 @@ function restoreDraft() {
   publishForm.location = d.location
   publishForm.duration_estimate = d.duration_estimate
   publishForm.skills_text = d.skills_text
+  publishForm.verification_method = (d.verification_method as any) || 'manual_review'
+  publishForm.verification_requirements_text = d.verification_requirements_text || ''
   publishForm.escrow_enabled = d.escrow_enabled
   publishForm.escrow_rows = d.escrow_rows.length
     ? d.escrow_rows.map((r) => ({
@@ -1044,6 +1112,11 @@ function doPublish() {
     location: publishForm.location.trim() || undefined,
     duration_estimate: publishForm.duration_estimate.trim() || undefined,
     skills,
+    verification_method: publishForm.verification_method,
+    verification_requirements: publishForm.verification_requirements_text
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean),
     discord_webhook_url: publishForm.discord_webhook_url.trim() || undefined,
     escrow_milestones: escrow_milestones,
   }).then(() => {
@@ -1061,6 +1134,8 @@ function doPublish() {
     publishForm.location = ''
     publishForm.duration_estimate = ''
     publishForm.skills_text = ''
+    publishForm.verification_method = 'manual_review'
+    publishForm.verification_requirements_text = ''
     publishForm.escrow_enabled = false
     publishForm.escrow_rows = defaultEscrowRows()
     showSuccessLocal(t('task.publishSuccess'))
@@ -1092,12 +1167,25 @@ function openSubmitModal(task: { id: number; title: string }) {
   submitCompletionTask.value = task
   submitCompletionForm.result_summary = ''
   submitCompletionForm.completion_link = ''
+  submitCompletionForm.proof_links_text = ''
+  submitCompletionForm.completed_requirements_text = ''
 }
 
 function doSubmitCompletion() {
   if (!submitCompletionTask.value) return
   submitCompletionLoading.value = true
-  const evidence = submitCompletionForm.completion_link.trim() ? { link: submitCompletionForm.completion_link.trim() } : {}
+  const evidence: Record<string, unknown> = {}
+  if (submitCompletionForm.completion_link.trim()) evidence.link = submitCompletionForm.completion_link.trim()
+  const proofLinks = submitCompletionForm.proof_links_text
+    .split('\n')
+    .map((s) => s.trim())
+    .filter((s) => s.startsWith('http://') || s.startsWith('https://'))
+  if (proofLinks.length) evidence.proof_links = proofLinks
+  const completedRequirements = submitCompletionForm.completed_requirements_text
+    .split('\n')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  if (completedRequirements.length) evidence.completed_requirements = completedRequirements
   api.submitCompletion(submitCompletionTask.value.id, { result_summary: submitCompletionForm.result_summary.trim(), evidence }).then(() => {
     submitCompletionTask.value = null
     showSuccessLocal(t('task.submitCompletionSuccess'))
@@ -1176,10 +1264,26 @@ function doEscrowResolve() {
   }).finally(() => { escrowResolveLoading.value = null })
 }
 
-function doConfirm(taskId: number) {
+function openConfirmModal(taskId: number) {
+  confirmTaskId.value = taskId
+  confirmForm.verification_mode = 'manual_review'
+  confirmForm.verification_note = ''
+}
+function closeConfirmModal() {
+  confirmTaskId.value = null
+  confirmForm.verification_mode = 'manual_review'
+  confirmForm.verification_note = ''
+}
+function doConfirm() {
+  if (!confirmTaskId.value) return
+  const taskId = confirmTaskId.value
   confirmLoading.value = taskId
-  api.confirmTask(taskId).then(() => {
+  api.confirmTask(taskId, {
+    verification_mode: confirmForm.verification_mode,
+    verification_note: confirmForm.verification_note.trim(),
+  }).then(() => {
     showSuccessLocal(t('task.confirmSuccess'))
+    closeConfirmModal()
     loadTasks()
     loadMyTasks()
     loadAccountMe()
@@ -1514,6 +1618,10 @@ watch(tab, (newTab) => {
 .task-detail-completion-submission { margin-top: var(--space-5); padding: var(--space-4); background: var(--surface); border-radius: var(--radius-sm); }
 .task-detail-completion-submission .completion-summary { margin: 0 0 0.5rem; white-space: pre-wrap; font-size: 0.9rem; color: var(--text-secondary); }
 .task-detail-completion-submission .completion-link { margin: 0; font-size: 0.9rem; }
+.completion-links { margin-top: 0.5rem; }
+.completion-links-title { margin: 0 0 0.35rem; font-size: 0.85rem; color: var(--text-secondary); }
+.completion-links ul { margin: 0; padding-left: 1rem; }
+.task-detail-verification-record { margin-top: var(--space-4); padding: var(--space-4); border: var(--border-hairline); border-radius: var(--radius-sm); background: rgba(255,255,255,0.02); }
 .task-tabs {
   display: inline-flex;
   gap: 0;

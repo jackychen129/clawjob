@@ -1,7 +1,7 @@
 <template>
   <div class="inbox-view apple-layout">
     <h1 class="page-title">{{ t('inbox.title') || '站内信' }}</h1>
-    <p class="page-desc">{{ t('inbox.desc') || '任务接取、验收通过、平台动态等与您相关的消息。' }}</p>
+    <p class="page-desc">{{ t('inbox.desc') || '给其他用户发送消息，查看收件箱与已发送。' }}</p>
 
     <div v-if="!auth.isLoggedIn" class="tw-empty-state empty-state">
       <div class="tw-empty-state__icon" aria-hidden="true">✉</div>
@@ -13,13 +13,31 @@
     </div>
 
     <template v-else>
+      <div class="compose-card">
+        <h3 class="compose-title">{{ t('inbox.compose') || '发送站内信' }}</h3>
+        <div class="compose-grid">
+          <Input v-model="composeForm.recipient_username" :placeholder="t('inbox.recipientUsername') || '收件人用户名'" />
+          <Input v-model="composeForm.title" :placeholder="t('inbox.messageTitle') || '标题'" />
+        </div>
+        <Textarea v-model="composeForm.content" rows="3" :placeholder="t('inbox.messageContent') || '消息内容'" />
+        <div class="compose-actions">
+          <Button :disabled="sending || !composeForm.recipient_username.trim() || !composeForm.title.trim() || !composeForm.content.trim()" @click="sendMessage">
+            {{ sending ? (t('common.loading') || '发送中...') : (t('inbox.send') || '发送') }}
+          </Button>
+        </div>
+      </div>
+
       <div class="inbox-tabs">
-        <button type="button" class="inbox-tab" :class="{ active: tab === 'all' }" @click="tab = 'all'">
-          {{ t('inbox.tabAll') || '全部动态' }}
+        <button type="button" class="inbox-tab" :class="{ active: tab === 'inbox' }" @click="tab = 'inbox'">
+          {{ t('inbox.inbox') || '收件箱' }}
         </button>
-        <button type="button" class="inbox-tab" :class="{ active: tab === 'mine' }" @click="tab = 'mine'">
-          {{ t('inbox.tabMine') || '与我相关' }}
+        <button type="button" class="inbox-tab" :class="{ active: tab === 'sent' }" @click="tab = 'sent'">
+          {{ t('inbox.sent') || '已发送' }}
         </button>
+        <label v-if="tab === 'inbox'" class="unread-only">
+          <input v-model="unreadOnly" type="checkbox" />
+          {{ t('inbox.unreadOnly') || '仅看未读' }}
+        </label>
       </div>
 
       <div v-if="loading" class="inbox-skeleton">
@@ -29,26 +47,42 @@
         </div>
       </div>
 
-      <TransitionGroup v-else-if="displayEvents.length" name="inbox-list" tag="ul" class="inbox-list">
-        <li v-for="ev in displayEvents" :key="ev.at + ':' + ev.type + ':' + (ev.task_id ?? ev.agent_id ?? '')" class="inbox-item">
+      <TransitionGroup v-else-if="displayMessages.length" name="inbox-list" tag="ul" class="inbox-list">
+        <li v-for="msg in displayMessages" :key="msg.id" class="inbox-item" :class="{ unread: tab === 'inbox' && !msg.is_read }">
           <div class="inbox-item-inner">
-            <span class="inbox-time mono">{{ formatTimeAgo(ev.at) }}</span>
-            <p class="inbox-body">
-              <span class="inbox-who">{{ getEventWho(ev) }}</span> {{ getEventWhat(ev) }}
-            </p>
-            <router-link v-if="ev.task_id" :to="'/#/tasks?taskId=' + ev.task_id" class="inbox-link">{{ t('task.viewDetail') }}</router-link>
-            <router-link v-else-if="ev.agent_id" :to="'/agents#' + ev.agent_id" class="inbox-link">{{ t('inbox.viewAgent') || '查看 Agent' }}</router-link>
+            <div class="inbox-item-main">
+              <p class="inbox-title-row">
+                <strong>{{ msg.title }}</strong>
+                <span class="inbox-time mono">{{ formatTimeAgo(msg.created_at || '') }}</span>
+              </p>
+              <p class="inbox-meta" v-if="tab === 'inbox'">
+                {{ t('inbox.from') || '来自' }}：{{ msg.sender_username || ('#' + (msg.sender_user_id ?? '')) }}
+              </p>
+              <p class="inbox-meta" v-else>
+                {{ t('inbox.to') || '发送给' }}：{{ msg.recipient_username || ('#' + (msg.recipient_user_id ?? '')) }}
+              </p>
+              <p class="inbox-body">{{ msg.content }}</p>
+              <router-link v-if="msg.related_task_id" :to="'/tasks?taskId=' + msg.related_task_id" class="inbox-link">{{ t('task.viewDetail') }}</router-link>
+            </div>
+            <Button
+              v-if="tab === 'inbox' && !msg.is_read"
+              size="sm"
+              variant="secondary"
+              :disabled="markingReadId === msg.id"
+              @click="markRead(msg.id)"
+            >
+              {{ t('inbox.markRead') || '标记已读' }}
+            </Button>
           </div>
         </li>
       </TransitionGroup>
 
       <div v-else class="tw-empty-state empty-state empty-state--inbox">
         <div class="tw-empty-state__icon" aria-hidden="true">✉</div>
-        <p class="tw-empty-state__title">{{ tab === 'mine' ? (t('inbox.noMine') || '暂无与您相关的动态') : (t('inbox.noActivity') || '暂无动态') }}</p>
-        <p class="tw-empty-state__text">{{ tab === 'mine' ? (t('inbox.noMineHint') || '发布或接取任务后，相关动态会出现在这里。') : (t('inbox.noActivityHint') || '平台有新的任务完成或发布时会显示在这里。') }}</p>
+        <p class="tw-empty-state__title">{{ tab === 'inbox' ? (t('inbox.emptyInbox') || '收件箱暂无消息') : (t('inbox.emptySent') || '暂无已发送消息') }}</p>
+        <p class="tw-empty-state__text">{{ tab === 'inbox' ? (t('inbox.emptyInboxHint') || '让其他用户给你发送一条站内信试试。') : (t('inbox.emptySentHint') || '发送后可在这里查看历史。') }}</p>
         <div class="tw-empty-state__actions">
           <Button :as="RouterLink" to="/tasks">{{ t('nav.taskManage') }}</Button>
-          <Button :as="RouterLink" to="/" variant="secondary">{{ t('common.home') }}</Button>
         </div>
       </div>
     </template>
@@ -56,10 +90,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Button } from '../components/ui/button'
+import { Input } from '../components/ui/input'
+import { Textarea } from '../components/ui/textarea'
 import { useAuthStore } from '../stores/auth'
 import * as api from '../api'
 import { safeT } from '../i18n'
@@ -73,35 +109,19 @@ const _i18n = useI18n()
 const t = typeof _i18n.t === 'function' ? _i18n.t : safeT
 const auth = useAuthStore()
 
-const tab = ref<'all' | 'mine'>('all')
-const events = ref<api.ActivityEvent[]>([])
+const tab = ref<'inbox' | 'sent'>('inbox')
+const unreadOnly = ref(false)
+const inboxItems = ref<api.InternalMessageItem[]>([])
+const sentItems = ref<api.InternalMessageItem[]>([])
 const loading = ref(true)
-const myAgentNames = ref<string[]>([])
+const sending = ref(false)
+const markingReadId = ref<number | null>(null)
+const composeForm = ref({ recipient_username: '', title: '', content: '' })
 
-const displayEvents = computed(() => {
-  if (tab.value === 'all') return events.value
-  const username = auth.username || ''
-  return events.value.filter((ev) => {
-    if (ev.type === 'task_created') return ev.publisher_name === username
-    if (ev.type === 'task_completed') return ev.publisher_name === username || (ev.agent_name != null && myAgentNames.value.includes(ev.agent_name))
-    if (ev.type === 'agent_registered') return ev.owner_name === username
-    return false
-  })
+const displayMessages = computed(() => {
+  if (tab.value === 'inbox') return inboxItems.value
+  return sentItems.value
 })
-
-function getEventWho(ev: api.ActivityEvent): string {
-  if (ev.type === 'task_created') return ev.publisher_name ?? ''
-  if (ev.type === 'task_completed') return ev.agent_name ?? t('common.agent')
-  if (ev.type === 'agent_registered') return ev.owner_name ?? ''
-  return ''
-}
-
-function getEventWhat(ev: api.ActivityEvent): string {
-  if (ev.type === 'task_created') return t('dashboard.eventTaskCreated', { title: ev.task_title || '#' + (ev.task_id ?? '') })
-  if (ev.type === 'task_completed') return t('dashboard.eventTaskCompleted', { title: ev.task_title || '#' + (ev.task_id ?? ''), points: ev.reward_points ?? 0 })
-  if (ev.type === 'agent_registered') return t('dashboard.eventAgentRegistered', { name: ev.agent_name || '#' + (ev.agent_id ?? '') })
-  return ''
-}
 
 function formatTimeAgo(iso: string) {
   try {
@@ -120,27 +140,62 @@ function formatTimeAgo(iso: string) {
 async function load() {
   loading.value = true
   try {
-    const [actRes, agentsRes] = await Promise.all([
-      api.fetchActivity(80),
-      auth.isLoggedIn ? api.fetchMyAgents().catch(() => ({ data: { agents: [] } })) : Promise.resolve({ data: { agents: [] } }),
+    const [inboxRes, sentRes] = await Promise.all([
+      api.fetchInboxMessages({ limit: 100, unread_only: unreadOnly.value }),
+      api.fetchSentMessages({ limit: 100 }),
     ])
-    events.value = actRes.data.events ?? []
-    myAgentNames.value = (agentsRes.data.agents ?? []).map((a: { name: string }) => a.name)
+    inboxItems.value = inboxRes.data.items ?? []
+    sentItems.value = sentRes.data.items ?? []
   } catch {
-    events.value = []
+    inboxItems.value = []
+    sentItems.value = []
   } finally {
     loading.value = false
+  }
+}
+
+async function markRead(messageId: number) {
+  markingReadId.value = messageId
+  try {
+    await api.markMessageRead(messageId)
+    await load()
+  } finally {
+    markingReadId.value = null
+  }
+}
+
+async function sendMessage() {
+  if (!composeForm.value.recipient_username.trim() || !composeForm.value.title.trim() || !composeForm.value.content.trim()) return
+  sending.value = true
+  try {
+    await api.sendInternalMessage({
+      recipient_username: composeForm.value.recipient_username.trim(),
+      title: composeForm.value.title.trim(),
+      content: composeForm.value.content.trim(),
+    })
+    composeForm.value = { recipient_username: '', title: '', content: '' }
+    tab.value = 'sent'
+    await load()
+  } finally {
+    sending.value = false
   }
 }
 
 onMounted(() => {
   if (auth.isLoggedIn) load()
 })
+watch(unreadOnly, () => {
+  if (auth.isLoggedIn && tab.value === 'inbox') load()
+})
 </script>
 
 <style scoped>
 .inbox-view { max-width: 56rem; margin: 0 auto; padding: 0 var(--space-6) var(--space-10); }
 .page-desc { margin: 0 0 var(--space-6); font-size: var(--font-body); color: var(--text-secondary); }
+.compose-card { border: var(--border-hairline); border-radius: var(--radius-lg); background: var(--card-background); padding: var(--space-4); margin-bottom: var(--space-5); }
+.compose-title { margin: 0 0 var(--space-3); font-size: var(--font-body-strong); }
+.compose-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); margin-bottom: var(--space-2); }
+.compose-actions { margin-top: var(--space-2); display: flex; justify-content: flex-end; }
 .inbox-tabs { display: flex; gap: var(--space-2); margin-bottom: var(--space-5); }
 .inbox-tab {
   padding: var(--space-2) var(--space-4);
@@ -160,13 +215,20 @@ onMounted(() => {
 .tw-skeleton-text { flex: 1; height: 1.25rem; border-radius: var(--radius-sm); }
 .inbox-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0; }
 .inbox-item { border-bottom: var(--border-hairline); }
-.inbox-item-inner { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); padding: var(--space-4) 0; }
-.inbox-time { color: var(--text-tertiary); font-size: var(--font-caption); min-width: 4rem; }
-.inbox-body { margin: 0; font-size: var(--font-body); line-height: 1.4; flex: 1 1 12rem; }
-.inbox-who { font-weight: 600; color: var(--text-primary); margin-right: 0.25rem; }
+.inbox-item-inner { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); padding: var(--space-4) 0; }
+.inbox-item.unread { background: rgba(var(--primary-rgb), 0.05); }
+.inbox-item-main { flex: 1 1 auto; min-width: 0; }
+.inbox-title-row { margin: 0 0 0.2rem; display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.inbox-time { color: var(--text-tertiary); font-size: var(--font-caption); }
+.inbox-meta { margin: 0 0 0.35rem; color: var(--text-secondary); font-size: var(--font-caption); }
+.inbox-body { margin: 0 0 0.35rem; font-size: var(--font-body); line-height: 1.5; white-space: pre-wrap; }
 .inbox-link { font-size: var(--font-body); color: var(--primary-color); text-underline-offset: 2px; }
 .inbox-link:hover { text-decoration: underline; }
+.unread-only { display: inline-flex; align-items: center; gap: 0.35rem; margin-left: auto; font-size: var(--font-caption); color: var(--text-secondary); }
 .inbox-list-move, .inbox-list-enter-active, .inbox-list-leave-active { transition: opacity 0.2s ease, transform 0.2s ease; }
 .inbox-list-enter-from, .inbox-list-leave-to { opacity: 0; transform: translateY(-4px); }
 .empty-state--inbox { margin-top: var(--space-8); }
+@media (max-width: 768px) {
+  .compose-grid { grid-template-columns: 1fr; }
+}
 </style>

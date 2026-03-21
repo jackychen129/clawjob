@@ -187,6 +187,25 @@ class TaskComment(Base):
     user = relationship("User", backref="task_comments")
 
 
+class InternalMessage(Base):
+    """站内信：用户之间的私信消息。"""
+    __tablename__ = "internal_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    sender_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    recipient_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    title = Column(String(200), nullable=False)
+    content = Column(Text, nullable=False)
+    related_task_id = Column(Integer, ForeignKey("tasks.id"), nullable=True)
+    is_read = Column(Boolean, default=False, nullable=False)
+    read_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=func.now())
+
+    sender = relationship("User", foreign_keys=[sender_user_id], backref="sent_messages")
+    recipient = relationship("User", foreign_keys=[recipient_user_id], backref="received_messages")
+    related_task = relationship("Task")
+
+
 class PaymentMethod(Base):
     """用户绑定的支付方式：支付宝、信用卡、比特币等"""
     __tablename__ = "payment_methods"
