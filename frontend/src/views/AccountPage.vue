@@ -19,13 +19,13 @@
         <p><strong>{{ credits }}</strong> {{ t('account.points') }}</p>
       </section>
       <section class="card card-content">
-        <h3>API 密钥托管</h3>
-        <p class="hint">用于托管第三方模型/服务 API Key，仅展示脱敏值。</p>
+        <h3>{{ t('account.apiKeysTitle') || 'API 密钥托管' }}</h3>
+        <p class="hint">{{ t('account.apiKeysHint') || '用于托管第三方模型/服务 API Key，仅展示脱敏值。' }}</p>
         <div class="api-key-form">
-          <input v-model="apiKeyForm.provider" class="input" placeholder="provider（如 openai/anthropic）" />
-          <input v-model="apiKeyForm.label" class="input" placeholder="别名（如 生产主 Key）" />
-          <input v-model="apiKeyForm.secret" class="input" type="password" placeholder="输入 API Key" />
-          <Button type="button" :disabled="apiKeySaving" @click="createApiKey">保存密钥</Button>
+          <input v-model="apiKeyForm.provider" class="input" :placeholder="t('account.apiKeyProviderPlaceholder') || 'provider（如 openai/anthropic）'" />
+          <input v-model="apiKeyForm.label" class="input" :placeholder="t('account.apiKeyLabelPlaceholder') || '别名（如 生产主 Key）'" />
+          <input v-model="apiKeyForm.secret" class="input" type="password" :placeholder="t('account.apiKeySecretPlaceholder') || '输入 API Key'" />
+          <Button type="button" :disabled="apiKeySaving" @click="createApiKey">{{ t('account.apiKeySave') || '保存密钥' }}</Button>
         </div>
         <p v-if="apiKeyError" class="error-msg">{{ apiKeyError }}</p>
         <div class="api-key-list">
@@ -34,9 +34,9 @@
               <strong>{{ it.label }}</strong>
               <div class="hint mono">{{ it.provider }} · {{ it.secret_masked }}</div>
             </div>
-            <Button size="sm" variant="ghost" type="button" @click="removeApiKey(it.id)">删除</Button>
+            <Button size="sm" variant="ghost" type="button" @click="removeApiKey(it.id)">{{ t('account.apiKeyDelete') || '删除' }}</Button>
           </div>
-          <p v-if="!apiKeys.length" class="hint">暂无托管密钥</p>
+          <p v-if="!apiKeys.length" class="hint">{{ t('account.apiKeyEmpty') || '暂无托管密钥' }}</p>
         </div>
       </section>
     </template>
@@ -89,7 +89,7 @@ function createApiKey() {
   const label = apiKeyForm.value.label.trim()
   const secret = apiKeyForm.value.secret.trim()
   if (!provider || !label || secret.length < 8) {
-    apiKeyError.value = '请填写 provider、别名，且密钥至少 8 位'
+    apiKeyError.value = t('account.apiKeyValidationError') || '请填写 provider、别名，且密钥至少 8 位'
     return
   }
   apiKeySaving.value = true
@@ -98,7 +98,7 @@ function createApiKey() {
     apiKeyForm.value.secret = ''
     loadApiKeys()
   }).catch((e: any) => {
-    apiKeyError.value = e?.response?.data?.detail || '保存失败'
+    apiKeyError.value = e?.response?.data?.detail || t('account.apiKeySaveFailed') || '保存失败'
   }).finally(() => { apiKeySaving.value = false })
 }
 

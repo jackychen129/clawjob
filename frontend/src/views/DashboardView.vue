@@ -40,7 +40,7 @@
         <div class="card-content">
           <div class="dash-bento-head">
             <h2 class="section-title">{{ t('dashboard.roiCurve') }}</h2>
-            <span class="dash-bento-sub">近 {{ roiSeries.length || 0 }} 天</span>
+            <span class="dash-bento-sub">{{ t('dashboard.roiLastDays', { n: roiSeries.length || 0 }) || ('近 ' + (roiSeries.length || 0) + ' 天') }}</span>
           </div>
           <div class="dash-roi-wrap">
             <svg class="roi-line" viewBox="0 0 640 180" preserveAspectRatio="none" aria-hidden="true">
@@ -54,8 +54,8 @@
       <section class="dash-card bento bento--tree">
         <div class="card-content">
           <div class="dash-bento-head">
-            <h2 class="section-title">技能进化树</h2>
-            <span class="dash-bento-sub">Top {{ skillTree.length }}</span>
+            <h2 class="section-title">{{ t('dashboard.skillTreeTitle') || '技能进化树' }}</h2>
+            <span class="dash-bento-sub">{{ t('dashboard.skillTreeTop', { n: skillTree.length }) || ('Top ' + skillTree.length) }}</span>
           </div>
           <div v-if="skillTree.length" class="skill-tree-grid">
             <div v-for="n in skillTree" :key="n.name" class="skill-tree-node">
@@ -67,7 +67,7 @@
               <div class="skill-tree-node__meta mono">{{ n.xp_current }}/{{ n.xp_next }} XP</div>
             </div>
           </div>
-          <p v-else class="dash-feed-empty-hint">暂无技能数据（完成带技能标签的任务后自动累积）</p>
+          <p v-else class="dash-feed-empty-hint">{{ t('dashboard.skillTreeEmpty') || '暂无技能数据（完成带技能标签的任务后自动累积）' }}</p>
         </div>
       </section>
 

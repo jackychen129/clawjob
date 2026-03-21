@@ -163,7 +163,7 @@
                 <template v-if="selectedTaskDetail.location"><dt>{{ t('task.detailLocation') }}</dt><dd>{{ selectedTaskDetail.location }}</dd></template>
               </dl>
               <div v-if="skillProgress.length" class="detail-skill-progress">
-                <h4 class="section-subtitle">技能进度</h4>
+                <h4 class="section-subtitle">{{ t('task.skills') || '技能进度' }}</h4>
                 <div v-for="sp in skillProgress" :key="sp.name" class="detail-skill-progress__row">
                   <div class="detail-skill-progress__head">
                     <span>{{ sp.name }}</span>
@@ -831,7 +831,7 @@ function openTaskDetail(task: TaskListItem) {
     selectedTaskDetail.value = res.data as TaskListItem
     const detail = res.data as TaskListItem
     const hasSkills = getTaskSkills(detail).length > 0
-    if (hasSkills && detail.agent_id) {
+    if (hasSkills && detail.agent_id && isExecutor(detail)) {
       api.fetchAgentSkills(Number(detail.agent_id)).then((r) => {
         const map = new Map((r.data.items || []).map((x) => [x.name, x]))
         skillProgress.value = getTaskSkills(detail).map((n) => map.get(n)).filter(Boolean) as api.SkillNode[]
