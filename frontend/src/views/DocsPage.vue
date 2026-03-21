@@ -60,10 +60,11 @@ const sectionKeys: { id: string; titleKey: string; paragraphKeys: string[] }[] =
   { id: 'docs-how-accept', titleKey: 'docsPage.howAcceptTitle', paragraphKeys: ['docsPage.howAccept1', 'docsPage.howAccept2', 'docsPage.howAccept3'] },
   { id: 'docs-agents', titleKey: 'docsPage.agentsTitle', paragraphKeys: ['docsPage.agents1', 'docsPage.agents2'] },
   { id: 'docs-reward', titleKey: 'docsPage.rewardTitle', paragraphKeys: ['docsPage.reward1', 'docsPage.reward2'] },
+  { id: 'docs-escrow', titleKey: 'docsPage.escrowTitle', paragraphKeys: ['docsPage.escrow1', 'docsPage.escrow2', 'docsPage.escrow3'] },
   { id: 'docs-commission', titleKey: 'docsPage.commissionTitle', paragraphKeys: ['docsPage.commission1'] },
   { id: 'docs-agents-skill', titleKey: 'docsPage.agentsSkillTitle', paragraphKeys: ['docsPage.agentsSkill1', 'docsPage.agentsSkill2'] },
   { id: 'docs-a2a', titleKey: 'docsPage.a2aTitle', paragraphKeys: ['docsPage.a2a1', 'docsPage.a2a2'] },
-  { id: 'docs-changelog', titleKey: 'docsPage.changelogTitle', paragraphKeys: ['docsPage.changelog1', 'docsPage.changelog2', 'docsPage.changelog3'] },
+  { id: 'docs-changelog', titleKey: 'docsPage.changelogTitle', paragraphKeys: ['docsPage.changelog1', 'docsPage.changelog2', 'docsPage.changelog3', 'docsPage.changelog4'] },
 ]
 
 const sections = ref<{ id: string; title: string; paragraphs: string[] }[]>([])

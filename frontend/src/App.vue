@@ -447,6 +447,30 @@
                 <label class="form-label">{{ t('agentGuide.fieldWebhook') }}</label>
                 <Input v-model="publishForm.completion_webhook_url" class="w-full" type="url" :placeholder="t('task.webhookPlaceholder')" />
               </div>
+              <div class="form-group escrow-block">
+                <label class="form-label flex items-center gap-2">
+                  <input v-model="publishForm.escrow_enabled" type="checkbox" class="rounded border-input" />
+                  {{ t('task.escrowEnable') || '启用分阶段托管（里程碑）' }}
+                </label>
+                <p class="form-hint">{{ t('task.escrowHint') || '至少 2 个里程碑，权重之和须为 1。' }}</p>
+                <div v-if="publishForm.escrow_enabled" class="escrow-rows">
+                  <div v-for="(row, idx) in publishForm.escrow_rows" :key="idx" class="escrow-row-wrap">
+                    <div class="escrow-row">
+                      <Input v-model="row.title" type="text" :placeholder="t('task.escrowMilestoneTitle') || '里程碑名称'" />
+                      <input v-model.number="row.weight" type="number" step="0.01" min="0" max="1" class="input input-num escrow-weight" :placeholder="t('task.escrowWeight') || '权重'" />
+                      <Button v-if="publishForm.escrow_rows.length > 2" type="button" size="sm" variant="ghost" @click="removeEscrowRowHome(idx)">×</Button>
+                    </div>
+                    <Textarea
+                      v-model="row.acceptance_criteria"
+                      rows="2"
+                      class="escrow-criteria"
+                      :placeholder="t('task.escrowAcceptanceCriteriaPlaceholder') || '里程碑验收要点（可选）'"
+                    />
+                  </div>
+                  <Button type="button" size="sm" variant="secondary" @click="addEscrowRowHome">{{ t('task.escrowAdd') || '添加里程碑' }}</Button>
+                  <p class="form-hint escrow-sum">{{ t('task.escrowWeightSum') || '权重合计' }}：{{ escrowWeightSumHome.toFixed(4) }}</p>
+                </div>
+              </div>
             </template>
             <div class="step-actions">
               <Button type="button" variant="ghost" @click="saveDraft">{{ t('task.draftSave') || '保存草稿' }}</Button>
@@ -812,6 +836,11 @@ function applyTaskTemplateHome() {
   }
 }
 
+type EscrowRowHome = { title: string; weight: number | string; acceptance_criteria: string }
+const defaultEscrowRowsHome = (): EscrowRowHome[] => [
+  { title: '', weight: 0.5, acceptance_criteria: '' },
+  { title: '', weight: 0.5, acceptance_criteria: '' },
+]
 const publishForm = reactive({
   title: '',
   description: '',
@@ -824,7 +853,24 @@ const publishForm = reactive({
   location: '',
   duration_estimate: '',
   skills_text: '',
+  escrow_enabled: false,
+  escrow_rows: defaultEscrowRowsHome(),
 })
+const escrowWeightSumHome = computed(() =>
+  publishForm.escrow_rows.reduce((s, r) => s + (Number(r.weight) || 0), 0),
+)
+function addEscrowRowHome() {
+  publishForm.escrow_rows.push({ title: '', weight: 0, acceptance_criteria: '' })
+}
+function removeEscrowRowHome(idx: number) {
+  if (publishForm.escrow_rows.length > 2) publishForm.escrow_rows.splice(idx, 1)
+}
+watch(
+  () => publishForm.reward_points,
+  (v) => {
+    if (Math.max(0, Number(v) || 0) <= 0) publishForm.escrow_enabled = false
+  },
+)
 const publishLoading = ref(false)
 const publishError = ref('')
 
@@ -879,6 +925,8 @@ function saveDraft() {
     duration_estimate: publishForm.duration_estimate,
     skills_text: publishForm.skills_text,
     invited_agent_ids: publishForm.invited_agent_ids,
+    escrow_enabled: publishForm.escrow_enabled,
+    escrow_rows: publishForm.escrow_rows.map((r) => ({ ...r })),
   }
   try {
     localStorage.setItem(PUBLISH_DRAFT_KEY, JSON.stringify(payload))
@@ -902,6 +950,14 @@ function loadDraft() {
   if (typeof d.duration_estimate === 'string') publishForm.duration_estimate = d.duration_estimate
   if (typeof d.skills_text === 'string') publishForm.skills_text = d.skills_text
   if (Array.isArray(d.invited_agent_ids)) publishForm.invited_agent_ids = d.invited_agent_ids.map(Number).filter(Boolean)
+  if (typeof d.escrow_enabled === 'boolean') publishForm.escrow_enabled = d.escrow_enabled
+  if (Array.isArray(d.escrow_rows) && d.escrow_rows.length) {
+    publishForm.escrow_rows = (d.escrow_rows as EscrowRowHome[]).map((r) => ({
+      title: String(r.title ?? ''),
+      weight: Number(r.weight) || 0,
+      acceptance_criteria: String((r as any).acceptance_criteria ?? ''),
+    }))
+  }
 }
 function openCreateTaskModalWithDraft() {
   loadDraft()
@@ -923,6 +979,8 @@ function clearDraft() {
   publishForm.duration_estimate = ''
   publishForm.skills_text = ''
   publishForm.invited_agent_ids = []
+  publishForm.escrow_enabled = false
+  publishForm.escrow_rows = defaultEscrowRowsHome()
 }
 
 const SKILL_BANNER_KEY = 'clawjob_skill_banner_dismissed'
@@ -1268,6 +1326,28 @@ function doPublish() {
     publishLoading.value = false
     return
   }
+  let escrow_milestones: Array<{ title: string; weight: number; acceptance_criteria?: string }> | undefined
+  if (reward > 0 && publishForm.escrow_enabled) {
+    const rows = publishForm.escrow_rows
+      .map((r) => ({
+        title: (r.title || '').trim(),
+        weight: Number(r.weight) || 0,
+        acceptance_criteria: (r.acceptance_criteria || '').trim(),
+      }))
+      .filter((r) => r.title)
+    if (rows.length < 2) {
+      publishError.value = t('task.escrowErrorMin') || '托管模式至少需要 2 个里程碑并填写标题'
+      publishLoading.value = false
+      return
+    }
+    const sum = rows.reduce((s, r) => s + r.weight, 0)
+    if (Math.abs(sum - 1) > 0.001) {
+      publishError.value = t('task.escrowErrorWeights') || '各里程碑权重之和须为 1'
+      publishLoading.value = false
+      return
+    }
+    escrow_milestones = rows
+  }
   const skills = publishForm.skills_text ? publishForm.skills_text.split(/[,，\s]+/).map((s) => s.trim()).filter(Boolean) : undefined
   api.publishTask({
     title: publishForm.title.trim(),
@@ -1281,6 +1361,7 @@ function doPublish() {
     location: (publishForm.location || '').trim() || undefined,
     duration_estimate: (publishForm.duration_estimate || '').trim() || undefined,
     skills,
+    escrow_milestones: escrow_milestones,
   }).then(() => {
     clearDraft()
     publishForm.title = ''
@@ -1294,6 +1375,8 @@ function doPublish() {
     publishForm.location = ''
     publishForm.duration_estimate = ''
     publishForm.skills_text = ''
+    publishForm.escrow_enabled = false
+    publishForm.escrow_rows = defaultEscrowRowsHome()
     showSuccess(t('task.publishSuccess'))
     if (showCreateTaskModal.value) closeCreateTaskModal()
     loadAccountMe()
@@ -1553,6 +1636,14 @@ onUnmounted(() => {
 .badge--skill-token { background: rgba(34, 197, 94, 0.15); color: var(--primary-color); font-size: 0.7rem; }
 .form-inline--agent { flex-wrap: wrap; }
 .form-inline--agent .input { min-width: 10rem; }
+.escrow-block { margin-top: 0.5rem; padding: 0.75rem 1rem; border-radius: var(--radius-md, 8px); border: 1px solid rgba(255,255,255,0.08); background: rgba(0,0,0,0.12); }
+.escrow-rows { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem; }
+.escrow-row-wrap { display: flex; flex-direction: column; gap: 0.45rem; }
+.escrow-row { display: grid; grid-template-columns: 1fr 5.5rem auto; gap: 0.5rem; align-items: center; }
+@media (max-width: 520px) { .escrow-row { grid-template-columns: 1fr 4.5rem auto; } }
+.escrow-weight { max-width: 100%; }
+.escrow-criteria { width: 100%; }
+.escrow-sum { margin-top: 0.35rem; font-weight: 500; color: var(--primary-color); }
 
 /* 首页 Dashboard：KPI + 实况 + 排行榜 */
 .home-dashboard { margin-bottom: var(--space-6, 1.5rem); }

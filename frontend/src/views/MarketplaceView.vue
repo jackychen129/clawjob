@@ -15,16 +15,16 @@
           <CardContent class="pt-6">
             <div class="rental-card-head">
               <span class="rental-card-title">{{ t('rental.escrow') || '托管协议 (Escrow)' }}</span>
-              <span class="soon-badge" :title="t('rental.placeholder') || '即将上线'">{{ t('marketplace.soon') || '即将上线' }}</span>
+              <span class="live-badge" :title="t('marketplace.escrowLive') || '已支持'">{{ t('marketplace.escrowLive') || '已支持' }}</span>
             </div>
             <ul class="rental-list">
-              <li>托管协议生成：确认 Leader/Worker、结算与验收规则。</li>
-              <li>运行期中转：任务结果与佣金自动对齐（协议层）。</li>
-              <li>可视化进度：Escrow 状态与里程碑展示（协议层）。</li>
+              <li>{{ t('marketplace.escrowBullet1') }}</li>
+              <li>{{ t('marketplace.escrowBullet2') }}</li>
+              <li>{{ t('marketplace.escrowBullet3') }}</li>
             </ul>
             <div class="rental-actions">
-              <Button type="button" disabled variant="secondary" size="sm">{{ t('marketplace.createEscrowSoon') || '创建 Escrow（即将上线）' }}</Button>
-              <Button type="button" disabled variant="ghost" size="sm">{{ t('marketplace.escrowSettlementSoon') || 'Escrow 结算（即将上线）' }}</Button>
+              <Button :as="RouterLink" to="/tasks" variant="secondary" size="sm">{{ t('marketplace.escrowPublishCta') }}</Button>
+              <Button :as="RouterLink" to="/docs#docs-escrow" variant="ghost" size="sm">{{ t('marketplace.escrowDocsLink') }}</Button>
             </div>
           </CardContent>
         </Card>
@@ -95,6 +95,9 @@
               <span v-if="tpl.verified" class="verified-badge" :title="t('playbook.verifiedByProject') || '平台验证'">✓</span>
             </div>
             <p v-if="tpl.description" class="template-desc">{{ tpl.description }}</p>
+            <p v-if="tpl.publisher_username" class="template-publisher">
+              {{ t('marketplace.publisher') || '发布者' }}：{{ tpl.publisher_username }}
+            </p>
           </CardHeader>
 
           <CardContent class="pt-0">
@@ -143,6 +146,9 @@
               <span v-if="s.verified" class="verified-badge" :title="t('marketplace.verifiedByProject') || '平台验证'">✓</span>
             </div>
             <p v-if="s.description" class="template-desc">{{ s.description }}</p>
+            <p v-if="s.publisher_username" class="template-publisher">
+              {{ t('marketplace.publisher') || '发布者' }}：{{ s.publisher_username }}
+            </p>
           </CardHeader>
 
           <CardContent class="pt-0">
@@ -183,9 +189,9 @@ const skillsLoading = ref(true)
 onMounted(async () => {
   try {
     const [listRes, statsRes, skillsRes, skillsStatsRes] = await Promise.all([
-      api.fetchAgentTemplates().catch(() => ({ data: { items: [] } })),
+      api.fetchAgentTemplates({ sort: 'tasks_desc', limit: 50 }).catch(() => ({ data: { items: [] } })),
       api.fetchAgentTemplateStats().catch(() => ({ data: null })),
-      api.fetchSkills().catch(() => ({ data: { items: [] } })),
+      api.fetchSkills({ sort: 'tasks_desc', limit: 50 }).catch(() => ({ data: { items: [] } })),
       api.fetchSkillStats().catch(() => ({ data: null })),
     ])
     templates.value = listRes.data?.items ?? []
@@ -265,6 +271,16 @@ onMounted(async () => {
   color: rgba(34, 197, 94, 0.95);
 }
 
+.live-badge {
+  font-size: var(--font-caption);
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius-full);
+  background: rgba(34, 197, 94, 0.14);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  color: rgba(34, 197, 94, 0.98);
+  white-space: nowrap;
+}
+
 .market-stats {
   display: flex;
   flex-wrap: wrap;
@@ -311,6 +327,7 @@ onMounted(async () => {
 }
 
 .template-desc { font-size: var(--font-caption); color: var(--text-secondary); margin: var(--space-1) 0 0; line-height: 1.45; }
+.template-publisher { font-size: var(--font-caption); color: var(--text-secondary); margin: var(--space-2) 0 0; opacity: 0.9; }
 .template-meta { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-bottom: var(--space-3); font-size: var(--font-caption); color: var(--text-secondary); }
 .template-stat { font-weight: 500; color: var(--primary-color); }
 .template-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
