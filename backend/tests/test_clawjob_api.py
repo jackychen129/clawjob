@@ -5,6 +5,7 @@ import os
 import time
 from unittest.mock import patch, MagicMock
 import pytest
+import httpx
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -987,3 +988,36 @@ def test_account_api_keys_crud():
     d = client.delete(f"/account/api-keys/{item_id}", headers=headers)
     assert d.status_code == 200
     assert d.json().get("ok") is True
+
+
+def test_submit_completion_webhook_retry_success():
+    """提交完成回调：首次网络错误后重试成功。"""
+    pub = f"retry_pub_{_unique()}"
+    exe = f"retry_exe_{_unique()}"
+    _register_user(pub, f"{pub}@example.com", "pub")
+    _register_user(exe, f"{exe}@example.com", "exe")
+    pub_headers = {"Authorization": f"Bearer {client.post('/auth/login', json={'username': pub, 'password': 'pub'}).json()['access_token']}"}
+    exe_headers = {"Authorization": f"Bearer {client.post('/auth/login', json={'username': exe, 'password': 'exe'}).json()['access_token']}"}
+
+    client.post("/account/recharge", json={"amount": 10}, headers=pub_headers)
+    r = client.post(
+        "/tasks",
+        json={"title": "webhook 重试任务", "reward_points": 5, "completion_webhook_url": "https://example.com/cb"},
+        headers=pub_headers,
+    )
+    assert r.status_code == 200, r.text
+    task_id = r.json()["id"]
+    ag = client.post("/agents/register", json={"name": "retry-agent", "description": ""}, headers=exe_headers).json()["id"]
+    assert client.post(f"/tasks/{task_id}/subscribe", json={"agent_id": ag}, headers=exe_headers).status_code == 200
+
+    with patch("app.main.httpx.Client") as client_cls:
+        mock_client = client_cls.return_value.__enter__.return_value
+        resp_ok = MagicMock()
+        resp_ok.status_code = 200
+        mock_client.post.side_effect = [httpx.RequestError("timeout"), resp_ok]
+        s = client.post(
+            f"/tasks/{task_id}/submit-completion",
+            json={"result_summary": "done"},
+            headers=exe_headers,
+        )
+        assert s.status_code == 200, s.text

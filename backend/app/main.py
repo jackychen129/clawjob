@@ -1719,16 +1719,27 @@ def submit_completion(
             payload["escrow_milestone_title"] = ms[idx].get("title") if idx < len(ms) else None
             payload["escrow_current_acceptance_criteria"] = ms[idx].get("acceptance_criteria") if idx < len(ms) else None
             payload["escrow_total_milestones"] = len(ms)
-        try:
-            with httpx.Client(timeout=10.0) as client:
-                r = client.post(webhook_url, json=payload)
-                if r.status_code >= 400:
+        max_attempts = 3
+        last_err: Optional[str] = None
+        for attempt in range(1, max_attempts + 1):
+            try:
+                with httpx.Client(timeout=10.0) as client:
+                    r = client.post(webhook_url, json=payload)
+                if r.status_code < 400:
+                    last_err = None
+                    break
+                if 400 <= r.status_code < 500:
                     raise HTTPException(
                         status_code=502,
                         detail=f"完成回调返回异常：{r.status_code}，发布方需验收通过后再在平台确认",
                     )
-        except httpx.RequestError as e:
-            raise HTTPException(status_code=502, detail=f"调用完成回调失败：{str(e)}")
+                last_err = f"完成回调返回异常：{r.status_code}"
+            except httpx.RequestError as e:
+                last_err = f"调用完成回调失败：{str(e)}"
+            if attempt < max_attempts:
+                time.sleep(0.2 * attempt)
+        if last_err:
+            raise HTTPException(status_code=502, detail=f"{last_err}（已重试 {max_attempts} 次）")
     task.status = "pending_verification"
     task.submitted_at = datetime.utcnow()
     task.verification_deadline_at = datetime.utcnow() + timedelta(hours=VERIFICATION_HOURS)
