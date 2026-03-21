@@ -15,8 +15,10 @@ from app.database.relational_db import (
     Task,
     Agent,
     UserCommissionRecord,
+    UserApiCredential,
 )
-from app.security import get_current_user
+from app.security import get_current_user, SECRET_KEY
+import base64
 
 router = APIRouter(prefix="/account", tags=["account"])
 
@@ -45,6 +47,108 @@ class ReceivingAccountBody(BaseModel):
     account_type: str  # alipay, bank_card
     account_name: str  # 户名/实名
     account_number: str  # 账号/卡号（可脱敏，如 ***1234）
+
+
+class ApiKeyCreateBody(BaseModel):
+    provider: str
+    label: str
+    secret: str
+
+
+def _mask_secret(secret: str) -> str:
+    s = (secret or "").strip()
+    if len(s) <= 8:
+        return "*" * len(s)
+    return f"{s[:4]}***{s[-4:]}"
+
+
+def _xor_encrypt(plain: str) -> str:
+    # 轻量密文存储（避免明文落库）；后续可替换为 KMS/专业密钥管理。
+    p = (plain or "").encode("utf-8")
+    k = (SECRET_KEY or "clawjob-secret").encode("utf-8") or b"clawjob-secret"
+    out = bytes([b ^ k[i % len(k)] for i, b in enumerate(p)])
+    return base64.b64encode(out).decode("utf-8")
+
+
+# ---------- API 密钥托管 ----------
+@router.get("/api-keys")
+def list_api_keys(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    uid = int(current_user["user_id"])
+    rows = (
+        db.query(UserApiCredential)
+        .filter(UserApiCredential.user_id == uid)
+        .order_by(UserApiCredential.updated_at.desc(), UserApiCredential.id.desc())
+        .all()
+    )
+    return {
+        "items": [
+            {
+                "id": r.id,
+                "provider": r.provider,
+                "label": r.label,
+                "secret_masked": r.secret_masked,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+                "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+            }
+            for r in rows
+        ]
+    }
+
+
+@router.post("/api-keys")
+def create_api_key(
+    body: ApiKeyCreateBody,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    uid = int(current_user["user_id"])
+    provider = (body.provider or "").strip().lower()[:64]
+    label = (body.label or "").strip()[:128]
+    secret = (body.secret or "").strip()
+    if not provider:
+        raise HTTPException(status_code=400, detail="provider 不能为空")
+    if not label:
+        raise HTTPException(status_code=400, detail="label 不能为空")
+    if len(secret) < 8:
+        raise HTTPException(status_code=400, detail="secret 长度不能少于 8")
+    row = UserApiCredential(
+        user_id=uid,
+        provider=provider,
+        label=label,
+        secret_cipher=_xor_encrypt(secret),
+        secret_masked=_mask_secret(secret),
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return {
+        "id": row.id,
+        "provider": row.provider,
+        "label": row.label,
+        "secret_masked": row.secret_masked,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+    }
+
+
+@router.delete("/api-keys/{key_id}")
+def delete_api_key(
+    key_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    uid = int(current_user["user_id"])
+    row = db.query(UserApiCredential).filter(UserApiCredential.id == key_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="API key 不存在")
+    if row.user_id != uid:
+        raise HTTPException(status_code=403, detail="无权删除该 API key")
+    db.delete(row)
+    db.commit()
+    return {"ok": True, "id": key_id}
 
 
 # ---------- 收款账户（用户配置的佣金收款）----------

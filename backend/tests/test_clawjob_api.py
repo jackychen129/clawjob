@@ -962,3 +962,28 @@ def test_admin_disputed_tasks_list():
     assert rr.status_code == 200
     items = rr.json().get("items") or []
     assert any(int(it.get("id", 0)) == task_id for it in items)
+
+
+def test_account_api_keys_crud():
+    u = f"ak_{_unique()}"
+    _register_user(u, f"{u}@example.com", "pw")
+    token = client.post('/auth/login', json={'username': u, 'password': 'pw'}).json()['access_token']
+    headers = {"Authorization": f"Bearer {token}"}
+
+    c = client.post(
+        "/account/api-keys",
+        json={"provider": "openai", "label": "主密钥", "secret": "sk-test-123456789"},
+        headers=headers,
+    )
+    assert c.status_code == 200, c.text
+    item_id = c.json().get("id")
+    assert c.json().get("secret_masked")
+
+    l = client.get("/account/api-keys", headers=headers)
+    assert l.status_code == 200
+    items = l.json().get("items") or []
+    assert any(int(x.get("id", 0)) == int(item_id) for x in items)
+
+    d = client.delete(f"/account/api-keys/{item_id}", headers=headers)
+    assert d.status_code == 200
+    assert d.json().get("ok") is True

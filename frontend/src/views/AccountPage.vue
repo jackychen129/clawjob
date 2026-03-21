@@ -18,6 +18,27 @@
         <h3>{{ t('account.balance') }}</h3>
         <p><strong>{{ credits }}</strong> {{ t('account.points') }}</p>
       </section>
+      <section class="card card-content">
+        <h3>API 密钥托管</h3>
+        <p class="hint">用于托管第三方模型/服务 API Key，仅展示脱敏值。</p>
+        <div class="api-key-form">
+          <input v-model="apiKeyForm.provider" class="input" placeholder="provider（如 openai/anthropic）" />
+          <input v-model="apiKeyForm.label" class="input" placeholder="别名（如 生产主 Key）" />
+          <input v-model="apiKeyForm.secret" class="input" type="password" placeholder="输入 API Key" />
+          <Button type="button" :disabled="apiKeySaving" @click="createApiKey">保存密钥</Button>
+        </div>
+        <p v-if="apiKeyError" class="error-msg">{{ apiKeyError }}</p>
+        <div class="api-key-list">
+          <div v-for="it in apiKeys" :key="it.id" class="api-key-item">
+            <div>
+              <strong>{{ it.label }}</strong>
+              <div class="hint mono">{{ it.provider }} · {{ it.secret_masked }}</div>
+            </div>
+            <Button size="sm" variant="ghost" type="button" @click="removeApiKey(it.id)">删除</Button>
+          </div>
+          <p v-if="!apiKeys.length" class="hint">暂无托管密钥</p>
+        </div>
+      </section>
     </template>
     <div class="account-footer-actions">
       <Button :as="RouterLink" to="/" variant="secondary">{{ t('common.home') }}</Button>
@@ -38,6 +59,10 @@ const auth = useAuthStore()
 const credits = ref(0)
 const copyTokenDone = ref(false)
 const copyEnvDone = ref(false)
+const apiKeys = ref<api.UserApiKeyItem[]>([])
+const apiKeySaving = ref(false)
+const apiKeyError = ref('')
+const apiKeyForm = ref({ provider: 'openai', label: '', secret: '' })
 
 const emit = defineEmits<{ (e: 'credits-updated'): void }>()
 
@@ -47,6 +72,38 @@ function loadMe() {
     credits.value = res.data?.credits ?? 0
     emit('credits-updated')
   }).catch(() => {})
+}
+
+function loadApiKeys() {
+  if (!auth.token) return
+  api.listAccountApiKeys().then((res) => {
+    apiKeys.value = res.data.items || []
+  }).catch(() => {
+    apiKeys.value = []
+  })
+}
+
+function createApiKey() {
+  apiKeyError.value = ''
+  const provider = apiKeyForm.value.provider.trim()
+  const label = apiKeyForm.value.label.trim()
+  const secret = apiKeyForm.value.secret.trim()
+  if (!provider || !label || secret.length < 8) {
+    apiKeyError.value = '请填写 provider、别名，且密钥至少 8 位'
+    return
+  }
+  apiKeySaving.value = true
+  api.createAccountApiKey({ provider, label, secret }).then(() => {
+    apiKeyForm.value.label = ''
+    apiKeyForm.value.secret = ''
+    loadApiKeys()
+  }).catch((e: any) => {
+    apiKeyError.value = e?.response?.data?.detail || '保存失败'
+  }).finally(() => { apiKeySaving.value = false })
+}
+
+function removeApiKey(id: number) {
+  api.deleteAccountApiKey(id).then(() => loadApiKeys()).catch(() => {})
 }
 
 async function copyToken() {
@@ -73,7 +130,10 @@ async function copyEnvSnippet() {
   }
 }
 
-onMounted(() => loadMe())
+onMounted(() => {
+  loadMe()
+  loadApiKeys()
+})
 </script>
 
 <style scoped>
@@ -83,4 +143,7 @@ onMounted(() => loadMe())
 .account-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-3); }
 .hint { color: var(--text-secondary); font-size: var(--font-body); margin: 0; }
 .account-footer-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-2); }
+.api-key-form { display: grid; grid-template-columns: 1fr; gap: var(--space-2); margin-top: var(--space-3); }
+.api-key-list { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-3); }
+.api-key-item { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); border: var(--border-hairline); border-radius: var(--radius-md); padding: var(--space-2) var(--space-3); }
 </style>

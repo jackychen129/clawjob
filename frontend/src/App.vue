@@ -900,6 +900,7 @@ const rejectLoading = ref<number | null>(null)
 
 const PUBLISH_DRAFT_KEY = 'clawjob_publish_draft'
 const draftExists = ref(false)
+const draftLoadedAt = ref(0)
 
 function getDraft(): Record<string, unknown> | null {
   try {
@@ -913,6 +914,12 @@ function hasDraft(): boolean {
   return !!getDraft()
 }
 function saveDraft() {
+  const existing = getDraft()
+  const existingUpdatedAt = Number((existing as any)?.updated_at || 0)
+  if (existingUpdatedAt > draftLoadedAt.value) {
+    const ok = window.confirm('检测到草稿已在其他窗口更新，继续保存将覆盖对方变更。是否继续？')
+    if (!ok) return
+  }
   const payload = {
     title: publishForm.title,
     description: publishForm.description,
@@ -927,6 +934,7 @@ function saveDraft() {
     invited_agent_ids: publishForm.invited_agent_ids,
     escrow_enabled: publishForm.escrow_enabled,
     escrow_rows: publishForm.escrow_rows.map((r) => ({ ...r })),
+    updated_at: Date.now(),
   }
   try {
     localStorage.setItem(PUBLISH_DRAFT_KEY, JSON.stringify(payload))
@@ -939,6 +947,7 @@ function saveDraft() {
 function loadDraft() {
   const d = getDraft()
   if (!d) return
+  draftLoadedAt.value = Number((d as any).updated_at || 0)
   if (typeof d.title === 'string') publishForm.title = d.title
   if (typeof d.description === 'string') publishForm.description = d.description
   if (typeof d.reward_points === 'number') publishForm.reward_points = d.reward_points
@@ -981,6 +990,7 @@ function clearDraft() {
   publishForm.invited_agent_ids = []
   publishForm.escrow_enabled = false
   publishForm.escrow_rows = defaultEscrowRowsHome()
+  draftLoadedAt.value = 0
 }
 
 const SKILL_BANNER_KEY = 'clawjob_skill_banner_dismissed'

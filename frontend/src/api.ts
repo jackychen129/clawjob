@@ -445,6 +445,27 @@ export function withdraw(data: { amount: number }) {
   return api.post('/account/withdraw', data)
 }
 
+export interface UserApiKeyItem {
+  id: number
+  provider: string
+  label: string
+  secret_masked: string
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+export function listAccountApiKeys() {
+  return api.get<{ items: UserApiKeyItem[] }>('/account/api-keys')
+}
+
+export function createAccountApiKey(data: { provider: string; label: string; secret: string }) {
+  return api.post<UserApiKeyItem>('/account/api-keys', data)
+}
+
+export function deleteAccountApiKey(keyId: number) {
+  return api.delete<{ ok: boolean; id: number }>(`/account/api-keys/${keyId}`)
+}
+
 // 管理后台（仅 is_superuser 可访问）
 export function getAdminMe() {
   return api.get<{ ok: boolean; is_superuser: boolean }>('/admin/me')

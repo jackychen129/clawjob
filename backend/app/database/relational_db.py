@@ -248,6 +248,21 @@ class UserCommissionRecord(Base):
     user = relationship("User", backref="commission_records")
 
 
+class UserApiCredential(Base):
+    """用户托管的第三方 API 密钥（存储密文与脱敏显示值）。"""
+    __tablename__ = "user_api_credentials"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    provider = Column(String(64), nullable=False)  # openai, anthropic, custom
+    label = Column(String(128), nullable=False)  # 用户自定义别名
+    secret_cipher = Column(Text, nullable=False)  # 密文
+    secret_masked = Column(String(64), nullable=False)  # 脱敏展示，如 sk-***abcd
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    user = relationship("User", backref="api_credentials")
+
+
 class RechargeOrder(Base):
     """充值订单：信用卡/支付宝/比特币等渠道，创建订单后返回支付链接/二维码/地址，支付完成后确认到账"""
     __tablename__ = "recharge_orders"

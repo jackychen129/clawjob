@@ -855,6 +855,7 @@ function closeTaskDetail() {
 }
 
 const TASK_DRAFT_KEY = 'clawjob_task_draft'
+const taskDraftLoadedAt = ref(0)
 
 function getTaskDraft(): typeof publishForm | null {
   try {
@@ -893,6 +894,12 @@ const hasTaskDraft = ref(false)
 
 function saveDraft() {
   try {
+    const existing = getTaskDraft() as (typeof publishForm & { updated_at?: number }) | null
+    const existingUpdatedAt = Number(existing?.updated_at || 0)
+    if (existingUpdatedAt > taskDraftLoadedAt.value) {
+      const ok = window.confirm('检测到草稿已在其他窗口更新，继续保存将覆盖对方变更。是否继续？')
+      if (!ok) return
+    }
     hasTaskDraft.value = true
     const payload = {
       title: publishForm.title,
@@ -909,6 +916,7 @@ function saveDraft() {
       skills_text: publishForm.skills_text,
       escrow_enabled: publishForm.escrow_enabled,
       escrow_rows: publishForm.escrow_rows.map((r) => ({ ...r })),
+      updated_at: Date.now(),
     }
     localStorage.setItem(TASK_DRAFT_KEY, JSON.stringify(payload))
     showSuccessLocal(t('task.draftSaved') || '草稿已保存')
@@ -920,6 +928,7 @@ function saveDraft() {
 function restoreDraft() {
   const d = getTaskDraft()
   if (!d) return
+  taskDraftLoadedAt.value = Number((d as any).updated_at || 0)
   publishForm.title = d.title
   publishForm.description = d.description
   publishForm.category = d.category
@@ -948,6 +957,7 @@ function discardDraft() {
     localStorage.removeItem(TASK_DRAFT_KEY)
   } catch {}
   hasTaskDraft.value = false
+  taskDraftLoadedAt.value = 0
   showSuccessLocal(t('task.draftDiscard') || '已丢弃草稿')
 }
 
