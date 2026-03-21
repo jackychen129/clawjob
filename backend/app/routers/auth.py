@@ -18,7 +18,7 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.database.relational_db import User, VerificationCode, Agent, SystemLog, CreditTransaction, get_db
+from app.database.relational_db import User, VerificationCode, Agent, Task, TaskSubscription, SystemLog, CreditTransaction, get_db
 from app.security import get_password_hash, create_access_token, verify_password
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -52,6 +52,42 @@ class RegisterViaSkillBody(BaseModel):
     agent_name: str
     description: str = ""
     agent_type: str = "general"
+
+
+CLAWJOB_SYSTEM_USERNAME = "clawjob_system"
+CLAWJOB_SYSTEM_AGENT_NAME = "clawjob-agent"
+SKILL_REGISTER_BONUS_CREDITS = 500
+
+
+def _get_or_create_clawjob_system_agent(db: Session):
+    """获取或创建平台引导 Agent，用于首条握手任务自动完成。"""
+    user = db.query(User).filter(User.username == CLAWJOB_SYSTEM_USERNAME).first()
+    if not user:
+        user = User(
+            username=CLAWJOB_SYSTEM_USERNAME,
+            email="system@clawjob.local",
+            hashed_password="",
+        )
+        db.add(user)
+        db.flush()
+    agent = db.query(Agent).filter(
+        Agent.owner_id == user.id,
+        Agent.name == CLAWJOB_SYSTEM_AGENT_NAME,
+    ).first()
+    if not agent:
+        agent = Agent(
+            name=CLAWJOB_SYSTEM_AGENT_NAME,
+            description="平台引导 Agent：新注册 Skill 用户的握手任务将由此 Agent 自动完成。",
+            agent_type="general",
+            category="api",
+            owner_id=user.id,
+            capabilities=[{"name": "clawjob", "category": "skill"}],
+            config={},
+            is_active=True,
+        )
+        db.add(agent)
+        db.flush()
+    return user, agent
 
 
 def _send_verification_email(email: str, code: str) -> str:
@@ -234,7 +270,8 @@ def register_via_skill(body: RegisterViaSkillBody, db: Session = Depends(get_db)
         user = User(
             username=username,
             email=email,
-            hashed_password=None,
+            hashed_password="",
+            credits=SKILL_REGISTER_BONUS_CREDITS,
         )
         db.add(user)
         db.flush()
@@ -247,6 +284,70 @@ def register_via_skill(body: RegisterViaSkillBody, db: Session = Depends(get_db)
             config={},
         )
         db.add(agent)
+        db.flush()
+
+        # 赠送注册任务点，便于用户继续发有奖励任务。
+        db.add(CreditTransaction(
+            user_id=user.id,
+            amount=SKILL_REGISTER_BONUS_CREDITS,
+            type="signup_bonus",
+            ref_id=None,
+            remark=f"通过 ClawJob Skill 注册赠送 {SKILL_REGISTER_BONUS_CREDITS} 点",
+        ))
+
+        # 任务 1：握手任务（平台自动完成），让新用户立即看到闭环体验。
+        _, system_agent = _get_or_create_clawjob_system_agent(db)
+        handshake_task = Task(
+            title="ClawJob registration handshake (auto-confirm)",
+            description="新加载 agent 的握手任务，已由平台引导 Agent 自动完成。",
+            status="completed",
+            task_type="general",
+            priority="low",
+            owner_id=user.id,
+            creator_agent_id=agent.id,
+            agent_id=system_agent.id,
+            reward_points=0,
+            category="other",
+            input_data={"skills": ["clawjob", "openclaw"], "source": "register_via_skill"},
+            output_data={
+                "result_summary": "首个握手任务由 ClawJob 引导 Agent 自动完成，Skill 已可用。",
+                "auto_completed_by": CLAWJOB_SYSTEM_AGENT_NAME,
+            },
+            submitted_at=datetime.utcnow(),
+            completed_at=datetime.utcnow(),
+        )
+        db.add(handshake_task)
+        db.flush()
+        db.add(TaskSubscription(task_id=handshake_task.id, agent_id=system_agent.id))
+
+        # 任务 2：基于 OpenClaw + ClawJob Skill 上下文的真实开放任务，供他人接取。
+        context_task = Task(
+            title="【clawjob-skill】为 OpenClaw Agent 设计可复用任务执行模板",
+            description=(
+                "Context: 新注册的 OpenClaw Agent 已挂载 clawjob skill，需要一条可由他人接取并交付的真实任务。\n\n"
+                "Deliverables:\n"
+                "- 产出 1 份可复用的任务执行模板（含任务分解、执行步骤、回传格式）\n"
+                "- 给出 3 条不同类型任务的示例输入（开发/调研/运营）\n"
+                "- 补充失败重试与验收建议\n\n"
+                "Acceptance criteria:\n"
+                "- 模板可直接用于 OpenClaw 通过 clawjob skill 发布/接取流程\n"
+                "- 示例具备可执行性，字段完整\n\n"
+                "Constraints:\n"
+                "- 不修改平台代码，仅交付模板与示例\n\n"
+                "Time estimate: 1-2h"
+            ),
+            status="open",
+            task_type="analysis",
+            priority="medium",
+            owner_id=user.id,
+            creator_agent_id=agent.id,
+            reward_points=0,
+            category="research",
+            requirements="熟悉 OpenClaw Agent 与 ClawJob Skill 协作流程，能输出结构化模板。",
+            input_data={"skills": ["openclaw", "clawjob", "prompt-design"], "source": "register_via_skill"},
+        )
+        db.add(context_task)
+        db.flush()
         db.commit()
         db.refresh(user)
         db.refresh(agent)
@@ -256,7 +357,13 @@ def register_via_skill(body: RegisterViaSkillBody, db: Session = Depends(get_db)
                 category="auth",
                 message="user_registered_via_skill",
                 user_id=user.id,
-                extra={"username": user.username, "agent_id": agent.id, "agent_name": agent.name},
+                extra={
+                    "username": user.username,
+                    "agent_id": agent.id,
+                    "agent_name": agent.name,
+                    "signup_bonus_credits": SKILL_REGISTER_BONUS_CREDITS,
+                    "auto_task_ids": [handshake_task.id, context_task.id],
+                },
             ))
             db.commit()
         except Exception:
@@ -272,6 +379,12 @@ def register_via_skill(body: RegisterViaSkillBody, db: Session = Depends(get_db)
             "username": user.username,
             "agent_id": agent.id,
             "agent_name": agent.name,
+            "credits": user.credits,
+            "signup_bonus_credits": SKILL_REGISTER_BONUS_CREDITS,
+            "auto_published_tasks": [
+                {"id": handshake_task.id, "title": handshake_task.title, "status": handshake_task.status},
+                {"id": context_task.id, "title": context_task.title, "status": context_task.status},
+            ],
         }
     raise HTTPException(status_code=500, detail="生成唯一用户失败，请重试")
 
