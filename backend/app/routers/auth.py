@@ -57,6 +57,7 @@ class RegisterViaSkillBody(BaseModel):
 CLAWJOB_SYSTEM_USERNAME = "clawjob_system"
 CLAWJOB_SYSTEM_AGENT_NAME = "clawjob-agent"
 SKILL_REGISTER_BONUS_CREDITS = 500
+SKILL_AUTO_TASK_REWARD_POINTS = 100
 
 
 def _get_or_create_clawjob_system_agent(db: Session):
@@ -88,6 +89,39 @@ def _get_or_create_clawjob_system_agent(db: Session):
         db.add(agent)
         db.flush()
     return user, agent
+
+
+def _build_openclaw_auto_task(agent_name: str, agent_desc: str, agent_type: str) -> tuple[str, str, str]:
+    """根据注册 Agent 信息生成一条可真实接取的高价值任务。"""
+    skill_focus = "workflow-automation"
+    if "research" in (agent_type or "").lower():
+        skill_focus = "research"
+    elif "coding" in (agent_type or "").lower():
+        skill_focus = "coding"
+    elif "analysis" in (agent_type or "").lower():
+        skill_focus = "analysis"
+    clean_desc = (agent_desc or "").strip()[:180]
+    title = f"【openclaw-{skill_focus}】为 {agent_name[:32]} 设计并交付可执行协作方案"
+    description = (
+        f"Context: 新注册的 OpenClaw Agent（{agent_name[:64]}）已挂载 clawjob skill，需一名接取者完成可直接落地的协作方案。"
+        f"{(' Agent 简介：' + clean_desc) if clean_desc else ''}\n\n"
+        "Deliverables:\n"
+        "- 1 份可直接执行的任务协作方案（含目标、步骤、输入输出字段）\n"
+        "- 3 条可复制任务模板（开发/调研/运营各 1 条）\n"
+        "- 失败重试与验收建议（不少于 5 条）\n\n"
+        "Acceptance criteria:\n"
+        "- 输出为结构化 Markdown，字段齐全，可直接用于下一轮任务发布\n"
+        "- 示例任务具备可执行性，且与 OpenClaw + clawjob skill 场景匹配\n"
+        "- 交付至少包含 1 个演示链接或附件链接\n\n"
+        "Constraints:\n"
+        "- 不改平台源码，仅产出交付物\n"
+        "- 内容真实可执行，不得只给概念描述\n\n"
+        "Time estimate: 1-2h"
+    )
+    requirements = (
+        "熟悉 OpenClaw + ClawJob skill 协作；能输出结构化执行方案，并保证交付内容可被直接复用。"
+    )
+    return title, description, requirements
 
 
 def _send_verification_email(email: str, code: str) -> str:
@@ -320,34 +354,39 @@ def register_via_skill(body: RegisterViaSkillBody, db: Session = Depends(get_db)
         db.flush()
         db.add(TaskSubscription(task_id=handshake_task.id, agent_id=system_agent.id))
 
-        # 任务 2：基于 OpenClaw + ClawJob Skill 上下文的真实开放任务，供他人接取。
+        # 任务 2：基于 OpenClaw + ClawJob Skill 的真实可接取任务，默认分配 100 点奖励。
+        task_title, task_description, task_requirements = _build_openclaw_auto_task(
+            agent_name=name,
+            agent_desc=body.description or "",
+            agent_type=body.agent_type or "general",
+        )
         context_task = Task(
-            title="【clawjob-skill】为 OpenClaw Agent 设计可复用任务执行模板",
-            description=(
-                "Context: 新注册的 OpenClaw Agent 已挂载 clawjob skill，需要一条可由他人接取并交付的真实任务。\n\n"
-                "Deliverables:\n"
-                "- 产出 1 份可复用的任务执行模板（含任务分解、执行步骤、回传格式）\n"
-                "- 给出 3 条不同类型任务的示例输入（开发/调研/运营）\n"
-                "- 补充失败重试与验收建议\n\n"
-                "Acceptance criteria:\n"
-                "- 模板可直接用于 OpenClaw 通过 clawjob skill 发布/接取流程\n"
-                "- 示例具备可执行性，字段完整\n\n"
-                "Constraints:\n"
-                "- 不修改平台代码，仅交付模板与示例\n\n"
-                "Time estimate: 1-2h"
-            ),
+            title=task_title,
+            description=task_description,
             status="open",
             task_type="analysis",
             priority="medium",
             owner_id=user.id,
             creator_agent_id=agent.id,
-            reward_points=0,
+            reward_points=SKILL_AUTO_TASK_REWARD_POINTS,
             category="research",
-            requirements="熟悉 OpenClaw Agent 与 ClawJob Skill 协作流程，能输出结构化模板。",
-            input_data={"skills": ["openclaw", "clawjob", "prompt-design"], "source": "register_via_skill"},
+            requirements=task_requirements,
+            input_data={
+                "skills": ["openclaw", "clawjob", "prompt-design", "workflow-design"],
+                "source": "register_via_skill",
+            },
         )
         db.add(context_task)
         db.flush()
+        # 将注册送的 500 点中自动分配 100 点给该默认任务，便于真实接取和成交。
+        user.credits = max(0, (getattr(user, "credits", 0) or 0) - SKILL_AUTO_TASK_REWARD_POINTS)
+        db.add(CreditTransaction(
+            user_id=user.id,
+            amount=-SKILL_AUTO_TASK_REWARD_POINTS,
+            type="task_publish",
+            ref_id=context_task.id,
+            remark=f"Skill 注册自动任务 #{context_task.id} 预留奖励 {SKILL_AUTO_TASK_REWARD_POINTS} 点",
+        ))
         db.commit()
         db.refresh(user)
         db.refresh(agent)
@@ -362,6 +401,7 @@ def register_via_skill(body: RegisterViaSkillBody, db: Session = Depends(get_db)
                     "agent_id": agent.id,
                     "agent_name": agent.name,
                     "signup_bonus_credits": SKILL_REGISTER_BONUS_CREDITS,
+                    "auto_task_reward_allocated": SKILL_AUTO_TASK_REWARD_POINTS,
                     "auto_task_ids": [handshake_task.id, context_task.id],
                 },
             ))
@@ -381,9 +421,15 @@ def register_via_skill(body: RegisterViaSkillBody, db: Session = Depends(get_db)
             "agent_name": agent.name,
             "credits": user.credits,
             "signup_bonus_credits": SKILL_REGISTER_BONUS_CREDITS,
+            "auto_task_reward_allocated": SKILL_AUTO_TASK_REWARD_POINTS,
             "auto_published_tasks": [
                 {"id": handshake_task.id, "title": handshake_task.title, "status": handshake_task.status},
-                {"id": context_task.id, "title": context_task.title, "status": context_task.status},
+                {
+                    "id": context_task.id,
+                    "title": context_task.title,
+                    "status": context_task.status,
+                    "reward_points": context_task.reward_points,
+                },
             ],
         }
     raise HTTPException(status_code=500, detail="生成唯一用户失败，请重试")

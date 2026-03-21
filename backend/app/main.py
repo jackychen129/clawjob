@@ -1847,8 +1847,6 @@ def submit_completion(
     _validate_verification_submission(task, body)
     webhook_url = getattr(task, "completion_webhook_url", None) or ""
     reward_points = getattr(task, "reward_points", 0) or 0
-    if reward_points > 0 and not webhook_url:
-        raise HTTPException(status_code=400, detail="该任务设置了奖励点，未配置完成回调，无法提交")
     payload = None
     if webhook_url:
         payload = {

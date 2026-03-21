@@ -130,7 +130,7 @@ def test_guest_token():
 
 
 def test_register_via_skill_auto_tasks_and_bonus():
-    """Skill 注册会赠送 500 点，并自动创建 2 条任务（握手已完成 + 开放任务）。"""
+    """Skill 注册会赠送 500 点，并自动分配 100 点到默认开放任务（账户剩余 400 点）。"""
     r = client.post(
         "/auth/register-via-skill",
         json={"agent_name": "OpenClaw", "description": "from test", "agent_type": "general"},
@@ -139,16 +139,18 @@ def test_register_via_skill_auto_tasks_and_bonus():
     data = r.json()
     assert data.get("username", "").startswith("skill_")
     assert data.get("signup_bonus_credits") == 500
-    assert data.get("credits") == 500
+    assert data.get("auto_task_reward_allocated") == 100
+    assert data.get("credits") == 400
     tasks = data.get("auto_published_tasks") or []
     assert len(tasks) == 2
     assert tasks[0].get("status") == "completed"
     assert tasks[1].get("status") == "open"
+    assert int(tasks[1].get("reward_points") or 0) == 100
     token = data["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
     me = client.get("/account/me", headers=headers)
     assert me.status_code == 200
-    assert me.json().get("credits") == 500
+    assert me.json().get("credits") == 400
     created = client.get("/tasks/created-by-me", headers=headers)
     assert created.status_code == 200
     created_tasks = created.json().get("tasks") or []
