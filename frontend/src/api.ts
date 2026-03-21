@@ -66,6 +66,24 @@ export const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
+function genRequestId(): string {
+  try {
+    // Modern browsers / Node 19+
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+    if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID()
+  } catch {}
+  return `rid_${Date.now()}_${Math.random().toString(16).slice(2)}`
+}
+
+// 将 X-Request-ID 透传给后端，便于把客户端请求与 system_logs 中的 request_id 对齐（P0 可观测性）。
+api.interceptors.request.use((config) => {
+  const headers = (config.headers || {}) as Record<string, unknown>
+  const existing = headers['X-Request-ID'] ?? headers['x-request-id']
+  if (!existing) headers['X-Request-ID'] = genRequestId()
+  config.headers = headers
+  return config
+})
+
 export function setAuthToken(token: string | null) {
   if (token) {
     api.defaults.headers.common['Authorization'] = `Bearer ${token}`
@@ -203,6 +221,17 @@ export interface TaskListItem {
   duration_estimate?: string
   skills?: string[]
   output_data?: { result_summary?: string; evidence?: Record<string, unknown>; rejection_reason?: string }
+  escrow?: {
+    enabled: boolean
+    milestone_count?: number
+    current_index?: number
+    released_points?: number
+    disputed?: boolean
+    milestones_preview?: Array<{ title?: string; points?: number; acceptance_criteria?: string }>
+    dispute_reason?: string | null
+    dispute_evidence?: Record<string, unknown> | null
+    admin_resolve_note?: string | null
+  }
 }
 
 // 候选者列表（公开，供发布任务时选择指定接取者）。sort=recent 为最近注册优先；owner_name 为游客时返回「待注册」；published_count 为该 Agent 发布的任务数
@@ -226,6 +255,8 @@ export function publishTask(data: {
   duration_estimate?: string
   skills?: string[]
   discord_webhook_url?: string
+  /** 托管：至少 2 个里程碑，weight 之和为 1；需配合 reward_points > 0 */
+  escrow_milestones?: Array<{ title: string; weight: number; acceptance_criteria?: string }>
 }) {
   return api.post('/tasks', data)
 }
@@ -283,6 +314,22 @@ export function batchConfirmTasks(taskIds: number[]) {
 // 发布者拒绝验收（必须填写拒绝理由，作为 RL 反馈；接取者可重新提交）
 export function rejectTask(taskId: number, data: { rejection_reason: string }) {
   return api.post(`/tasks/${taskId}/reject`, data)
+}
+
+// 发起托管争议（需发布方或接取方身份）
+export function escrowDispute(taskId: number, data: { reason: string; evidence?: Record<string, unknown> }) {
+  return api.post(`/tasks/${taskId}/escrow/dispute`, {
+    reason: data.reason,
+    evidence: data.evidence ?? {},
+  })
+}
+
+// 管理员处理托管争议（恢复/强制验收当前里程碑等）
+export function adminResolveEscrowDispute(taskId: number, data: { note?: string; resolution_type?: string }) {
+  return api.post(`/admin/tasks/${taskId}/escrow/dispute/resolve`, {
+    note: data.note ?? '',
+    resolution_type: data.resolution_type ?? 'resume',
+  })
 }
 
 // 订阅任务（需登录）
@@ -405,10 +452,18 @@ export function getAdminMe() {
 
 export function getAdminMetrics() {
   return api.get<{
-    tasks: { total: number; open: number; completed: number; today: number; pending_verification: number }
+    tasks: {
+      total: number
+      open: number
+      completed: number
+      today: number
+      pending_verification: number
+      disputed?: number
+    }
     users: { total: number; new_today: number; active: number }
     agents: { total: number; new_today: number; active: number }
     rewards_paid: number
+    observability?: { requests_last_hour: number; errors_last_hour: number }
     generated_at: string
   }>('/admin/metrics')
 }
@@ -436,13 +491,25 @@ export interface AgentTemplateItem {
   name: string
   description?: string
   verified: boolean
+  version_tag?: string
   tasks_completed: number
   agent_type?: string
+  publisher_username?: string
+  publisher_user_id?: number | null
   download_agent_url?: string
   download_skill_url?: string
+  created_at?: string | null
 }
 
-export function fetchAgentTemplates(params?: { skip?: number; limit?: number }) {
+export function fetchAgentTemplates(
+  params?: {
+    skip?: number
+    limit?: number
+    verified_only?: boolean
+    agent_type?: string
+    sort?: 'created_desc' | 'tasks_desc'
+  }
+) {
   return api.get<{ items: AgentTemplateItem[]; total: number; skip?: number; limit?: number }>(
     '/agent-templates',
     { params }
@@ -460,10 +527,15 @@ export function publishAgentTemplate(body: {
   agent_id: number
   name: string
   description?: string
+  version_tag?: string
   download_agent_url?: string
   download_skill_url?: string
 }) {
   return api.post<AgentTemplateItem>('/agent-templates', body)
+}
+
+export function deleteAgentTemplate(templateId: number) {
+  return api.delete<{ ok: boolean; id: number }>(`/agent-templates/${templateId}`)
 }
 
 export interface SkillMarketItem {
@@ -472,11 +544,22 @@ export interface SkillMarketItem {
   name: string
   description?: string
   verified: boolean
+  version_tag?: string
   tasks_completed: number
+  publisher_username?: string
+  publisher_user_id?: number | null
   download_skill_url?: string
+  created_at?: string | null
 }
 
-export function fetchSkills(params?: { skip?: number; limit?: number }) {
+export function fetchSkills(
+  params?: {
+    skip?: number
+    limit?: number
+    verified_only?: boolean
+    sort?: 'created_desc' | 'tasks_desc'
+  }
+) {
   return api.get<{ items: SkillMarketItem[]; total: number; skip?: number; limit?: number }>(
     '/skills',
     { params }
@@ -491,7 +574,32 @@ export function publishSkill(body: {
   skill_token?: string
   name?: string
   description?: string
+  version_tag?: string
   download_skill_url?: string
 }) {
   return api.post<SkillMarketItem>('/skills/publish', body)
+}
+
+export function deleteSkillPublish(skillId: number) {
+  return api.delete<{ ok: boolean; id: number }>(`/skills/${skillId}`)
+}
+
+export interface AdminDisputedTaskItem {
+  id: number
+  title: string
+  owner_id: number
+  agent_id?: number | null
+  status: string
+  updated_at?: string | null
+  dispute_reason?: string | null
+  dispute_evidence?: Record<string, unknown> | null
+  current_index: number
+  milestones_total: number
+}
+
+export function getAdminDisputedTasks(params?: { skip?: number; limit?: number }) {
+  return api.get<{ items: AdminDisputedTaskItem[]; total: number; skip: number; limit: number }>(
+    '/admin/tasks/disputed',
+    { params }
+  )
 }

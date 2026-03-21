@@ -617,3 +617,348 @@ def test_task_comment_post_requires_auth():
     task_id = tasks[0]["id"]
     r = client.post(f"/tasks/{task_id}/comments", json={"content": "未登录评论"})
     assert r.status_code == 401
+
+
+def test_escrow_two_milestones_partial_pay():
+    """托管两里程碑：第一次验收部分放款且任务仍为进行中，第二次完成后结束。"""
+    pub = f"esc_pub_{_unique()}"
+    exe = f"esc_exe_{_unique()}"
+    _register_user(pub, f"{pub}@example.com", "pub")
+    _register_user(exe, f"{exe}@example.com", "exe")
+    pub_headers = {"Authorization": f"Bearer {client.post('/auth/login', json={'username': pub, 'password': 'pub'}).json()['access_token']}"}
+    exe_headers = {"Authorization": f"Bearer {client.post('/auth/login', json={'username': exe, 'password': 'exe'}).json()['access_token']}"}
+    client.post("/account/recharge", json={"amount": 20}, headers=pub_headers)
+    r = client.post(
+        "/tasks",
+        json={
+            "title": "托管里程碑任务",
+            "reward_points": 5,
+            "completion_webhook_url": "https://example.com/cb",
+            "escrow_milestones": [
+                {"title": "阶段一", "weight": 0.5},
+                {"title": "阶段二", "weight": 0.5},
+            ],
+        },
+        headers=pub_headers,
+    )
+    assert r.status_code == 200
+    task_id = r.json()["id"]
+    r = client.post("/agents/register", json={"name": "托管执行Agent", "description": ""}, headers=exe_headers)
+    assert r.status_code == 200
+    agent_id = r.json()["id"]
+    assert client.post(f"/tasks/{task_id}/subscribe", json={"agent_id": agent_id}, headers=exe_headers).status_code == 200
+    with patch("app.main.httpx") as m:
+        m.Client.return_value.__enter__.return_value.post.return_value.status_code = 200
+        assert client.post(
+            f"/tasks/{task_id}/submit-completion",
+            json={"result_summary": "阶段一交付"},
+            headers=exe_headers,
+        ).status_code == 200
+    r = client.post(f"/tasks/{task_id}/confirm", headers=pub_headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert body.get("escrow", {}).get("finished") is False
+    td = client.get(f"/tasks/{task_id}").json()
+    assert td["status"] == "in_progress"
+    with patch("app.main.httpx") as m:
+        m.Client.return_value.__enter__.return_value.post.return_value.status_code = 200
+        assert client.post(
+            f"/tasks/{task_id}/submit-completion",
+            json={"result_summary": "阶段二交付"},
+            headers=exe_headers,
+        ).status_code == 200
+    r = client.post(f"/tasks/{task_id}/confirm", headers=pub_headers)
+    assert r.status_code == 200
+    assert r.json().get("escrow", {}).get("finished") is True
+    td = client.get(f"/tasks/{task_id}").json()
+    assert td["status"] == "completed"
+
+
+def test_escrow_dispute_blocks_submission():
+    """托管争议：进入 disputed 后，接取者无法继续提交里程碑完成。"""
+    pub = f"esc_pub_{_unique()}"
+    exe = f"esc_exe_{_unique()}"
+    _register_user(pub, f"{pub}@example.com", "pub")
+    _register_user(exe, f"{exe}@example.com", "exe")
+    pub_headers = {
+        "Authorization": f"Bearer {client.post('/auth/login', json={'username': pub, 'password': 'pub'}).json()['access_token']}"
+    }
+    exe_headers = {
+        "Authorization": f"Bearer {client.post('/auth/login', json={'username': exe, 'password': 'exe'}).json()['access_token']}"
+    }
+    client.post("/account/recharge", json={"amount": 20}, headers=pub_headers)
+    r = client.post(
+        "/tasks",
+        json={
+            "title": "托管争议冻结任务",
+            "reward_points": 6,
+            "completion_webhook_url": "https://example.com/cb",
+            "escrow_milestones": [
+                {"title": "阶段一", "weight": 0.5},
+                {"title": "阶段二", "weight": 0.5},
+            ],
+        },
+        headers=pub_headers,
+    )
+    assert r.status_code == 200
+    task_id = r.json()["id"]
+
+    r = client.post("/agents/register", json={"name": "托管执行Agent", "description": ""}, headers=exe_headers)
+    assert r.status_code == 200
+    agent_id = r.json()["id"]
+    assert client.post(f"/tasks/{task_id}/subscribe", json={"agent_id": agent_id}, headers=exe_headers).status_code == 200
+
+    with patch("app.main.httpx") as m:
+        m.Client.return_value.__enter__.return_value.post.return_value.status_code = 200
+        assert client.post(
+            f"/tasks/{task_id}/submit-completion",
+            json={"result_summary": "阶段一交付"},
+            headers=exe_headers,
+        ).status_code == 200
+
+    reason = "阶段一提交证据不足，疑似不符合要求"
+    evidence = {"summary": "提供了但疑似与验收不一致", "links": ["https://example.com/a", "https://example.com/b"]}
+    r = client.post(
+        f"/tasks/{task_id}/escrow/dispute",
+        json={"reason": reason, "evidence": evidence},
+        headers=pub_headers,
+    )
+    assert r.status_code == 200
+    assert r.json().get("task_id") == task_id
+    assert "冻结" in (r.json().get("message") or "")
+
+    td = client.get(f"/tasks/{task_id}").json()
+    assert td["status"] == "disputed"
+    assert td.get("escrow", {}).get("disputed") is True
+    assert reason[:50] in (td.get("escrow", {}).get("dispute_reason") or "")
+    assert (td.get("escrow", {}).get("dispute_evidence", {}) or {}).get("summary") is not None
+
+    with patch("app.main.httpx") as m:
+        m.Client.return_value.__enter__.return_value.post.return_value.status_code = 200
+        r2 = client.post(
+            f"/tasks/{task_id}/submit-completion",
+            json={"result_summary": "阶段二交付（不允许）"},
+            headers=exe_headers,
+        )
+        assert r2.status_code == 400
+        assert "争议中" in (r2.json().get("detail") or "")
+
+
+def test_escrow_acceptance_criteria_saved():
+    """里程碑 acceptance_criteria：发布后应在任务详情 escrow 摘要中回显。"""
+    pub = f"esc_pub_{_unique()}"
+    exe = f"esc_exe_{_unique()}"
+    _register_user(pub, f"{pub}@example.com", "pub")
+    _register_user(exe, f"{exe}@example.com", "exe")
+    pub_headers = {
+        "Authorization": f"Bearer {client.post('/auth/login', json={'username': pub, 'password': 'pub'}).json()['access_token']}"
+    }
+
+    client.post("/account/recharge", json={"amount": 20}, headers=pub_headers)
+    r = client.post(
+        "/tasks",
+        json={
+            "title": "托管里程碑验收要点任务",
+            "reward_points": 10,
+            "completion_webhook_url": "https://example.com/cb",
+            "escrow_milestones": [
+                {"title": "阶段一", "weight": 0.5, "acceptance_criteria": "交付代码与测试"},
+                {"title": "阶段二", "weight": 0.5, "acceptance_criteria": "补充文档与复盘"},
+            ],
+        },
+        headers=pub_headers,
+    )
+    assert r.status_code == 200
+    task_id = r.json()["id"]
+
+    td = client.get(f"/tasks/{task_id}").json()
+    assert td["status"] in ("open", "in_progress")
+    milestones = td.get("escrow", {}).get("milestones_preview") or []
+    assert len(milestones) == 2
+    assert milestones[0].get("acceptance_criteria") == "交付代码与测试"
+    assert milestones[1].get("acceptance_criteria") == "补充文档与复盘"
+
+
+def test_admin_force_confirm_escrow_dispute():
+    """管理员 resolve: force_confirm 应直接按当前里程碑放款并推进任务状态。"""
+    pub = f"esc_pub_{_unique()}"
+    exe = f"esc_exe_{_unique()}"
+    admin = f"esc_admin_{_unique()}"
+
+    _register_user(pub, f"{pub}@example.com", "pub")
+    _register_user(exe, f"{exe}@example.com", "exe")
+    _register_user(admin, f"{admin}@example.com", "adminpw")
+
+    pub_token = client.post('/auth/login', json={'username': pub, 'password': 'pub'}).json()['access_token']
+    exe_token = client.post('/auth/login', json={'username': exe, 'password': 'exe'}).json()['access_token']
+    admin_token = client.post('/auth/login', json={'username': admin, 'password': 'adminpw'}).json()['access_token']
+
+    # 让该 admin 用户具备 is_superuser 权限（依赖环境变量的默认 admin 不一定在测试环境里存在）
+    from app.database.relational_db import SessionLocal, User as UserModel
+    db = SessionLocal()
+    try:
+        u = db.query(UserModel).filter(UserModel.username == admin).first()
+        assert u is not None
+        u.is_superuser = True
+        db.commit()
+    finally:
+        db.close()
+
+    pub_headers = {"Authorization": f"Bearer {pub_token}"}
+    exe_headers = {"Authorization": f"Bearer {exe_token}"}
+    admin_headers = {"Authorization": f"Bearer {admin_token}"}
+
+    client.post("/account/recharge", json={"amount": 20}, headers=pub_headers)
+    r = client.post(
+        "/tasks",
+        json={
+            "title": "管理员强制验收争议任务",
+            "reward_points": 10,
+            "completion_webhook_url": "https://example.com/cb",
+            "escrow_milestones": [
+                {"title": "阶段一", "weight": 0.5, "acceptance_criteria": "交付阶段一"},
+                {"title": "阶段二", "weight": 0.5, "acceptance_criteria": "交付阶段二"},
+            ],
+        },
+        headers=pub_headers,
+    )
+    assert r.status_code == 200
+    task_id = r.json()["id"]
+
+    r = client.post("/agents/register", json={"name": "托管执行Agent", "description": ""}, headers=exe_headers)
+    assert r.status_code == 200
+    agent_id = r.json()["id"]
+    assert client.post(f"/tasks/{task_id}/subscribe", json={"agent_id": agent_id}, headers=exe_headers).status_code == 200
+
+    # 让任务进入 pending_verification（可选，但更贴近真实争议链路）
+    with patch("app.main.httpx") as m:
+        m.Client.return_value.__enter__.return_value.post.return_value.status_code = 200
+        assert client.post(
+            f"/tasks/{task_id}/submit-completion",
+            json={"result_summary": "阶段一交付"},
+            headers=exe_headers,
+        ).status_code == 200
+
+    # 进入 disputed
+    reason = "阶段一证据不足"
+    r = client.post(
+        f"/tasks/{task_id}/escrow/dispute",
+        json={"reason": reason, "evidence": {"summary": "无充分证据"}},
+        headers=pub_headers,
+    )
+    assert r.status_code == 200
+
+    td = client.get(f"/tasks/{task_id}").json()
+    assert td["status"] == "disputed"
+
+    # 管理员强制验收当前里程碑：应推进到 in_progress
+    rr = client.post(
+        f"/admin/tasks/{task_id}/escrow/dispute/resolve",
+        json={"note": "管理员裁决：强制按当前里程碑验收", "resolution_type": "force_confirm"},
+        headers=admin_headers,
+    )
+    assert rr.status_code == 200
+    assert rr.json().get("resolution_type") == "force_confirm"
+
+    td2 = client.get(f"/tasks/{task_id}").json()
+    assert td2["status"] == "in_progress"
+    assert td2.get("escrow", {}).get("disputed") is False
+
+
+def test_publish_template_and_skill_version_tag():
+    u = f"mk_pub_{_unique()}"
+    _register_user(u, f"{u}@example.com", "pw")
+    token = client.post('/auth/login', json={'username': u, 'password': 'pw'}).json()['access_token']
+    headers = {"Authorization": f"Bearer {token}"}
+
+    r = client.post("/agents/register", json={"name": "模板Agent", "description": ""}, headers=headers)
+    assert r.status_code == 200
+    agent_id = r.json()["id"]
+
+    # 先造一个 completed 任务，满足发布模板条件
+    client.post("/account/recharge", json={"amount": 10}, headers=headers)
+    create_task = client.post(
+        "/tasks",
+        json={"title": "用于模板发布", "reward_points": 1, "completion_webhook_url": "https://example.com/cb"},
+        headers=headers,
+    )
+    task_id = create_task.json()["id"]
+    assert client.post(f"/tasks/{task_id}/subscribe", json={"agent_id": agent_id}, headers=headers).status_code == 200
+    with patch("app.main.httpx") as m:
+        m.Client.return_value.__enter__.return_value.post.return_value.status_code = 200
+        assert client.post(f"/tasks/{task_id}/submit-completion", json={"result_summary": "ok"}, headers=headers).status_code == 200
+    assert client.post(f"/tasks/{task_id}/confirm", headers=headers).status_code == 200
+
+    pt = client.post(
+        "/agent-templates",
+        json={"agent_id": agent_id, "name": "模板A", "version_tag": "v1.2.0"},
+        headers=headers,
+    )
+    assert pt.status_code == 200
+    assert pt.json().get("version_tag") == "v1.2.0"
+
+    # skill 版本标签
+    skill_token = f"sk_{_unique()}"
+    r2 = client.post(
+        "/agents/register",
+        json={"name": "SkillAgent", "description": "", "skill_bound_token": skill_token},
+        headers=headers,
+    )
+    assert r2.status_code == 200
+    ps = client.post(
+        "/skills/publish",
+        json={"skill_token": skill_token, "name": "SkillA", "version_tag": "release-202603"},
+        headers=headers,
+    )
+    assert ps.status_code == 200
+    assert ps.json().get("version_tag") == "release-202603"
+
+
+def test_admin_disputed_tasks_list():
+    pub = f"esc_pub_{_unique()}"
+    exe = f"esc_exe_{_unique()}"
+    admin = f"esc_admin_{_unique()}"
+    _register_user(pub, f"{pub}@example.com", "pub")
+    _register_user(exe, f"{exe}@example.com", "exe")
+    _register_user(admin, f"{admin}@example.com", "adminpw")
+    pub_token = client.post('/auth/login', json={'username': pub, 'password': 'pub'}).json()['access_token']
+    exe_token = client.post('/auth/login', json={'username': exe, 'password': 'exe'}).json()['access_token']
+    admin_token = client.post('/auth/login', json={'username': admin, 'password': 'adminpw'}).json()['access_token']
+
+    from app.database.relational_db import SessionLocal, User as UserModel
+    db = SessionLocal()
+    try:
+        u = db.query(UserModel).filter(UserModel.username == admin).first()
+        u.is_superuser = True
+        db.commit()
+    finally:
+        db.close()
+
+    pub_headers = {"Authorization": f"Bearer {pub_token}"}
+    exe_headers = {"Authorization": f"Bearer {exe_token}"}
+    admin_headers = {"Authorization": f"Bearer {admin_token}"}
+
+    client.post("/account/recharge", json={"amount": 20}, headers=pub_headers)
+    r = client.post(
+        "/tasks",
+        json={
+            "title": "争议列表测试任务",
+            "reward_points": 10,
+            "completion_webhook_url": "https://example.com/cb",
+            "escrow_milestones": [{"title": "阶段一", "weight": 0.5}, {"title": "阶段二", "weight": 0.5}],
+        },
+        headers=pub_headers,
+    )
+    assert r.status_code == 200, r.json()
+    task_id = r.json()["id"]
+    ag = client.post("/agents/register", json={"name": "agent-x", "description": ""}, headers=exe_headers).json()["id"]
+    client.post(f"/tasks/{task_id}/subscribe", json={"agent_id": ag}, headers=exe_headers)
+    with patch("app.main.httpx") as m:
+        m.Client.return_value.__enter__.return_value.post.return_value.status_code = 200
+        client.post(f"/tasks/{task_id}/submit-completion", json={"result_summary": "done"}, headers=exe_headers)
+    client.post(f"/tasks/{task_id}/escrow/dispute", json={"reason": "需要争议"}, headers=pub_headers)
+
+    rr = client.get("/admin/tasks/disputed", headers=admin_headers)
+    assert rr.status_code == 200
+    items = rr.json().get("items") or []
+    assert any(int(it.get("id", 0)) == task_id for it in items)

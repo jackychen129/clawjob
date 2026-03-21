@@ -15,6 +15,7 @@ from datetime import datetime, timedelta
 from typing import Optional, List, Any
 import os
 import time
+import uuid
 import httpx
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -43,6 +44,12 @@ from app.database.relational_db import (
 )
 from app.database.cache_db import CacheDB
 from app.utils.datetime_iso import iso_utc
+from app.services.escrow_tasks import (
+    get_escrow,
+    build_escrow_plan,
+    save_escrow_to_task,
+    apply_escrow_milestone_confirm,
+)
 
 # Agent system imports
 from app.agents.agent_manager import AgentManager
@@ -74,8 +81,11 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
     """记录每次 API 请求到 system_logs 表，便于监控与审计。"""
     async def dispatch(self, request, call_next):
         start = time.perf_counter()
+        rid = request.headers.get("x-request-id") or str(uuid.uuid4())
+        request.state.request_id = rid
         response = await call_next(request)
         duration_ms = (time.perf_counter() - start) * 1000
+        response.headers["X-Request-ID"] = rid
         path = request.scope.get("path") or ""
         method = request.method or ""
         status = response.status_code
@@ -90,7 +100,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
                     path=path[:512] if path else None,
                     method=method[:16] if method else None,
                     status_code=status,
-                    extra={"duration_ms": round(duration_ms, 2)},
+                    extra={"duration_ms": round(duration_ms, 2), "request_id": rid},
                 )
                 db.add(log)
                 db.commit()
@@ -356,23 +366,46 @@ def _count_completed_tasks_for_skill_token(db: Session, skill_token: str) -> int
 
 
 @app.get("/agent-templates")
-def get_agent_templates(db: Session = Depends(get_db), skip: int = 0, limit: int = 50):
+def get_agent_templates(
+    db: Session = Depends(get_db),
+    skip: int = 0,
+    limit: int = 50,
+    verified_only: bool = False,
+    agent_type: Optional[str] = None,
+    sort: str = "created_desc",  # created_desc | tasks_desc
+):
     """Agent 模板 / Skill 市场：可下载的 Agent 模板与 Skill 列表（含平台 verify、完成任务数）。"""
-    q = db.query(PublishedAgentTemplate).join(Agent).order_by(PublishedAgentTemplate.created_at.desc())
-    total = q.count()
-    rows = q.offset(skip).limit(limit).all()
+    q = db.query(PublishedAgentTemplate).join(Agent)
+    if verified_only:
+        q = q.filter(PublishedAgentTemplate.verified.is_(True))
+    if agent_type and agent_type.strip():
+        q = q.filter(Agent.agent_type == agent_type.strip())
+    if sort == "tasks_desc":
+        rows = q.all()
+        scored = [(t, _count_completed_tasks_for_agent(db, t.agent_id)) for t in rows]
+        scored.sort(key=lambda x: (-x[1], -x[0].id))
+        rows = [x[0] for x in scored]
+    else:
+        rows = q.order_by(PublishedAgentTemplate.created_at.desc()).all()
+    total = len(rows)
+    rows = rows[skip : skip + limit]
     items = []
     for t in rows:
         tasks_completed = _count_completed_tasks_for_agent(db, t.agent_id)
+        owner = db.query(User).filter(User.id == t.agent.owner_id).first() if t.agent else None
         items.append({
             "id": t.id,
             "name": t.name,
             "description": t.description or "",
             "verified": t.verified,
+            "version_tag": t.version_tag or "v1",
             "tasks_completed": tasks_completed,
             "agent_type": t.agent.agent_type if t.agent else None,
+            "publisher_username": owner.username if owner else "",
+            "publisher_user_id": t.agent.owner_id if t.agent else None,
             "download_agent_url": t.download_agent_url,
             "download_skill_url": t.download_skill_url,
+            "created_at": iso_utc(t.created_at) if getattr(t, "created_at", None) else None,
         })
     return {"items": items, "total": total, "skip": skip, "limit": limit}
 
@@ -395,6 +428,7 @@ class PublishAgentTemplateBody(BaseModel):
     agent_id: int
     name: str
     description: str = ""
+    version_tag: str = "v1"
     download_agent_url: Optional[str] = None
     download_skill_url: Optional[str] = None
 
@@ -419,10 +453,12 @@ def publish_agent_template(
     if existing:
         raise HTTPException(status_code=400, detail="This agent is already published as a template")
     name = (body.name or agent.name or "").strip() or agent.name
+    version_tag = ((body.version_tag or "v1").strip() or "v1")[:64]
     template = PublishedAgentTemplate(
         agent_id=agent.id,
         name=name,
         description=(body.description or "").strip() or None,
+        version_tag=version_tag,
         download_agent_url=(body.download_agent_url or "").strip() or None,
         download_skill_url=(body.download_skill_url or "").strip() or None,
     )
@@ -435,11 +471,30 @@ def publish_agent_template(
         "name": template.name,
         "description": template.description or "",
         "verified": template.verified,
+        "version_tag": template.version_tag or "v1",
         "tasks_completed": tasks_completed,
         "agent_type": agent.agent_type,
         "download_agent_url": template.download_agent_url,
         "download_skill_url": template.download_skill_url,
     }
+
+@app.delete("/agent-templates/{template_id}")
+def delete_agent_template(
+    template_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    uid = int(current_user["user_id"])
+    me = db.query(User).filter(User.id == uid).first()
+    tpl = db.query(PublishedAgentTemplate).filter(PublishedAgentTemplate.id == template_id).first()
+    if not tpl:
+        raise HTTPException(status_code=404, detail="Template not found")
+    owner_id = tpl.agent.owner_id if tpl.agent else None
+    if owner_id != uid and not (me and bool(getattr(me, "is_superuser", False))):
+        raise HTTPException(status_code=403, detail="Only publisher/admin can delete template")
+    db.delete(tpl)
+    db.commit()
+    return {"ok": True, "id": template_id}
 
 
 class PublishSkillBody(BaseModel):
@@ -449,26 +504,58 @@ class PublishSkillBody(BaseModel):
     skill_token: Optional[str] = None
     name: Optional[str] = None
     description: Optional[str] = None
+    version_tag: Optional[str] = "v1"
     download_skill_url: Optional[str] = None
 
 
+def _publisher_for_skill_token(db: Session, skill_token: str) -> tuple:
+    """返回 (publisher_username, publisher_user_id)。"""
+    agents = db.query(Agent).all()
+    for a in agents:
+        cfg = a.config or {}
+        if (cfg.get("skill_bound_token") or "").strip() == skill_token:
+            u = db.query(User).filter(User.id == a.owner_id).first()
+            return (u.username if u else "", a.owner_id)
+    return ("", None)
+
+
 @app.get("/skills")
-def get_skills(db: Session = Depends(get_db), skip: int = 0, limit: int = 50):
+def get_skills(
+    db: Session = Depends(get_db),
+    skip: int = 0,
+    limit: int = 50,
+    verified_only: bool = False,
+    sort: str = "created_desc",
+):
     """Skill 市场：列出已发布 Skill，并给出完成任务数（用于 verify 展示）。"""
-    q = db.query(PublishedSkill).order_by(PublishedSkill.created_at.desc())
-    total = q.count()
-    rows = q.offset(skip).limit(limit).all()
+    q = db.query(PublishedSkill)
+    if verified_only:
+        q = q.filter(PublishedSkill.verified.is_(True))
+    if sort == "tasks_desc":
+        rows = q.all()
+        scored = [(s, _count_completed_tasks_for_skill_token(db, s.skill_token)) for s in rows]
+        scored.sort(key=lambda x: (-x[1], -x[0].id))
+        rows = [x[0] for x in scored]
+    else:
+        rows = q.order_by(PublishedSkill.created_at.desc()).all()
+    total = len(rows)
+    rows = rows[skip : skip + limit]
     out = []
     for s in rows:
         tasks_completed = _count_completed_tasks_for_skill_token(db, s.skill_token)
+        pub_name, pub_uid = _publisher_for_skill_token(db, s.skill_token)
         out.append({
             "id": s.id,
             "skill_token": s.skill_token,
             "name": s.name,
             "description": s.description or "",
             "verified": bool(s.verified),
+            "version_tag": s.version_tag or "v1",
             "tasks_completed": int(tasks_completed),
             "download_skill_url": s.download_skill_url,
+            "publisher_username": pub_name,
+            "publisher_user_id": pub_uid,
+            "created_at": iso_utc(s.created_at) if getattr(s, "created_at", None) else None,
         })
     return {"items": out, "total": total, "skip": skip, "limit": limit}
 
@@ -531,6 +618,7 @@ def publish_skill(
 
     name = (body.name or "").strip() or f"Skill {skill_token[:8]}"
     description = (body.description or "").strip() if body.description else None
+    version_tag = ((body.version_tag or "v1").strip() if body.version_tag else "v1")[:64] or "v1"
     download_skill_url = (body.download_skill_url or "").strip() if body.download_skill_url else None
 
     existing = db.query(PublishedSkill).filter(PublishedSkill.skill_token == skill_token).first()
@@ -538,6 +626,7 @@ def publish_skill(
         existing.name = name
         existing.description = description
         existing.download_skill_url = download_skill_url
+        existing.version_tag = version_tag
         existing.verified = bool(verified)
         db.commit()
         db.refresh(existing)
@@ -548,6 +637,7 @@ def publish_skill(
             name=name,
             description=description,
             verified=bool(verified),
+            version_tag=version_tag,
             download_skill_url=download_skill_url,
         )
         db.add(row)
@@ -561,9 +651,29 @@ def publish_skill(
         "name": name,
         "description": description or "",
         "verified": bool(verified),
+        "version_tag": version_tag,
         "tasks_completed": int(tasks_completed),
         "download_skill_url": download_skill_url,
     }
+
+
+@app.delete("/skills/{skill_id}")
+def delete_skill_publish(
+    skill_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    uid = int(current_user["user_id"])
+    me = db.query(User).filter(User.id == uid).first()
+    row = db.query(PublishedSkill).filter(PublishedSkill.id == skill_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Skill publish not found")
+    owns_token = bool(_get_agent_ids_by_skill_token(db, uid=uid, skill_token=row.skill_token))
+    if (not owns_token) and not (me and bool(getattr(me, "is_superuser", False))):
+        raise HTTPException(status_code=403, detail="Only publisher/admin can delete skill publish")
+    db.delete(row)
+    db.commit()
+    return {"ok": True, "id": skill_id}
 
 # OpenClaw/Clawl 对齐：capability 项 { id?, name, category? }
 class CapabilityItem(BaseModel):
@@ -919,6 +1029,14 @@ PLATFORM_COMMISSION_RATE = 0.01  # 任务成功发放奖励时，若发布方已
 _FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/")
 
 
+class EscrowMilestoneIn(BaseModel):
+    """托管里程碑：title + weight + acceptance_criteria（weight 之和须为 1）"""
+
+    title: str
+    weight: float
+    acceptance_criteria: str = ""
+
+
 class PublishTaskBody(BaseModel):
     title: str
     description: str = ""
@@ -928,6 +1046,8 @@ class PublishTaskBody(BaseModel):
     completion_webhook_url: str = ""  # 有奖励点时必填：接取者提交完成时 POST 回调此 URL，供发布方验收
     invited_agent_ids: list = []  # 可选：仅这些 Agent 可接取；空表示对所有人开放
     creator_agent_id: Optional[int] = None  # 可选：由某 Agent 代发（须为当前用户的 Agent）
+    # 托管（Escrow）MVP：多里程碑；至少 2 项且权重和为 1，与 6 小时自动验收按里程碑生效
+    escrow_milestones: List[EscrowMilestoneIn] = []
     # 任务分类与详情
     category: str = ""  # 任务分类：development, design, research, writing, data, other
     requirements: str = ""  # 详细要求说明
@@ -986,6 +1106,11 @@ class SubscribeTaskBody(BaseModel):
 
 class RejectCompletionBody(BaseModel):
     rejection_reason: str  # 必填：作为 RL 惩罚信号，供接取者改进
+
+
+class EscrowDisputeBody(BaseModel):
+    reason: str
+    evidence: dict = {}
 
 
 class SubmitCompletionBody(BaseModel):
@@ -1092,9 +1217,17 @@ def _maybe_auto_confirm(task: Task, db: Session) -> None:
     if task.status != "pending_verification" or not getattr(task, "verification_deadline_at", None):
         return
     deadline = task.verification_deadline_at
-    if deadline and datetime.utcnow() >= deadline:
-        _pay_task_reward(task, db)
+    if not (deadline and datetime.utcnow() >= deadline):
+        return
+    esc = get_escrow(task)
+    if esc and esc.get("disputed"):
+        return
+    if esc:
+        apply_escrow_milestone_confirm(task, db, auto=True)
         db.commit()
+        return
+    _pay_task_reward(task, db)
+    db.commit()
 
 
 def _task_extra(t: Task) -> dict:
@@ -1102,6 +1235,7 @@ def _task_extra(t: Task) -> dict:
     d = getattr(t, "input_data", None) or {}
     if not isinstance(d, dict):
         d = {}
+    esc = get_escrow(t)
     out = {
         "category": getattr(t, "category", None) or None,
         "requirements": getattr(t, "requirements", None) or None,
@@ -1109,6 +1243,29 @@ def _task_extra(t: Task) -> dict:
         "duration_estimate": d.get("duration_estimate") or None,
         "skills": d.get("skills") if isinstance(d.get("skills"), list) else None,
     }
+    if esc:
+        ms = esc.get("milestones") or []
+        idx = int(esc.get("current_index", 0) or 0)
+        out["escrow"] = {
+            "enabled": True,
+            "milestone_count": len(ms),
+            "current_index": idx,
+            "released_points": int(esc.get("released_points", 0) or 0),
+            "disputed": bool(esc.get("disputed")),
+            "milestones_preview": [
+                {
+                    "title": m.get("title"),
+                    "points": m.get("points"),
+                    "acceptance_criteria": m.get("acceptance_criteria"),
+                }
+                for m in ms[:20]
+            ],
+            "dispute_reason": (esc.get("dispute_reason") or None),
+            "dispute_evidence": esc.get("dispute_evidence") or None,
+            "admin_resolve_note": (esc.get("admin_resolve_note") or None),
+        }
+    else:
+        out["escrow"] = {"enabled": False}
     return out
 
 
@@ -1381,6 +1538,17 @@ def publish_task(
         extra["skills"] = [str(s).strip()[:50] for s in body.skills if s][:20]
     category = (getattr(body, "category", None) or "").strip()[:64] or None
     requirements = (getattr(body, "requirements", None) or "").strip() or None
+    # 托管里程碑计划
+    em = getattr(body, "escrow_milestones", None) or []
+    if em:
+        try:
+            plan = build_escrow_plan(
+                [{"title": x.title, "weight": x.weight, "acceptance_criteria": getattr(x, "acceptance_criteria", "")} for x in em],
+                reward_points,
+            )
+            extra["escrow"] = plan
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
     task = Task(
         title=body.title,
         description=body.description,
@@ -1418,7 +1586,7 @@ def publish_task(
     if os.getenv("ENV", "").strip().lower() == "production":
         auto_complete_enabled = True
     first_task_count = db.query(Task).filter(Task.owner_id == uid).count()
-    if first_task_count == 1 and auto_complete_enabled and not is_pytest:
+    if first_task_count == 1 and auto_complete_enabled and not is_pytest and not get_escrow(task):
         try:
             _, clawjob_agent = _get_or_create_clawjob_system_agent(db)
             sub = TaskSubscription(task_id=task.id, agent_id=clawjob_agent.id)
@@ -1496,6 +1664,8 @@ def subscribe_task(
     # 若任务尚未分配接取者，则当前订阅的 Agent 视为接取者
     if task.agent_id is None:
         task.agent_id = body.agent_id
+    if get_escrow(task) and task.status == "open":
+        task.status = "in_progress"
     db.commit()
     db.refresh(sub)
     return {"message": "订阅成功", "subscription_id": sub.id}
@@ -1520,8 +1690,13 @@ def submit_completion(
         raise HTTPException(status_code=403, detail="仅接取该任务的用户可提交完成")
     if task.status == "completed":
         return {"message": "任务已完成", "task_id": task_id}
+    escrow = get_escrow(task)
+    if escrow and escrow.get("disputed"):
+        raise HTTPException(status_code=400, detail="任务处于争议中，请等待处理后再提交")
     if task.status == "pending_verification":
         return {"message": "已提交验收，请等待发布者确认或 6 小时后自动完成", "task_id": task_id}
+    if escrow and task.status not in ("open", "in_progress"):
+        raise HTTPException(status_code=400, detail="当前任务状态不可提交里程碑交付")
     webhook_url = getattr(task, "completion_webhook_url", None) or ""
     reward_points = getattr(task, "reward_points", 0) or 0
     if reward_points > 0 and not webhook_url:
@@ -1537,6 +1712,13 @@ def submit_completion(
             "evidence": body.evidence or {},
             "submitted_at": datetime.utcnow().isoformat() + "Z",
         }
+        if escrow:
+            idx = int(escrow.get("current_index", 0) or 0)
+            ms = escrow.get("milestones") or []
+            payload["escrow_milestone_index"] = idx
+            payload["escrow_milestone_title"] = ms[idx].get("title") if idx < len(ms) else None
+            payload["escrow_current_acceptance_criteria"] = ms[idx].get("acceptance_criteria") if idx < len(ms) else None
+            payload["escrow_total_milestones"] = len(ms)
         try:
             with httpx.Client(timeout=10.0) as client:
                 r = client.post(webhook_url, json=payload)
@@ -1553,6 +1735,10 @@ def submit_completion(
     if body.result_summary or body.evidence:
         base = task.output_data if isinstance(task.output_data, dict) else {}
         task.output_data = {**(base or {}), "result_summary": body.result_summary or "", "evidence": body.evidence or {}}
+    if escrow:
+        base = task.output_data if isinstance(task.output_data, dict) else {}
+        idx = int(escrow.get("current_index", 0) or 0)
+        task.output_data = {**(base or {}), "escrow_submit_milestone_index": idx}
     db.commit()
     return {
         "message": "已提交验收，发布者需在 6 小时内确认，否则将自动完成并发奖",
@@ -1579,6 +1765,26 @@ def confirm_task(
     if task.status == "completed":
         return {"message": "任务已是完成状态（或已自动完成）", "task_id": task_id}
     reward_points = getattr(task, "reward_points", 0) or 0
+    escrow = get_escrow(task)
+    if task.status == "pending_verification" and escrow:
+        info = apply_escrow_milestone_confirm(task, db, auto=False)
+        db.commit()
+        msg = (
+            "托管里程碑验收通过，奖励已发放"
+            if not info.get("escrow_finished")
+            else "托管任务已全部完成，奖励已发放"
+        )
+        return {
+            "message": msg,
+            "task_id": task_id,
+            "reward_paid": info.get("reward_paid", 0),
+            "reward_total": reward_points,
+            "commission": info.get("commission", 0),
+            "escrow": {
+                "milestone_index": info.get("milestone_index"),
+                "finished": bool(info.get("escrow_finished")),
+            },
+        }
     if task.status == "pending_verification":
         _pay_task_reward(task, db)
     elif task.status == "open" and reward_points == 0:
@@ -1617,13 +1823,78 @@ def reject_completion(
     reason = (body.rejection_reason or "").strip()
     if not reason:
         raise HTTPException(status_code=400, detail="请填写拒绝理由，以便接取者改进（作为 RL 反馈）")
-    task.status = "open"
+    task.status = "in_progress" if get_escrow(task) else "open"
     task.submitted_at = None
     task.verification_deadline_at = None
     base = task.output_data if isinstance(task.output_data, dict) else {}
     task.output_data = {**(base or {}), "rejection_reason": reason}
     db.commit()
     return {"message": "已拒绝，接取者可重新提交完成", "task_id": task_id}
+
+
+@app.post("/tasks/{task_id}/escrow/dispute")
+def escrow_dispute(
+    task_id: int,
+    body: EscrowDisputeBody,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """托管争议：发布方或接取方发起，任务进入 disputed，暂停提交与放款直至管理员处理。"""
+    uid = int(current_user["user_id"])
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    escrow = get_escrow(task)
+    if not escrow:
+        raise HTTPException(status_code=400, detail="该任务未启用托管里程碑")
+    if task.status == "completed":
+        raise HTTPException(status_code=400, detail="任务已完成，无法发起争议")
+    reason = (body.reason or "").strip()
+    if not reason:
+        raise HTTPException(status_code=400, detail="请填写争议说明")
+    evidence = body.evidence if isinstance(body.evidence, dict) else {}
+    is_pub = task.owner_id == uid
+    agent = db.query(Agent).filter(Agent.id == task.agent_id).first() if task.agent_id else None
+    is_exe = agent and agent.owner_id == uid
+    if not is_pub and not is_exe:
+        raise HTTPException(status_code=403, detail="仅发布方或接取方可发起托管争议")
+    escrow["disputed"] = True
+    escrow["dispute_reason"] = reason[:4000]
+    # 争议证据：限制到合理体量，避免 input_data 被滥用过大
+    try:
+        # 截断所有字符串字段，避免存储超大文本
+        def _trim_obj(x, max_len: int = 4000):
+            if isinstance(x, str):
+                return x[:max_len]
+            if isinstance(x, list):
+                return [_trim_obj(i, max_len) for i in x[:20]]
+            if isinstance(x, dict):
+                out = {}
+                for k, v in list(x.items())[:20]:
+                    out[str(k)[:50]] = _trim_obj(v, max_len)
+                return out
+            return x
+
+        escrow["dispute_evidence"] = _trim_obj(evidence, 4000)
+    except Exception:
+        escrow["dispute_evidence"] = {}
+    save_escrow_to_task(task, escrow)
+    task.status = "disputed"
+    db.commit()
+    try:
+        db.add(
+            SystemLog(
+                level="warning",
+                category="task",
+                message="escrow_dispute",
+                user_id=uid,
+                extra={"task_id": task_id, "reason_preview": reason[:200]},
+            )
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+    return {"message": "已记录托管争议，任务已冻结", "task_id": task_id}
 
 
 class BatchConfirmBody(BaseModel):
@@ -1654,7 +1925,10 @@ def batch_confirm_tasks(
             results.append({"task_id": task_id, "ok": False, "reason": "not_pending_verification"})
             continue
         try:
-            _pay_task_reward(task, db) if task.status == "pending_verification" else None
+            if task.status == "pending_verification" and get_escrow(task):
+                apply_escrow_milestone_confirm(task, db, auto=False)
+            elif task.status == "pending_verification":
+                _pay_task_reward(task, db)
             if task.status == "open" and (getattr(task, "reward_points", 0) or 0) == 0:
                 task.status = "completed"
                 task.completed_at = datetime.utcnow()

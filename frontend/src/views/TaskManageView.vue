@@ -115,7 +115,7 @@
                     <Button size="sm" variant="ghost" type="button" class="task-row__btn" @click="openTaskDetail(item.data!)">{{ t('task.viewDetail') }}</Button>
                     <div class="task-actions" @click.stop>
                       <Button
-                        v-if="isExecutor(item.data!) && item.data!.status === 'open'"
+                        v-if="isExecutor(item.data!) && (item.data!.status === 'open' || item.data!.status === 'in_progress')"
                         size="sm"
                         :disabled="submitCompletionLoading === item.data!.id"
                         class="task-row__btn task-row__btn--primary"
@@ -168,12 +168,74 @@
                 · <span :class="taskStatusPillClass(selectedTaskDetail.status)">{{ t('status.' + selectedTaskDetail.status) || selectedTaskDetail.status }}</span>
                 <span v-if="selectedTaskDetail.reward_points" class="detail-reward mono">{{ t('task.reward', { n: selectedTaskDetail.reward_points }) }}</span>
               </p>
+              <div v-if="selectedTaskDetail.escrow?.enabled" class="detail-escrow">
+                <div class="detail-escrow__head">
+                  <h4 class="detail-escrow__title">{{ t('rental.escrow') || '托管协议 (Escrow)' }}</h4>
+                  <p class="detail-escrow__summary">
+                    {{ t('task.escrowProgressTitle') || '里程碑进度' }}：{{ escrowConfirmedCount(selectedTaskDetail) }}/{{ selectedTaskDetail.escrow.milestone_count ?? 0 }}
+                    · {{ t('task.escrowReleased') || '已放款' }}：{{ selectedTaskDetail.escrow.released_points ?? 0 }} 点
+                  </p>
+                </div>
+                <p v-if="selectedTaskDetail.escrow.disputed" class="detail-escrow__disputed">
+                  {{ t('task.escrowDisputed') || '已进入争议冻结，等待管理员处理' }}
+                  <span v-if="selectedTaskDetail.escrow.dispute_reason">（{{ selectedTaskDetail.escrow.dispute_reason }}）</span>
+                  <span v-if="selectedTaskDetail.escrow.dispute_evidence?.summary"> · 证据摘要：{{ selectedTaskDetail.escrow.dispute_evidence?.summary }}</span>
+                </p>
+                <div class="detail-escrow__milestones">
+                  <div
+                    v-for="(m, idx) in selectedTaskDetail.escrow.milestones_preview || []"
+                    :key="idx"
+                    class="detail-escrow__milestone"
+                    :class="escrowMilestoneClass(selectedTaskDetail, idx)"
+                  >
+                    <div class="detail-escrow__milestone-top">
+                      <span class="detail-escrow__milestone-title">{{ m.title || ('里程碑 ' + (idx + 1)) }}</span>
+                      <span class="detail-escrow__milestone-points">{{ m.points ?? 0 }} 点</span>
+                    </div>
+                    <span class="detail-escrow__milestone-state">{{ escrowMilestoneLabel(selectedTaskDetail, idx) }}</span>
+                    <p v-if="m.acceptance_criteria" class="detail-escrow__milestone-criteria">{{ m.acceptance_criteria }}</p>
+                  </div>
+                  <p
+                    v-if="selectedTaskDetail.escrow.milestones_preview && selectedTaskDetail.escrow.milestones_preview.length < (selectedTaskDetail.escrow.milestone_count ?? 0)"
+                    class="detail-escrow__more"
+                  >…</p>
+                </div>
+              </div>
               <div class="task-detail-panel__actions">
-                <Button v-if="auth.isLoggedIn && isExecutor(selectedTaskDetail) && selectedTaskDetail.status === 'open'" size="sm" :disabled="submitCompletionLoading === selectedTaskDetail.id" @click="openSubmitModal(selectedTaskDetail)">{{ t('task.submitCompletion') }}</Button>
+                <Button
+                  v-if="auth.isLoggedIn && isExecutor(selectedTaskDetail) && (selectedTaskDetail.status === 'open' || selectedTaskDetail.status === 'in_progress')"
+                  size="sm"
+                  :disabled="submitCompletionLoading === selectedTaskDetail.id"
+                  @click="openSubmitModal(selectedTaskDetail)"
+                >{{ t('task.submitCompletion') }}</Button>
                 <template v-if="auth.isLoggedIn && selectedTaskDetail.owner_id === auth.userId && selectedTaskDetail.status === 'pending_verification'">
                   <Button size="sm" :disabled="confirmLoading === selectedTaskDetail.id" @click="doConfirm(selectedTaskDetail.id)">{{ t('task.confirmPass') }}</Button>
                   <Button size="sm" variant="secondary" :disabled="rejectLoading === selectedTaskDetail.id" @click="openRejectModal(selectedTaskDetail.id)">{{ t('task.reject') }}</Button>
                 </template>
+                <Button
+                  v-if="
+                    auth.isLoggedIn
+                    && selectedTaskDetail.escrow?.enabled
+                    && !selectedTaskDetail.escrow.disputed
+                    && (selectedTaskDetail.owner_id === auth.userId || isExecutor(selectedTaskDetail))
+                    && (selectedTaskDetail.status === 'open' || selectedTaskDetail.status === 'in_progress' || selectedTaskDetail.status === 'pending_verification')
+                  "
+                  size="sm"
+                  variant="secondary"
+                  :disabled="escrowDisputeLoading === selectedTaskDetail.id"
+                  @click="openEscrowDisputeModal(selectedTaskDetail)"
+                >{{ t('task.escrowDispute') || '发起托管争议' }}</Button>
+                <Button
+                  v-if="
+                    auth.isLoggedIn
+                    && isAdmin
+                    && selectedTaskDetail.escrow?.enabled
+                    && selectedTaskDetail.escrow.disputed
+                  "
+                  size="sm"
+                  :disabled="escrowResolveLoading === selectedTaskDetail.id"
+                  @click="openEscrowResolveModal(selectedTaskDetail)"
+                >{{ t('task.escrowResolve') || '管理员处理争议' }}</Button>
               </div>
               <div v-if="selectedTaskDetail.status === 'pending_verification' && selectedTaskDetail.output_data && (selectedTaskDetail.output_data.result_summary || (selectedTaskDetail.output_data.evidence && selectedTaskDetail.output_data.evidence.link))" class="task-detail-completion-submission">
                 <h4 class="task-comments-title">{{ t('task.completionSubmissionTitle') }}</h4>
@@ -312,6 +374,30 @@
               <label class="form-label" for="publish-webhook">{{ t('agentGuide.fieldWebhook') }}</label>
               <Input id="publish-webhook" v-model="publishForm.completion_webhook_url" class="w-full" type="url" :placeholder="t('task.webhookPlaceholder')" />
             </div>
+            <div class="form-group escrow-block">
+              <label class="form-label flex items-center gap-2">
+                <input v-model="publishForm.escrow_enabled" type="checkbox" class="rounded border-input" />
+                {{ t('task.escrowEnable') || '启用分阶段托管（里程碑）' }}
+              </label>
+              <p class="form-hint">{{ t('task.escrowHint') || '至少 2 个里程碑，权重之和须为 1；每阶段单独提交验收与放款。' }}</p>
+              <div v-if="publishForm.escrow_enabled" class="escrow-rows">
+                <div v-for="(row, idx) in publishForm.escrow_rows" :key="idx" class="escrow-row-wrap">
+                  <div class="escrow-row">
+                    <Input v-model="row.title" type="text" :placeholder="t('task.escrowMilestoneTitle') || '里程碑名称'" />
+                    <input v-model.number="row.weight" type="number" step="0.01" min="0" max="1" class="input input-num escrow-weight" :placeholder="t('task.escrowWeight') || '权重'" />
+                    <Button v-if="publishForm.escrow_rows.length > 2" type="button" size="sm" variant="ghost" @click="removeEscrowRow(idx)">×</Button>
+                  </div>
+                  <Textarea
+                    v-model="row.acceptance_criteria"
+                    rows="2"
+                    class="escrow-criteria"
+                    :placeholder="t('task.escrowAcceptanceCriteriaPlaceholder') || '里程碑验收要点（可选）'"
+                  />
+                </div>
+                <Button type="button" size="sm" variant="secondary" @click="addEscrowRow">{{ t('task.escrowAdd') || '添加里程碑' }}</Button>
+                <p class="form-hint escrow-sum">{{ t('task.escrowWeightSum') || '权重合计' }}：{{ escrowWeightSum.toFixed(4) }}</p>
+              </div>
+            </div>
           </template>
           <div class="form-group">
             <label class="form-label" for="publish-discord">{{ t('task.discordWebhookLabel') }}</label>
@@ -363,6 +449,38 @@
           <Button :disabled="submitCompletionLoading" @click="doSubmitCompletion">{{ t('task.submitCompletion') }}</Button>
         </div>
         <Button variant="secondary" class="close-btn w-full" @click="submitCompletionTask = null">{{ t('common.cancel') }}</Button>
+      </div>
+    </div>
+
+    <!-- 托管争议弹窗 -->
+    <div v-if="escrowDisputeTask" class="modal-mask" @click.self="closeEscrowDisputeModal">
+      <div class="modal">
+        <h3>{{ t('task.escrowDispute') || '发起托管争议' }} · {{ escrowDisputeTask.title }}</h3>
+        <p class="hint">{{ t('task.escrowDisputeHint') || '请描述争议原因并补充证据摘要，提交后任务将进入冻结状态。' }}</p>
+        <div class="form">
+          <Textarea v-model="escrowDisputeForm.reason" rows="3" :placeholder="t('task.escrowDisputeReasonPlaceholder') || '争议原因'" />
+          <Textarea v-model="escrowDisputeForm.evidence_summary" rows="3" :placeholder="t('task.escrowDisputeEvidencePlaceholder') || '证据摘要（可选）'" />
+          <Input v-model="escrowDisputeForm.evidence_link" type="url" :placeholder="t('task.escrowDisputeEvidenceLinkPlaceholder') || '证据链接（可选）'" />
+          <Button :disabled="escrowDisputeLoading === escrowDisputeTask.id || !escrowDisputeForm.reason.trim()" @click="doEscrowDispute">{{ t('task.escrowDisputeSubmit') || '提交争议' }}</Button>
+        </div>
+        <Button variant="secondary" class="close-btn w-full" @click="closeEscrowDisputeModal">{{ t('common.cancel') }}</Button>
+      </div>
+    </div>
+
+    <!-- 管理员处理争议弹窗 -->
+    <div v-if="escrowResolveTask" class="modal-mask" @click.self="closeEscrowResolveModal">
+      <div class="modal">
+        <h3>{{ t('task.escrowResolve') || '管理员处理争议' }} · {{ escrowResolveTask.title }}</h3>
+        <p class="hint">{{ t('task.escrowResolveHint') || '可选择恢复执行或强制验收当前里程碑。' }}</p>
+        <div class="form">
+          <select v-model="escrowResolveForm.resolution_type" class="input select-input">
+            <option value="resume">{{ t('task.escrowResolveResume') || '恢复执行（resume）' }}</option>
+            <option value="force_confirm">{{ t('task.escrowResolveForceConfirm') || '强制验收当前里程碑（force_confirm）' }}</option>
+          </select>
+          <Textarea v-model="escrowResolveForm.note" rows="3" :placeholder="t('task.escrowResolveNotePlaceholder') || '管理员处理备注（可选）'" />
+          <Button :disabled="escrowResolveLoading === escrowResolveTask.id" @click="doEscrowResolve">{{ t('task.escrowResolveSubmit') || '提交处理' }}</Button>
+        </div>
+        <Button variant="secondary" class="close-btn w-full" @click="closeEscrowResolveModal">{{ t('common.cancel') }}</Button>
       </div>
     </div>
 
@@ -449,7 +567,57 @@ const tasks = ref<TaskListItem[]>([])
 const tasksLoading = ref(false)
 const myTasks = ref<TaskListItem[]>([])
 const myTasksLoading = ref(false)
-const publishForm = reactive<{ title: string; description: string; category: string; requirements: string; reward_points: number; completion_webhook_url: string; discord_webhook_url: string; invited_agent_ids: number[]; creator_agent_id: number | null; location: string; duration_estimate: string; skills_text: string }>({ title: '', description: '', category: '', requirements: '', reward_points: 0, completion_webhook_url: '', discord_webhook_url: '', invited_agent_ids: [], creator_agent_id: null, location: '', duration_estimate: '', skills_text: '' })
+type EscrowRow = { title: string; weight: number | string; acceptance_criteria: string }
+const defaultEscrowRows = (): EscrowRow[] => [
+  { title: '', weight: 0.5, acceptance_criteria: '' },
+  { title: '', weight: 0.5, acceptance_criteria: '' },
+]
+const publishForm = reactive<{
+  title: string
+  description: string
+  category: string
+  requirements: string
+  reward_points: number
+  completion_webhook_url: string
+  discord_webhook_url: string
+  invited_agent_ids: number[]
+  creator_agent_id: number | null
+  location: string
+  duration_estimate: string
+  skills_text: string
+  escrow_enabled: boolean
+  escrow_rows: EscrowRow[]
+}>({
+  title: '',
+  description: '',
+  category: '',
+  requirements: '',
+  reward_points: 0,
+  completion_webhook_url: '',
+  discord_webhook_url: '',
+  invited_agent_ids: [],
+  creator_agent_id: null,
+  location: '',
+  duration_estimate: '',
+  skills_text: '',
+  escrow_enabled: false,
+  escrow_rows: defaultEscrowRows(),
+})
+const escrowWeightSum = computed(() =>
+  publishForm.escrow_rows.reduce((s, r) => s + (Number(r.weight) || 0), 0)
+)
+function addEscrowRow() {
+  publishForm.escrow_rows.push({ title: '', weight: 0, acceptance_criteria: '' })
+}
+function removeEscrowRow(idx: number) {
+  if (publishForm.escrow_rows.length > 2) publishForm.escrow_rows.splice(idx, 1)
+}
+watch(
+  () => publishForm.reward_points,
+  (v) => {
+    if (Math.max(0, Number(v) || 0) <= 0) publishForm.escrow_enabled = false
+  },
+)
 const publishLoading = ref(false)
 const publishError = ref('')
 const candidates = ref<Array<{ id: number; name: string; owner_name: string; points?: number }>>([])
@@ -460,6 +628,16 @@ const subscribeLoading = ref<number | null>(null)
 const submitCompletionTask = ref<{ id: number; title: string } | null>(null)
 const submitCompletionForm = reactive({ result_summary: '', completion_link: '' })
 const submitCompletionLoading = ref(false)
+const escrowDisputeTask = ref<{ id: number; title: string } | null>(null)
+const escrowDisputeForm = reactive({ reason: '', evidence_summary: '', evidence_link: '' })
+const escrowDisputeLoading = ref<number | null>(null)
+const escrowResolveTask = ref<{ id: number; title: string } | null>(null)
+const escrowResolveForm = reactive<{ resolution_type: 'resume' | 'force_confirm'; note: string }>({
+  resolution_type: 'resume',
+  note: '',
+})
+const escrowResolveLoading = ref<number | null>(null)
+const isAdmin = ref(false)
 const confirmLoading = ref<number | null>(null)
 const rejectLoading = ref<number | null>(null)
 const rejectTaskId = ref<number | null>(null)
@@ -543,6 +721,14 @@ function loadAccountMe() {
   }).catch(() => {})
 }
 
+function refreshAdminFlag() {
+  if (!auth.isLoggedIn) {
+    isAdmin.value = false
+    return
+  }
+  api.getAdminMe().then(() => { isAdmin.value = true }).catch(() => { isAdmin.value = false })
+}
+
 function isExecutor(t: { agent_id?: number }) {
   if (!auth.userId || !t.agent_id) return false
   return myAgents.value.some((a) => a.id === t.agent_id)
@@ -567,8 +753,56 @@ function taskCategoryLabel(cat: string) {
 
 function taskStatusPillClass(status: string): string {
   const s = (status || '').replace(/-/g, '_')
-  if (['open', 'completed', 'pending_verification', 'rejected'].includes(s)) return `task-status-pill task-status-pill--${s}`
+  if (['open', 'completed', 'pending_verification', 'rejected', 'in_progress', 'disputed'].includes(s)) {
+    return `task-status-pill task-status-pill--${s}`
+  }
   return 'task-status-pill task-status-pill--open'
+}
+
+function escrowConfirmedCount(task: TaskListItem): number {
+  const esc = task.escrow
+  if (!esc?.enabled) return 0
+  const total = Number(esc.milestone_count ?? esc.milestones_preview?.length ?? 0) || 0
+  if (task.status === 'completed') return total
+  const currentIndex = Number(esc.current_index ?? 0) || 0
+  return Math.max(0, currentIndex)
+}
+
+function escrowMilestoneLabel(task: TaskListItem, idx: number): string {
+  const esc = task.escrow
+  if (!esc?.enabled) return ''
+  const currentIndex = Number(esc.current_index ?? 0) || 0
+  if (task.status === 'completed') return t('task.escrowStateDone') || '已放款'
+
+  if (esc.disputed) {
+    return idx < currentIndex
+      ? (t('task.escrowStateDone') || '已放款')
+      : (t('task.escrowStateFrozen') || '争议冻结')
+  }
+
+  if (idx < currentIndex) return t('task.escrowStateDone') || '已放款'
+  if (idx === currentIndex) {
+    return task.status === 'pending_verification'
+      ? (t('task.escrowStateToConfirm') || '待验收')
+      : (t('task.escrowStateToSubmit') || '等待提交完成')
+  }
+  return t('task.escrowStatePending') || '未开始'
+}
+
+function escrowMilestoneClass(task: TaskListItem, idx: number): string {
+  const esc = task.escrow
+  if (!esc?.enabled) return ''
+  const currentIndex = Number(esc.current_index ?? 0) || 0
+  if (task.status === 'completed') return 'detail-escrow__milestone--done'
+  if (esc.disputed) return idx < currentIndex ? 'detail-escrow__milestone--done' : 'detail-escrow__milestone--frozen'
+
+  if (idx < currentIndex) return 'detail-escrow__milestone--done'
+  if (idx === currentIndex) {
+    return task.status === 'pending_verification'
+      ? 'detail-escrow__milestone--to_confirm'
+      : 'detail-escrow__milestone--to_submit'
+  }
+  return 'detail-escrow__milestone--pending'
 }
 const selectedTaskDetail = ref<TaskListItem | null>(null)
 const detailLoading = ref(false)
@@ -627,6 +861,9 @@ function getTaskDraft(): typeof publishForm | null {
     const raw = localStorage.getItem(TASK_DRAFT_KEY)
     if (!raw) return null
     const o = JSON.parse(raw) as Record<string, unknown>
+    const rows = Array.isArray(o.escrow_rows) && (o.escrow_rows as unknown[]).length
+      ? (o.escrow_rows as EscrowRow[])
+      : defaultEscrowRows()
     return {
       title: String(o.title ?? ''),
       description: String(o.description ?? ''),
@@ -640,6 +877,12 @@ function getTaskDraft(): typeof publishForm | null {
       location: String(o.location ?? ''),
       duration_estimate: String(o.duration_estimate ?? ''),
       skills_text: String(o.skills_text ?? ''),
+      escrow_enabled: Boolean(o.escrow_enabled),
+      escrow_rows: rows.map((r) => ({
+        title: String(r.title ?? ''),
+        weight: Number(r.weight) || 0,
+        acceptance_criteria: String((r as any).acceptance_criteria ?? ''),
+      })),
     }
   } catch {
     return null
@@ -664,6 +907,8 @@ function saveDraft() {
       location: publishForm.location,
       duration_estimate: publishForm.duration_estimate,
       skills_text: publishForm.skills_text,
+      escrow_enabled: publishForm.escrow_enabled,
+      escrow_rows: publishForm.escrow_rows.map((r) => ({ ...r })),
     }
     localStorage.setItem(TASK_DRAFT_KEY, JSON.stringify(payload))
     showSuccessLocal(t('task.draftSaved') || '草稿已保存')
@@ -687,6 +932,14 @@ function restoreDraft() {
   publishForm.location = d.location
   publishForm.duration_estimate = d.duration_estimate
   publishForm.skills_text = d.skills_text
+  publishForm.escrow_enabled = d.escrow_enabled
+  publishForm.escrow_rows = d.escrow_rows.length
+    ? d.escrow_rows.map((r) => ({
+      title: String((r as any).title ?? ''),
+      weight: Number((r as any).weight) || 0,
+      acceptance_criteria: String((r as any).acceptance_criteria ?? ''),
+    }))
+    : defaultEscrowRows()
   showSuccessLocal(t('task.draftRestored') || '已恢复草稿')
 }
 
@@ -725,6 +978,28 @@ function doPublish() {
     publishLoading.value = false
     return
   }
+  let escrow_milestones: Array<{ title: string; weight: number; acceptance_criteria?: string }> | undefined
+  if (reward > 0 && publishForm.escrow_enabled) {
+    const rows = publishForm.escrow_rows
+      .map((r) => ({
+        title: (r.title || '').trim(),
+        weight: Number(r.weight) || 0,
+        acceptance_criteria: (r.acceptance_criteria || '').trim(),
+      }))
+      .filter((r) => r.title)
+    if (rows.length < 2) {
+      publishError.value = t('task.escrowErrorMin') || '托管模式至少需要 2 个里程碑并填写标题'
+      publishLoading.value = false
+      return
+    }
+    const sum = rows.reduce((s, r) => s + r.weight, 0)
+    if (Math.abs(sum - 1) > 0.001) {
+      publishError.value = t('task.escrowErrorWeights') || '各里程碑权重之和须为 1'
+      publishLoading.value = false
+      return
+    }
+    escrow_milestones = rows
+  }
   const skills = publishForm.skills_text ? publishForm.skills_text.split(/[,，]/).map((s) => s.trim()).filter(Boolean) : undefined
   api.publishTask({
     title: publishForm.title.trim(),
@@ -739,6 +1014,7 @@ function doPublish() {
     duration_estimate: publishForm.duration_estimate.trim() || undefined,
     skills,
     discord_webhook_url: publishForm.discord_webhook_url.trim() || undefined,
+    escrow_milestones: escrow_milestones,
   }).then(() => {
     try { localStorage.removeItem(TASK_DRAFT_KEY) } catch {}
     hasTaskDraft.value = false
@@ -754,6 +1030,8 @@ function doPublish() {
     publishForm.location = ''
     publishForm.duration_estimate = ''
     publishForm.skills_text = ''
+    publishForm.escrow_enabled = false
+    publishForm.escrow_rows = defaultEscrowRows()
     showSuccessLocal(t('task.publishSuccess'))
     showCreateModal.value = false
     if (auth.isGuestUser || !myAgents.value.length) emit('register-hint')
@@ -795,6 +1073,76 @@ function doSubmitCompletion() {
     loadTasks()
     loadMyTasks()
   }).finally(() => { submitCompletionLoading.value = false })
+}
+
+function openEscrowDisputeModal(task: { id: number; title: string }) {
+  escrowDisputeTask.value = task
+  escrowDisputeForm.reason = ''
+  escrowDisputeForm.evidence_summary = ''
+  escrowDisputeForm.evidence_link = ''
+}
+
+function closeEscrowDisputeModal() {
+  escrowDisputeTask.value = null
+  escrowDisputeForm.reason = ''
+  escrowDisputeForm.evidence_summary = ''
+  escrowDisputeForm.evidence_link = ''
+}
+
+function doEscrowDispute() {
+  if (!escrowDisputeTask.value || !escrowDisputeForm.reason.trim()) return
+  const taskId = escrowDisputeTask.value.id
+  escrowDisputeLoading.value = taskId
+  const evidence: Record<string, unknown> = {}
+  if (escrowDisputeForm.evidence_summary.trim()) evidence.summary = escrowDisputeForm.evidence_summary.trim()
+  if (escrowDisputeForm.evidence_link.trim()) evidence.link = escrowDisputeForm.evidence_link.trim()
+  api.escrowDispute(taskId, {
+    reason: escrowDisputeForm.reason.trim(),
+    evidence,
+  }).then(() => {
+    showSuccessLocal(t('task.escrowDisputeSuccess') || '争议已提交，任务已冻结')
+    closeEscrowDisputeModal()
+    loadTasks()
+    loadMyTasks()
+    if (selectedTaskDetail.value?.id === taskId) openTaskDetail(selectedTaskDetail.value)
+  }).finally(() => { escrowDisputeLoading.value = null })
+}
+
+function openEscrowResolveModal(task: { id: number; title: string }) {
+  escrowResolveTask.value = task
+  escrowResolveForm.resolution_type = 'resume'
+  escrowResolveForm.note = ''
+}
+
+function closeEscrowResolveModal() {
+  escrowResolveTask.value = null
+  escrowResolveForm.resolution_type = 'resume'
+  escrowResolveForm.note = ''
+}
+
+function doEscrowResolve() {
+  if (!escrowResolveTask.value) return
+  const taskId = escrowResolveTask.value.id
+  escrowResolveLoading.value = taskId
+  api.adminResolveEscrowDispute(taskId, {
+    note: escrowResolveForm.note.trim(),
+    resolution_type: escrowResolveForm.resolution_type,
+  }).then((res) => {
+    const data = res.data || {}
+    if (data.resolution_type === 'force_confirm') {
+      const rewardPaid = Number(data.reward_paid || 0)
+      const idx = Number(data.escrow?.milestone_index || 0) + 1
+      const total = Number(selectedTaskDetail.value?.escrow?.milestones_preview?.length || data.escrow?.milestones_total || 0)
+      const doneText = data.escrow?.finished ? '，托管已完成' : ''
+      showSuccessLocal(`争议已处理：已放款 ${rewardPaid} 点，进度 ${idx}/${Math.max(total, idx)}${doneText}`)
+    } else {
+      showSuccessLocal(t('task.escrowResolveSuccess') || '争议已处理')
+    }
+    closeEscrowResolveModal()
+    loadTasks()
+    loadMyTasks()
+    if (selectedTaskDetail.value?.id === taskId) openTaskDetail(selectedTaskDetail.value)
+  }).finally(() => { escrowResolveLoading.value = null })
 }
 
 function doConfirm(taskId: number) {
@@ -842,6 +1190,7 @@ onMounted(() => {
   if (auth.isLoggedIn) {
     loadMyAgents()
     loadAccountMe()
+    refreshAdminFlag()
   }
 })
 
@@ -855,7 +1204,10 @@ watch(() => auth.isLoggedIn, (loggedIn) => {
   if (loggedIn) {
     loadMyAgents()
     loadAccountMe()
+    refreshAdminFlag()
     if (tab.value === 'mine') loadMyTasks()
+  } else {
+    isAdmin.value = false
   }
 })
 
@@ -1228,6 +1580,58 @@ watch(tab, (newTab) => {
 .detail-footer { font-size: var(--font-caption); color: rgba(255,255,255,0.58); margin-top: var(--space-5); }
 .detail-reward { margin-left: 0.5rem; font-weight: 700; color: var(--primary-color); }
 
+.detail-escrow {
+  margin: 0 0 var(--space-5);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(255,255,255,0.06);
+  background: rgba(0,0,0,0.12);
+}
+
+.detail-escrow__head { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: var(--space-3); margin-bottom: var(--space-3); }
+.detail-escrow__title { margin: 0; font-size: var(--font-body-strong, 0.95rem); font-weight: 700; color: var(--text-primary); letter-spacing: -0.02em; }
+.detail-escrow__summary { margin: 0; font-size: var(--font-caption); color: rgba(255,255,255,0.65); line-height: 1.4; }
+
+.detail-escrow__disputed {
+  margin: 0 0 var(--space-3);
+  font-size: var(--font-caption);
+  color: rgba(249, 115, 22, 0.92);
+}
+
+.detail-escrow__milestones { display: flex; flex-direction: column; gap: 0.5rem; }
+.detail-escrow__milestone {
+  padding: 0.6rem 0.65rem;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.02);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  transition: background var(--duration-m) var(--ease-apple), border-color var(--duration-m) var(--ease-apple);
+}
+
+.detail-escrow__milestone-top { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.detail-escrow__milestone-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: rgba(255,255,255,0.88); font-size: var(--font-caption); font-weight: 650; }
+.detail-escrow__milestone-points { color: rgba(255,255,255,0.7); font-size: var(--font-caption); font-weight: 600; }
+.detail-escrow__milestone-state { font-size: var(--font-caption); color: rgba(255,255,255,0.62); }
+.detail-escrow__milestone-criteria { margin: 0; font-size: var(--font-caption); color: rgba(255,255,255,0.72); line-height: 1.4; white-space: pre-wrap; }
+
+.detail-escrow__milestone--done { border-color: rgba(var(--primary-rgb), 0.22); background: rgba(var(--primary-rgb), 0.08); }
+.detail-escrow__milestone--done .detail-escrow__milestone-state { color: rgba(var(--primary-rgb), 0.95); }
+
+.detail-escrow__milestone--to_submit { border-color: rgba(59, 130, 246, 0.25); background: rgba(59, 130, 246, 0.08); }
+.detail-escrow__milestone--to_submit .detail-escrow__milestone-state { color: rgba(147, 197, 253, 0.95); }
+
+.detail-escrow__milestone--to_confirm { border-color: rgba(234, 179, 8, 0.28); background: rgba(234, 179, 8, 0.09); }
+.detail-escrow__milestone--to_confirm .detail-escrow__milestone-state { color: rgba(254, 240, 138, 0.95); }
+
+.detail-escrow__milestone--pending { opacity: 0.85; }
+
+.detail-escrow__milestone--frozen { border-color: rgba(249, 115, 22, 0.28); background: rgba(249, 115, 22, 0.09); }
+.detail-escrow__milestone--frozen .detail-escrow__milestone-state { color: rgba(254, 215, 170, 0.95); }
+
+.detail-escrow__more { margin: 0; font-size: var(--font-caption); color: var(--text-secondary); opacity: 0.7; }
+
 .select-input { max-width: 100%; }
 .textarea-input { min-height: 4rem; resize: vertical; }
 .modal--create { max-width: 520px; width: 95%; max-height: 90vh; overflow-y: auto; padding: var(--space-6); }
@@ -1239,6 +1643,14 @@ watch(tab, (newTab) => {
 .publish-form-in-modal .form-group.form-inline .form-label { margin-bottom: 0; margin-right: 0.25rem; }
 .publish-form-in-modal .form-group.form-inline .input-num { width: 6rem; }
 .publish-form-in-modal .form-hint { font-size: 0.8rem; color: var(--text-secondary); margin: 0.35rem 0 0; line-height: 1.4; }
+.escrow-block { margin-top: 0.5rem; padding: 0.75rem 1rem; border-radius: var(--radius-md); border: 1px solid rgba(255,255,255,0.08); background: rgba(0,0,0,0.12); }
+.escrow-rows { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem; }
+.escrow-row-wrap { display: flex; flex-direction: column; gap: 0.45rem; }
+.escrow-row { display: grid; grid-template-columns: 1fr 5.5rem auto; gap: 0.5rem; align-items: center; }
+@media (max-width: 520px) { .escrow-row { grid-template-columns: 1fr 4.5rem auto; } }
+.escrow-weight { max-width: 100%; }
+.escrow-criteria { width: 100%; }
+.escrow-sum { margin-top: 0.35rem; font-weight: 500; color: var(--primary-color); }
 .create-task-step { margin-bottom: 1rem; }
 .create-task-step-label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.03em; }
 .create-task-step--identity { margin-bottom: 1.25rem; }

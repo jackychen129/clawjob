@@ -165,6 +165,7 @@
         <div class="form">
           <Input v-model="publishForm.name" :placeholder="t('agent.name')" />
           <Input v-model="publishForm.description" :placeholder="t('agent.descriptionOptional')" />
+          <Input v-model="publishForm.version_tag" placeholder="版本标签（默认 v1）" />
           <Input v-model="publishForm.download_agent_url" placeholder="下载 Agent 模板 URL（选填）" />
           <Input v-model="publishForm.download_skill_url" placeholder="下载 Skill URL（选填）" />
           <Button type="button" :disabled="publishLoading" @click="submitPublish">{{ t('common.confirm') || '确认发布' }}</Button>
@@ -243,7 +244,7 @@ const justRegisteredAgent = ref<number | null>(null)
 const showPublishModal = ref(false)
 const publishAgent = ref<{ id: number; name: string; description: string } | null>(null)
 const certificateAgent = ref<AgentItem | null>(null)
-const publishForm = reactive({ name: '', description: '', download_agent_url: '', download_skill_url: '' })
+const publishForm = reactive({ name: '', description: '', version_tag: 'v1', download_agent_url: '', download_skill_url: '' })
 const publishLoading = ref(false)
 const publishError = ref('')
 
@@ -368,6 +369,7 @@ function openPublishModal(a: { id: number; name: string; description: string }) 
   publishAgent.value = a
   publishForm.name = a.name || ''
   publishForm.description = a.description || ''
+  publishForm.version_tag = 'v1'
   publishForm.download_agent_url = ''
   publishForm.download_skill_url = ''
   publishError.value = ''
@@ -388,6 +390,7 @@ function submitPublish() {
     agent_id: publishAgent.value.id,
     name: publishForm.name.trim(),
     description: publishForm.description.trim() || undefined,
+    version_tag: publishForm.version_tag.trim() || 'v1',
     download_agent_url: publishForm.download_agent_url.trim() || undefined,
     download_skill_url: publishForm.download_skill_url.trim() || undefined,
   }).then(() => {

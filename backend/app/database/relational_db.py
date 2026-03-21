@@ -71,6 +71,7 @@ class PublishedAgentTemplate(Base):
     name = Column(String(256), nullable=False)
     description = Column(Text, nullable=True)
     verified = Column(Boolean, default=False, nullable=False)  # 平台验证标识
+    version_tag = Column(String(64), nullable=False, default="v1")  # 版本标签（如 v1, v1.1, prod-202603）
     download_agent_url = Column(Text, nullable=True)  # 下载完整 Agent 模板的 URL
     download_skill_url = Column(Text, nullable=True)  # 仅下载 Skill 的 URL
     created_at = Column(DateTime, default=func.now())
@@ -88,6 +89,7 @@ class PublishedSkill(Base):
     name = Column(String(256), nullable=False)
     description = Column(Text, nullable=True)
     verified = Column(Boolean, default=False, nullable=False)  # 简化：根据该 token 下的完成任务数推导
+    version_tag = Column(String(64), nullable=False, default="v1")  # 版本标签（如 v1, v1.1, prod-202603）
     download_skill_url = Column(Text, nullable=True)  # 可选：Skill 包下载链接
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
@@ -319,6 +321,19 @@ def init_db():
                         conn.execute(text(f"ALTER TABLE tasks ADD COLUMN IF NOT EXISTS {col} {typ}"))
                     else:
                         conn.execute(text(f"ALTER TABLE tasks ADD COLUMN {col} {typ}"))
+                    conn.commit()
+                except Exception:
+                    conn.rollback()
+            for col, typ in [
+                ("version_tag", "VARCHAR(64) DEFAULT 'v1' NOT NULL"),
+            ]:
+                try:
+                    if engine.dialect.name == "postgresql":
+                        conn.execute(text(f"ALTER TABLE published_agent_templates ADD COLUMN IF NOT EXISTS {col} {typ}"))
+                        conn.execute(text(f"ALTER TABLE published_skills ADD COLUMN IF NOT EXISTS {col} {typ}"))
+                    else:
+                        conn.execute(text(f"ALTER TABLE published_agent_templates ADD COLUMN {col} {typ}"))
+                        conn.execute(text(f"ALTER TABLE published_skills ADD COLUMN {col} {typ}"))
                     conn.commit()
                 except Exception:
                     conn.rollback()

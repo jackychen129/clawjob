@@ -28,6 +28,7 @@
             {{ t('admin.todayNew') || '今日新增' }}：{{ metrics?.tasks.today ?? 0 }} ·
             {{ t('admin.open') || '进行中' }}：{{ metrics?.tasks.open ?? 0 }} ·
             {{ t('admin.pendingReview') || '待验收' }}：{{ metrics?.tasks.pending_verification ?? 0 }}
+            · {{ t('admin.disputed') || '托管争议' }}：{{ metrics?.tasks.disputed ?? 0 }}
           </div>
         </div>
         <div class="card admin-metric-card">
@@ -49,7 +50,14 @@
         <div class="card admin-metric-card">
           <div class="admin-metric-title">{{ t('admin.rewardsPaid') || '累计发放' }}</div>
           <div class="admin-metric-value">{{ metrics?.rewards_paid ?? 0 }}</div>
-          <div class="admin-metric-hint">{{ t('admin.generatedAt') || '更新时间' }}：{{ (metrics?.generated_at || '').slice(0, 19).replace('T', ' ') }}</div>
+          <div class="admin-metric-hint">
+            {{ t('admin.generatedAt') || '更新时间' }}：{{ (metrics?.generated_at || '').slice(0, 19).replace('T', ' ') }}
+            <template v-if="metrics?.observability">
+              <br />
+              {{ t('admin.requestsLastHour') || '近1h请求' }}：{{ metrics.observability.requests_last_hour }} ·
+              {{ t('admin.errorsLastHour') || '近1h错误' }}：{{ metrics.observability.errors_last_hour }}
+            </template>
+          </div>
         </div>
       </div>
 
@@ -115,6 +123,43 @@
           </Button>
         </div>
       </div>
+
+      <div class="card admin-card admin-disputes">
+        <div class="admin-logs-head">
+          <h3 class="admin-logs-title">争议任务快速处理</h3>
+          <Button size="sm" variant="secondary" type="button" :disabled="disputesLoading" @click="reloadDisputes">
+            刷新争议列表
+          </Button>
+        </div>
+        <div v-if="disputesLoading && disputes.length === 0" class="admin-logs-skeleton">
+          <div v-for="i in 4" :key="'dsk-'+i" class="tw-skeleton admin-log-skel-row"></div>
+        </div>
+        <div v-else class="admin-log-table">
+          <div class="admin-log-row admin-log-row--head admin-dispute-row">
+            <div>任务</div>
+            <div>进度</div>
+            <div>争议原因</div>
+            <div>操作</div>
+          </div>
+          <div v-for="it in disputes" :key="it.id" class="admin-log-row admin-dispute-row">
+            <div>
+              <div class="admin-log-msg-main">#{{ it.id }} {{ it.title }}</div>
+              <div class="admin-log-time">{{ (it.updated_at || '').slice(0, 19).replace('T', ' ') }}</div>
+            </div>
+            <div class="admin-log-level">{{ Math.min(it.current_index + 1, Math.max(it.milestones_total, 1)) }} / {{ Math.max(it.milestones_total, 1) }}</div>
+            <div class="admin-log-msg-main">{{ it.dispute_reason || '-' }}</div>
+            <div class="admin-dispute-actions">
+              <Button size="sm" type="button" variant="secondary" :disabled="resolveLoading === it.id" @click="quickResolve(it.id, 'resume')">
+                恢复执行
+              </Button>
+              <Button size="sm" type="button" :disabled="resolveLoading === it.id" @click="quickResolve(it.id, 'force_confirm')">
+                强制验收
+              </Button>
+            </div>
+          </div>
+          <p v-if="!disputes.length && !disputesLoading" class="empty">暂无争议任务</p>
+        </div>
+      </div>
     </template>
   </section>
 </template>
@@ -140,6 +185,9 @@ const skip = ref(0)
 const pageSize = 50
 const level = ref('')
 const category = ref('')
+const disputesLoading = ref(false)
+const disputes = ref<api.AdminDisputedTaskItem[]>([])
+const resolveLoading = ref<number | null>(null)
 
 function reloadAll() {
   denied.value = false
@@ -152,6 +200,7 @@ function reloadAll() {
     loading.value = false
   })
   reloadLogs(true)
+  reloadDisputes()
 }
 
 function reloadLogs(reset = false) {
@@ -175,6 +224,21 @@ function prevPage() {
   if (skip.value <= 0) return
   skip.value = Math.max(0, skip.value - pageSize)
   reloadLogs(false)
+}
+
+function reloadDisputes() {
+  disputesLoading.value = true
+  api.getAdminDisputedTasks({ skip: 0, limit: 50 })
+    .then((res) => { disputes.value = res.data.items || [] })
+    .catch(() => { disputes.value = [] })
+    .finally(() => { disputesLoading.value = false })
+}
+
+function quickResolve(taskId: number, resolutionType: 'resume' | 'force_confirm') {
+  resolveLoading.value = taskId
+  api.adminResolveEscrowDispute(taskId, { resolution_type: resolutionType, note: '' })
+    .then(() => { reloadDisputes(); reloadAll() })
+    .finally(() => { resolveLoading.value = null })
 }
 
 onMounted(() => {
@@ -235,6 +299,8 @@ onMounted(() => {
 
 .admin-pagination { display: flex; justify-content: flex-end; align-items: center; gap: var(--space-3); margin-top: var(--space-4); }
 .admin-page-meta { color: var(--text-secondary); font-size: var(--font-caption); }
+.admin-dispute-row { grid-template-columns: 1.2fr 6rem 1.2fr 14rem; }
+.admin-dispute-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
 
 @media (max-width: 900px) {
   .admin-log-row { grid-template-columns: 9rem 4.5rem 6rem 1fr; }
