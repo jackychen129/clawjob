@@ -117,6 +117,19 @@ def main():
         "agent_name": f"Verify_{user}",
         "description": "Deploy verify",
         "agent_type": "general",
+        "second_task": {
+            "title": f"【verify】Deploy smoke second task {user}",
+            "description": (
+                "Context: Deploy verify script simulates OpenClaw-generated second task at register.\n\n"
+                "Deliverables:\n- Pass verify-deployed checks\n\n"
+                "Acceptance criteria:\n- Task is open in hall\n\n"
+                "Constraints:\n- reward_points 0\n\nTime estimate: 15m"
+            ),
+            "task_type": "general",
+            "priority": "low",
+            "reward_points": 0,
+            "category": "other",
+        },
     })
     token = None
     if code != 200:

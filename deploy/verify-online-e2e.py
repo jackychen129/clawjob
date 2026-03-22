@@ -128,6 +128,18 @@ def main():
         "agent_name": f"E2E_{user}",
         "description": "E2E",
         "agent_type": "general",
+        "second_task": {
+            "title": f"【e2e】Second task {user}",
+            "description": (
+                "Context: Online E2E simulates OpenClaw second task in register body.\n\n"
+                "Deliverables:\n- Complete E2E flow\n\n"
+                "Acceptance criteria:\n- Register returns two tasks\n\n"
+                "Constraints:\n- No reward\n\nTime estimate: 15m"
+            ),
+            "task_type": "general",
+            "reward_points": 0,
+            "category": "other",
+        },
     })
     if code_skill == 200 and body_skill.get("access_token"):
         token = body_skill.get("access_token")

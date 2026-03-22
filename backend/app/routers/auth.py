@@ -15,7 +15,9 @@ logger = logging.getLogger(__name__)
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import RedirectResponse
-from pydantic import BaseModel
+from typing import List, Optional
+
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from app.database.relational_db import User, VerificationCode, Agent, Task, TaskSubscription, SystemLog, CreditTransaction, get_db
@@ -47,16 +49,39 @@ class LoginBody(BaseModel):
     password: str
 
 
+class RegisterViaSkillSecondTaskBody(BaseModel):
+    """
+    第二条开放任务：由挂载 ClawJob Skill 的 OpenClaw 按 SKILL.md 模板生成正文，
+    与注册请求一并提交；平台在同一接口内自动写入任务库（无需再单独 POST /tasks）。
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    title: str
+    description: str = ""
+    task_type: str = "general"
+    priority: str = "medium"
+    reward_points: int = 0
+    completion_webhook_url: Optional[str] = None
+    category: Optional[str] = None
+    requirements: Optional[str] = None
+    skills: List[str] = Field(default_factory=list)
+
+
 class RegisterViaSkillBody(BaseModel):
-    """Agent 通过 Skill 注册：仅填 Agent 信息，自动创建用户并返回专属 token"""
+    """Agent 通过 Skill 注册：Agent 信息 + OpenClaw 生成的第二条任务内容"""
+
     agent_name: str
     description: str = ""
     agent_type: str = "general"
+    second_task: RegisterViaSkillSecondTaskBody
 
 
 CLAWJOB_SYSTEM_USERNAME = "clawjob_system"
 CLAWJOB_SYSTEM_AGENT_NAME = "clawjob-agent"
 SKILL_REGISTER_BONUS_CREDITS = 500
+# 第二条任务 description 最短长度（防止空泛一条句；须按 SKILL 模板写清多节）
+SKILL_SECOND_TASK_MIN_DESCRIPTION_LEN = 40
 
 
 def _get_or_create_clawjob_system_agent(db: Session):
@@ -255,9 +280,34 @@ def login(body: LoginBody, db: Session = Depends(get_db)):
 @router.post("/register-via-skill")
 def register_via_skill(body: RegisterViaSkillBody, db: Session = Depends(get_db)):
     """
-    Agent 通过 Skill 注册：无需先有人类用户，自动创建用户与 Agent，并返回用户专属 token。
-    平台仅自动创建并「完成」握手任务；第二条开放任务须由 OpenClaw 按 SKILL.md 模板调用 POST /tasks 发布。
+    Agent 通过 Skill 注册：创建用户与 Agent；平台自动完成握手任务；
+    第二条开放任务由 OpenClaw 生成内容（请求体 second_task），平台在同一请求内自动发布。
     """
+    st = body.second_task
+    st_title = (st.title or "").strip()[:512]
+    st_desc = (st.description or "").strip()
+    if not st_title:
+        raise HTTPException(status_code=400, detail="second_task.title 不能为空")
+    if len(st_desc) < SKILL_SECOND_TASK_MIN_DESCRIPTION_LEN:
+        raise HTTPException(
+            status_code=400,
+            detail=f"second_task.description 过短（至少 {SKILL_SECOND_TASK_MIN_DESCRIPTION_LEN} 字符），须按 SKILL 模板包含 Context、Deliverables、Acceptance criteria 等小节",
+        )
+    reward_points = max(0, int(st.reward_points or 0))
+    webhook = (st.completion_webhook_url or "").strip()
+    if reward_points > 0:
+        if not webhook.startswith(("http://", "https://")):
+            raise HTTPException(
+                status_code=400,
+                detail="second_task 有奖励点时必须填写有效的 completion_webhook_url（http/https）",
+            )
+    skill_tags = [str(s).strip()[:50] for s in (st.skills or []) if str(s).strip()][:20]
+    st_input = {"source": "register_via_skill_second", "skills": skill_tags} if skill_tags else {"source": "register_via_skill_second"}
+    st_category = (st.category or "").strip()[:64] or None
+    st_requirements = (st.requirements or "").strip() or None
+    st_type = (st.task_type or "general").strip()[:64] or "general"
+    st_priority = (st.priority or "medium").strip()[:32] or "medium"
+
     name = (body.agent_name or "").strip() or "SkillAgent"
     for _ in range(10):
         short_id = secrets.token_hex(6)
@@ -320,25 +370,66 @@ def register_via_skill(body: RegisterViaSkillBody, db: Session = Depends(get_db)
         db.flush()
         db.add(TaskSubscription(task_id=handshake_task.id, agent_id=system_agent.id))
 
-        # 第二条开放任务不再由服务端生成：须由挂载本 Skill 的 OpenClaw 按 SKILL.md 模板调用 POST /tasks 发布。
+        if reward_points > 0:
+            credits_now = getattr(user, "credits", 0) or 0
+            if credits_now < reward_points:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"信用点不足：当前 {credits_now}，second_task.reward_points 需要 {reward_points}",
+                )
+
+        # 任务 2：开放任务；正文由 OpenClaw 生成，平台校验后写入。
+        second_task = Task(
+            title=st_title,
+            description=st_desc[:50000] if len(st_desc) > 50000 else st_desc,
+            status="open",
+            task_type=st_type,
+            priority=st_priority,
+            owner_id=user.id,
+            creator_agent_id=agent.id,
+            agent_id=None,
+            reward_points=reward_points,
+            completion_webhook_url=webhook if webhook else None,
+            category=st_category,
+            requirements=st_requirements,
+            input_data=st_input,
+        )
+        db.add(second_task)
+        db.flush()
+
+        if reward_points > 0:
+            user.credits = max(0, (getattr(user, "credits", 0) or 0) - reward_points)
+            db.add(
+                CreditTransaction(
+                    user_id=user.id,
+                    amount=-reward_points,
+                    type="task_publish",
+                    ref_id=second_task.id,
+                    remark=f"Skill 注册第二条任务 #{second_task.id} 预留奖励 {reward_points} 点",
+                )
+            )
+
         db.commit()
         db.refresh(user)
         db.refresh(agent)
+        db.refresh(second_task)
         try:
-            db.add(SystemLog(
-                level="info",
-                category="auth",
-                message="user_registered_via_skill",
-                user_id=user.id,
-                extra={
-                    "username": user.username,
-                    "agent_id": agent.id,
-                    "agent_name": agent.name,
-                    "signup_bonus_credits": SKILL_REGISTER_BONUS_CREDITS,
-                    "auto_task_reward_allocated": 0,
-                    "auto_task_ids": [handshake_task.id],
-                },
-            ))
+            db.add(
+                SystemLog(
+                    level="info",
+                    category="auth",
+                    message="user_registered_via_skill",
+                    user_id=user.id,
+                    extra={
+                        "username": user.username,
+                        "agent_id": agent.id,
+                        "agent_name": agent.name,
+                        "signup_bonus_credits": SKILL_REGISTER_BONUS_CREDITS,
+                        "auto_task_reward_allocated": reward_points,
+                        "auto_task_ids": [handshake_task.id, second_task.id],
+                    },
+                )
+            )
             db.commit()
         except Exception:
             db.rollback()
@@ -355,11 +446,16 @@ def register_via_skill(body: RegisterViaSkillBody, db: Session = Depends(get_db)
             "agent_name": agent.name,
             "credits": user.credits,
             "signup_bonus_credits": SKILL_REGISTER_BONUS_CREDITS,
-            "auto_task_reward_allocated": 0,
+            "auto_task_reward_allocated": reward_points,
             "auto_published_tasks": [
                 {"id": handshake_task.id, "title": handshake_task.title, "status": handshake_task.status},
+                {
+                    "id": second_task.id,
+                    "title": second_task.title,
+                    "status": second_task.status,
+                    "reward_points": second_task.reward_points,
+                },
             ],
-            "second_open_task_by_skill_required": True,
         }
     raise HTTPException(status_code=500, detail="生成唯一用户失败，请重试")
 

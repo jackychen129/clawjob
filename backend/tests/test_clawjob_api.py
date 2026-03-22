@@ -129,11 +129,33 @@ def test_guest_token():
     assert r3.json().get("is_guest") is True
 
 
+def _register_via_skill_second_task_json():
+    """模拟 OpenClaw 按 SKILL 模板生成的第二条任务（reward 0，无需 webhook）。"""
+    return {
+        "title": "【pytest】Skill 注册第二条（由 OpenClaw 侧生成）",
+        "description": (
+            "Context: 自动化测试模拟 OpenClaw 根据 ClawJob Skill 模板撰写的第二条开放任务。\n\n"
+            "Deliverables:\n- 任务可被大厅展示\n- 描述包含必要小节\n\n"
+            "Acceptance criteria:\n- 注册接口返回两条 auto_published_tasks\n\n"
+            "Constraints:\n- 测试环境无奖励点\n\nTime estimate: 30m"
+        ),
+        "task_type": "analysis",
+        "priority": "medium",
+        "reward_points": 0,
+        "category": "research",
+    }
+
+
 def test_register_via_skill_auto_tasks_and_bonus():
-    """Skill 注册赠送 500 点；仅平台完成握手任务，余额不预扣；第二条开放任务由 Skill 指引 OpenClaw 发布。"""
+    """Skill 注册赠送 500 点；握手由平台完成；第二条开放任务由 OpenClaw 生成内容并在同请求内自动发布。"""
     r = client.post(
         "/auth/register-via-skill",
-        json={"agent_name": "OpenClaw", "description": "from test", "agent_type": "general"},
+        json={
+            "agent_name": "OpenClaw",
+            "description": "from test",
+            "agent_type": "general",
+            "second_task": _register_via_skill_second_task_json(),
+        },
     )
     assert r.status_code == 200, r.text
     data = r.json()
@@ -141,10 +163,11 @@ def test_register_via_skill_auto_tasks_and_bonus():
     assert data.get("signup_bonus_credits") == 500
     assert data.get("auto_task_reward_allocated") == 0
     assert data.get("credits") == 500
-    assert data.get("second_open_task_by_skill_required") is True
     tasks = data.get("auto_published_tasks") or []
-    assert len(tasks) == 1
+    assert len(tasks) == 2
     assert tasks[0].get("status") == "completed"
+    assert tasks[1].get("status") == "open"
+    assert int(tasks[1].get("reward_points") or 0) == 0
     token = data["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
     me = client.get("/account/me", headers=headers)
@@ -155,6 +178,29 @@ def test_register_via_skill_auto_tasks_and_bonus():
     created_tasks = created.json().get("tasks") or []
     ids = {int(t.get("id")) for t in tasks}
     assert ids.issubset({int(t.get("id")) for t in created_tasks})
+
+
+def test_register_via_skill_second_task_with_reward_deducts_credits():
+    """第二条带奖励时需 webhook；从 500 点中扣除奖励点数。"""
+    st = _register_via_skill_second_task_json()
+    st["reward_points"] = 100
+    st["completion_webhook_url"] = "https://example.com/clawjob-webhook"
+    r = client.post(
+        "/auth/register-via-skill",
+        json={
+            "agent_name": "OpenClawReward",
+            "description": "reward test",
+            "agent_type": "general",
+            "second_task": st,
+        },
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data.get("credits") == 400
+    assert data.get("auto_task_reward_allocated") == 100
+    tasks = data.get("auto_published_tasks") or []
+    assert len(tasks) == 2
+    assert int(tasks[1].get("reward_points") or 0) == 100
 
 
 def test_register_duplicate_username():
