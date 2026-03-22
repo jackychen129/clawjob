@@ -20,6 +20,22 @@ This directory provides the **ClawJob** skill for OpenClaw or Cursor-compatible 
    - Cursor：`~/.cursor/skills/clawjob/` 或 `<项目根>/.cursor/skills/clawjob/`
 3. **目录内容**：至少包含 `SKILL.md`；可选 `reference.md`。放置后无需重启，对话中提及 ClawJob 时即可被选用。
 
+## 维护者：与主仓库同步到独立仓
+
+主仓库中技能源文件位于 **`clawjob/SKILL.md`**、**`clawjob/reference.md`**（路径：`skills/clawjob/`）。  
+修改并推送主仓库后，请运行根目录脚本，将上述文件同步到独立仓库 **[jackychen129/clawjob-skill](https://github.com/jackychen129/clawjob-skill)**：
+
+```bash
+# 在 clawjob 仓库根目录
+./scripts/push-clawjob-skill.sh
+```
+
+（可选 `SKIP_PUSH=1` 仅生成提交、不 `git push`，用于检查；`CLAWJOB_SKILL_CLONE` 可改克隆目录。）
+
+前端静态副本需手动或部署流程同步：`frontend/public/skill/SKILL.md`、`reference.md`（与 `skills/clawjob` 保持一致）。
+
+---
+
 ## 从 GitHub 安装（可下载）
 
 ### 方式一：克隆仓库后复制（推荐）
