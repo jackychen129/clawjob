@@ -11,6 +11,7 @@
         </div>
       </div>
       <template v-else>
+        <p v-if="skillPublishBanner" class="skill-publish-banner">{{ skillPublishBanner }}</p>
         <!-- 一键注册提示 · 毛玻璃卡片 -->
         <div class="card one-click-hint-card one-click-hint-card--glass">
           <div class="card-content">
@@ -79,7 +80,8 @@
                     {{ agentStateLabel(a) }}
                   </span>
                   <span v-if="a.has_skill_token" class="agent-card__badge agent-card__badge--skill" :title="t('agent.skillBound')">{{ t('agent.skillBound') }}</span>
-                  <span v-else-if="a.published_template_id" class="agent-card__badge agent-card__badge--published">{{ t('agentManage.published') || '已发布' }}</span>
+                  <span v-if="a.published_skill_id" class="agent-card__badge agent-card__badge--skill-live" :title="t('agentManage.skillOnMarketHint')">{{ t('agentManage.skillOnMarket') || 'Skill 已上架' }}</span>
+                  <span v-if="a.published_template_id" class="agent-card__badge agent-card__badge--published">{{ t('agentManage.published') || '已发布模板' }}</span>
                 </div>
 
                 <!-- 技能/完成进度 · 细进度条 + 数值 -->
@@ -103,6 +105,41 @@
                   class="agent-card__btn agent-card__btn--secondary"
                   @click="openPublishModal(a)"
                 >{{ t('agentManage.publishAsTemplate') || '发布为模板' }}</Button>
+                <Button
+                  v-if="a.published_template_id"
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  class="agent-card__btn agent-card__btn--secondary"
+                  :disabled="templateUnpublishLoading === a.published_template_id"
+                  @click="confirmUnpublishTemplate(a)"
+                >{{ t('agentManage.unpublishTemplate') || '撤下模板' }}</Button>
+                <Button
+                  v-if="a.has_skill_token"
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  class="agent-card__btn agent-card__btn--secondary"
+                  @click="openSkillPublishModal(a)"
+                >{{ a.published_skill_id ? (t('agentManage.updateSkillPublish') || '更新 Skill 上架') : (t('agentManage.publishSkillToMarket') || '发布 Skill 到市场') }}</Button>
+                <Button
+                  v-if="a.published_skill_id"
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  class="agent-card__btn agent-card__btn--secondary"
+                  :as="RouterLink"
+                  to="/marketplace#section-skill-market"
+                >{{ t('agentManage.viewSkillMarket') || '查看 Skill 市场' }}</Button>
+                <Button
+                  v-if="a.published_skill_id"
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  class="agent-card__btn agent-card__btn--secondary"
+                  :disabled="skillUnpublishLoading === a.published_skill_id"
+                  @click="confirmUnpublishSkillMarket(a)"
+                >{{ t('agentManage.unpublishSkillMarket') || '撤下 Skill' }}</Button>
                 <Button
                   v-if="(a.completed_task_count || 0) >= 1"
                   type="button"
@@ -175,6 +212,37 @@
       </div>
     </div>
 
+    <!-- 发布 Skill 到市场（与 skill_bound_token 对齐） -->
+    <div v-if="showSkillPublishModal" class="modal-mask" @click.self="closeSkillPublishModal">
+      <div class="modal">
+        <h3>{{ t('agentManage.publishSkillToMarket') || '发布 Skill 到市场' }}</h3>
+        <p class="hint">{{ t('agentManage.publishSkillHint') || '将本 Agent 绑定的 skill_bound_token 对应的 Skill 发布到 Skill 市场；若已存在相同 token 的记录将更新。' }}</p>
+        <div class="skill-publish-tools">
+          <Button type="button" size="sm" variant="secondary" @click="fillOfficialSkillZip">{{ t('agentManage.fillOfficialSkillZip') }}</Button>
+          <Button type="button" size="sm" variant="ghost" @click="copySkillExportBlurb">{{ copySkillExportDone ? t('agentManage.skillExportCopied') : t('agentManage.copySkillExportBlurb') }}</Button>
+          <Button :as="RouterLink" to="/skill" size="sm" variant="ghost" @click="showSkillPublishModal = false">{{ t('agentManage.openSkillDownloadPage') }}</Button>
+        </div>
+        <div class="form">
+          <label class="skill-publish-label">{{ t('agentManage.skillTokenLabel') || 'Skill Token（与注册时 skill_bound_token 一致）' }}</label>
+          <input
+            type="text"
+            readonly
+            :value="skillPublishForm.skill_token"
+            class="input flex h-10 w-full rounded-md border border-input bg-muted/40 px-3 py-2 text-sm font-mono"
+            :aria-label="t('agentManage.skillTokenLabel')"
+          />
+          <Input v-model="skillPublishForm.name" :placeholder="t('agent.name')" />
+          <Input v-model="skillPublishForm.description" :placeholder="t('agent.descriptionOptional')" />
+          <Input v-model="skillPublishForm.version_tag" :placeholder="t('agentManage.versionTagPlaceholder') || '版本标签（默认 v1）'" />
+          <label class="skill-publish-label">{{ t('agentManage.downloadSkillUrlLabel') || '下载地址（ZIP/GitHub，建议填公开可访问链接）' }}</label>
+          <Input v-model="skillPublishForm.download_skill_url" :placeholder="t('agentManage.downloadSkillUrlPlaceholder') || '下载 Skill URL（选填）'" />
+          <Button type="button" :disabled="skillPublishLoading" @click="submitSkillPublish">{{ t('common.confirm') || '确认发布' }}</Button>
+        </div>
+        <p v-if="skillPublishError" class="error-msg">{{ skillPublishError }}</p>
+        <Button type="button" variant="secondary" class="close-btn w-full" @click="closeSkillPublishModal">{{ t('common.close') }}</Button>
+      </div>
+    </div>
+
     <!-- 登录/注册弹窗 -->
     <div v-if="showAuthModal" class="modal-mask" @click.self="showAuthModal = false">
       <div class="modal">
@@ -212,6 +280,7 @@ import { useI18n } from 'vue-i18n'
 import { safeT } from '../i18n'
 import { useAuthStore } from '../stores/auth'
 import * as api from '../api'
+import { getDefaultSkillZipUrl, getDefaultSkillRepoUrl } from '../lib/skillUrls'
 
 type AgentItem = {
   id: number
@@ -219,8 +288,10 @@ type AgentItem = {
   description: string
   agent_type: string
   published_template_id?: number
+  published_skill_id?: number | null
   completed_task_count?: number
   has_skill_token?: boolean
+  config?: { skill_bound_token?: string; [k: string]: unknown }
 }
 
 const _i18n = useI18n()
@@ -247,6 +318,21 @@ const certificateAgent = ref<AgentItem | null>(null)
 const publishForm = reactive({ name: '', description: '', version_tag: 'v1', download_agent_url: '', download_skill_url: '' })
 const publishLoading = ref(false)
 const publishError = ref('')
+
+const showSkillPublishModal = ref(false)
+const skillPublishForm = reactive({
+  skill_token: '',
+  name: '',
+  description: '',
+  version_tag: 'v1',
+  download_skill_url: '',
+})
+const skillPublishLoading = ref(false)
+const skillPublishError = ref('')
+const skillPublishBanner = ref('')
+const copySkillExportDone = ref(false)
+const templateUnpublishLoading = ref<number | null>(null)
+const skillUnpublishLoading = ref<number | null>(null)
 
 const SKILL_BAR_CAP = 10
 
@@ -401,6 +487,93 @@ function submitPublish() {
   }).finally(() => {
     publishLoading.value = false
   })
+}
+
+function skillBoundTokenFromAgent(a: AgentItem): string {
+  const cfg = a.config
+  const raw = cfg && typeof cfg === 'object' && 'skill_bound_token' in cfg ? (cfg as { skill_bound_token?: string }).skill_bound_token : ''
+  return String(raw || '').trim()
+}
+
+function openSkillPublishModal(a: AgentItem) {
+  const tok = skillBoundTokenFromAgent(a)
+  if (!tok) {
+    window.alert((t('agentManage.skillTokenMissing') as string) || '未找到 skill_bound_token，请刷新页面后重试')
+    return
+  }
+  skillPublishForm.skill_token = tok
+  skillPublishForm.name = a.name || ''
+  skillPublishForm.description = a.description || ''
+  skillPublishForm.version_tag = 'v1'
+  skillPublishForm.download_skill_url = ''
+  skillPublishError.value = ''
+  showSkillPublishModal.value = true
+}
+
+function closeSkillPublishModal() {
+  showSkillPublishModal.value = false
+  skillPublishError.value = ''
+}
+
+function confirmUnpublishSkillMarket(a: AgentItem) {
+  const sid = a.published_skill_id
+  if (!sid) return
+  if (!window.confirm(String(t('agentManage.unpublishSkillMarketConfirm', { name: a.name }) || `确定撤下「${a.name}」在 Skill 市场的上架？`))) return
+  skillUnpublishLoading.value = sid
+  api.deleteSkillPublish(sid)
+    .then(() => {
+      skillPublishBanner.value = String(t('agentManage.unpublishSkillMarketOk') || '已从 Skill 市场撤下')
+      setTimeout(() => { skillPublishBanner.value = '' }, 5000)
+      loadMyAgents()
+    })
+    .catch(() => {
+      window.alert((t('common.operationFailed') as string) || '操作失败')
+    })
+    .finally(() => {
+      skillUnpublishLoading.value = null
+    })
+}
+
+function submitSkillPublish() {
+  const token = skillPublishForm.skill_token.trim()
+  if (!token || !skillPublishForm.name.trim()) {
+    skillPublishError.value = (t('agentManage.skillPublishRequired') as string) || '请填写名称与 Skill Token'
+    return
+  }
+  skillPublishError.value = ''
+  skillPublishLoading.value = true
+  api.publishSkill({
+    skill_token: token,
+    name: skillPublishForm.name.trim(),
+    description: skillPublishForm.description.trim() || undefined,
+    version_tag: skillPublishForm.version_tag.trim() || 'v1',
+    download_skill_url: skillPublishForm.download_skill_url.trim() || undefined,
+  }).then(() => {
+    closeSkillPublishModal()
+    skillPublishBanner.value = String(t('agentManage.skillPublishSuccess') || 'Skill 已发布到市场，可在 Marketplace 的 Skill 分区查看。')
+    setTimeout(() => { skillPublishBanner.value = '' }, 8000)
+    loadMyAgents()
+  }).catch((e) => {
+    skillPublishError.value = e.response?.data?.detail || (t('common.operationFailed') as string) || '操作失败'
+  }).finally(() => {
+    skillPublishLoading.value = false
+  })
+}
+
+function confirmUnpublishTemplate(a: AgentItem) {
+  const tid = a.published_template_id
+  if (!tid) return
+  const msg = (t('agentManage.unpublishTemplateConfirm', { name: a.name }) as string) || `确定撤下「${a.name}」已发布的市场模板？`
+  if (!window.confirm(msg)) return
+  templateUnpublishLoading.value = tid
+  api.deleteAgentTemplate(tid)
+    .then(() => loadMyAgents())
+    .catch(() => {
+      window.alert((t('common.operationFailed') as string) || '操作失败')
+    })
+    .finally(() => {
+      templateUnpublishLoading.value = null
+    })
 }
 </script>
 
@@ -665,6 +838,28 @@ function submitPublish() {
 
 .modal .form { display: flex; flex-direction: column; gap: var(--space-3); margin: var(--space-5) 0; }
 .modal .form .input { width: 100%; }
+.skill-publish-label { font-size: var(--font-caption); color: var(--text-secondary); margin-bottom: calc(-1 * var(--space-1)); }
+.mono { font-family: ui-monospace, monospace; }
+.skill-publish-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+.skill-publish-banner {
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(var(--primary-rgb), 0.25);
+  background: rgba(var(--primary-rgb), 0.08);
+  font-size: var(--font-caption);
+  color: var(--text-primary);
+}
+.agent-card__badge--skill-live {
+  border-color: rgba(34, 197, 94, 0.35);
+  color: rgba(34, 197, 94, 0.95);
+  background: rgba(34, 197, 94, 0.1);
+}
 
 /* TransitionGroup · 列表进入/离开/移动 */
 .agent-list-move,

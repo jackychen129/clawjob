@@ -911,6 +911,20 @@ def register_agent(
     }
 
 
+def _published_skill_ids_by_token(db: Session, agents: List[Agent]) -> dict:
+    """skill_bound_token -> PublishedSkill.id，用于前端展示「Skill 已上架」。"""
+    tokens = set()
+    for a in agents:
+        cfg = a.config or {}
+        tok = (cfg.get("skill_bound_token") or "").strip()
+        if tok:
+            tokens.add(tok)
+    if not tokens:
+        return {}
+    rows = db.query(PublishedSkill).filter(PublishedSkill.skill_token.in_(list(tokens))).all()
+    return {r.skill_token: r.id for r in rows}
+
+
 @app.get("/agents/mine")
 def list_my_agents(
     db: Session = Depends(get_db),
@@ -920,7 +934,13 @@ def list_my_agents(
     _ensure_agents_category_column()
     uid = int(current_user["user_id"])
 
-    def _build_agent_item(a: Agent, points: int = 0, published_template_id: Optional[int] = None, completed_task_count: int = 0) -> dict:
+    def _build_agent_item(
+        a: Agent,
+        points: int = 0,
+        published_template_id: Optional[int] = None,
+        completed_task_count: int = 0,
+        published_skill_id: Optional[int] = None,
+    ) -> dict:
         cfg = a.config or {}
         return {
             "id": a.id,
@@ -934,6 +954,7 @@ def list_my_agents(
             "has_skill_token": bool(cfg.get("skill_bound_token")),
             "points": int(points),
             "published_template_id": published_template_id,
+            "published_skill_id": published_skill_id,
             "completed_task_count": completed_task_count,
         }
 
@@ -960,7 +981,20 @@ def list_my_agents(
             .order_by(points_subq.c.points.desc().nullslast(), Agent.id.desc())
             .all()
         )
-        return {"agents": [_build_agent_item(a, points, published_by_agent.get(a.id), int(completed_count)) for a, points, completed_count in rows]}
+        agents_only = [a for a, _, _ in rows]
+        skill_id_by_token = _published_skill_ids_by_token(db, agents_only)
+
+        def _skill_pub_id(agent: Agent) -> Optional[int]:
+            cfg = agent.config or {}
+            tok = (cfg.get("skill_bound_token") or "").strip()
+            return skill_id_by_token.get(tok) if tok else None
+
+        return {
+            "agents": [
+                _build_agent_item(a, points, published_by_agent.get(a.id), int(completed_count), _skill_pub_id(a))
+                for a, points, completed_count in rows
+            ]
+        }
     except Exception as e:
         db.rollback()
         err_msg = str(e).lower()
@@ -971,7 +1005,19 @@ def list_my_agents(
             aid_list = [a.id for a in agents]
             pub = {t.agent_id: t.id for t in db.query(PublishedAgentTemplate).filter(PublishedAgentTemplate.agent_id.in_(aid_list)).all()} if aid_list else {}
             completed_map = {r[0]: r[1] for r in db.query(Task.agent_id, func.count(Task.id)).filter(Task.status == "completed", Task.agent_id.in_(aid_list)).group_by(Task.agent_id).all()} if aid_list else {}
-            return {"agents": [_build_agent_item(a, 0, pub.get(a.id), completed_map.get(a.id, 0)) for a in agents]}
+            skill_id_by_token = _published_skill_ids_by_token(db, agents)
+
+            def _skill_pub_id_fb(agent: Agent) -> Optional[int]:
+                cfg = agent.config or {}
+                tok = (cfg.get("skill_bound_token") or "").strip()
+                return skill_id_by_token.get(tok) if tok else None
+
+            return {
+                "agents": [
+                    _build_agent_item(a, 0, pub.get(a.id), completed_map.get(a.id, 0), _skill_pub_id_fb(a))
+                    for a in agents
+                ]
+            }
         except Exception:
             db.rollback()
             return {"agents": []}

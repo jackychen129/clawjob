@@ -270,8 +270,30 @@
                 <p v-if="selectedTaskDetail.verification_record.note" class="completion-summary">{{ selectedTaskDetail.verification_record.note }}</p>
                 <p class="completion-link">{{ t('task.verifiedAt') || '验收时间' }}：{{ selectedTaskDetail.verification_record.verified_at || '-' }}</p>
               </div>
+              <div v-if="selectedTaskDetail && canA2aTask(selectedTaskDetail)" class="detail-a2a-sync">
+                <h4 class="task-comments-title">{{ t('task.a2aSyncTitle') || 'A2A 任务同步' }}</h4>
+                <p class="hint detail-a2a-sync__hint">{{ t('task.a2aSyncHint') || '与 GET /a2a/tasks/{id} 一致，便于 Agent 与发布方/接取方对齐状态。' }}</p>
+                <div v-if="a2aSyncLoading" class="loading"><div class="spinner"></div></div>
+                <template v-else-if="a2aSync">
+                  <dl class="detail-a2a-sync__dl">
+                    <template v-if="a2aSync.executor_agent_name != null && String(a2aSync.executor_agent_name)">
+                      <dt>{{ t('task.a2aFieldExecutor') || '执行 Agent' }}</dt>
+                      <dd>{{ a2aSync.executor_agent_name }}</dd>
+                    </template>
+                    <dt>{{ t('task.a2aFieldStatus') || '状态' }}</dt>
+                    <dd><span :class="taskStatusPillClass(String(a2aSync.status || ''))">{{ t('status.' + String(a2aSync.status || '')) || String(a2aSync.status || '') }}</span></dd>
+                    <dt>{{ t('task.a2aFieldReward') || '奖励（点）' }}</dt>
+                    <dd class="mono">{{ Number(a2aSync.reward_points) || 0 }}</dd>
+                    <dt>{{ t('task.a2aFieldSubmitted') || '提交完成时间' }}</dt>
+                    <dd class="mono">{{ formatA2aTime(a2aSync.submitted_at) }}</dd>
+                    <dt>{{ t('task.a2aFieldDeadline') || '验收截止时间' }}</dt>
+                    <dd class="mono">{{ formatA2aTime(a2aSync.verification_deadline_at) }}</dd>
+                  </dl>
+                  <Button size="sm" type="button" variant="secondary" @click="copyA2aSyncJson">{{ t('task.a2aCopyPayload') || '复制 JSON（供 Agent）' }}</Button>
+                </template>
+              </div>
               <div class="task-comments">
-                <h4 class="task-comments-title">{{ t('task.comments') }}</h4>
+                <h4 class="task-comments-title">{{ canA2aTask(selectedTaskDetail) ? (t('task.a2aCommentsTitle') || '协作留言 (A2A)') : (t('task.comments') || '评论') }}</h4>
                 <div v-if="taskCommentsLoading" class="loading"><div class="spinner"></div></div>
                 <ul v-else class="task-comments-list">
                   <li v-for="c in taskComments" :key="c.id" class="task-comment-item" :class="{ 'comment-kind-status': c.kind === 'status_update' }">
@@ -289,6 +311,22 @@
                 </ul>
                 <p v-if="!taskComments.length && !taskCommentsLoading" class="task-comments-empty">{{ t('task.noComments') }}</p>
                 <div v-if="auth.isLoggedIn" class="task-comment-form">
+                  <div v-if="selectedTaskDetail && canA2aTask(selectedTaskDetail)" class="task-comment-a2a-opts">
+                    <div class="task-comment-a2a-row">
+                      <label class="task-comment-a2a-label">{{ t('task.commentIdentity') || '发言身份' }}</label>
+                      <select v-model="commentAgentId" class="input select-input task-comment-a2a-select">
+                        <option value="">{{ t('task.commentAsSelf') || '本人' }}</option>
+                        <option v-for="a in myAgents" :key="a.id" :value="String(a.id)">{{ a.name }}</option>
+                      </select>
+                    </div>
+                    <div class="task-comment-a2a-row">
+                      <label class="task-comment-a2a-label">{{ t('task.commentKind') || '类型' }}</label>
+                      <select v-model="commentKind" class="input select-input task-comment-a2a-select">
+                        <option value="message">{{ t('task.commentKindMessage') || '普通消息' }}</option>
+                        <option value="status_update">{{ t('task.commentKindStatus') || '状态同步' }}</option>
+                      </select>
+                    </div>
+                  </div>
                   <Textarea v-model="newCommentContent" rows="2" :placeholder="t('task.writeComment')" />
                   <Button size="sm" type="button" :disabled="postCommentLoading || !newCommentContent.trim()" @click="postComment">{{ t('task.postComment') }}</Button>
                 </div>
@@ -588,9 +626,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue'
 import { useVirtualList } from '@vueuse/core'
-import { useRoute, RouterLink } from 'vue-router'
+import { useRoute, useRouter, RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
@@ -601,8 +639,10 @@ import { safeT } from '../i18n'
 import { useAuthStore } from '../stores/auth'
 import * as api from '../api'
 import type { TaskListItem, TaskCommentItem } from '../api'
+import { canA2aTaskParams } from '../utils/taskA2a'
 
 const route = useRoute()
+const router = useRouter()
 const publishAsSelfValue = null as number | null
 
 const emit = defineEmits<{ (e: 'show-auth'): void; (e: 'scroll-agent'): void; (e: 'success', msg: string): void; (e: 'register-hint'): void }>()
@@ -805,6 +845,29 @@ function isExecutor(t: { agent_id?: number }) {
   if (!auth.userId || !t.agent_id) return false
   return myAgents.value.some((a) => a.id === t.agent_id)
 }
+
+/** 发布方或接取方（当前用户名下 Agent 为 task.agent_id）可访问 A2A 接口 */
+function canA2aTask(t: TaskListItem | null): boolean {
+  if (!t) return false
+  return canA2aTaskParams({
+    isLoggedIn: auth.isLoggedIn,
+    userId: auth.userId,
+    taskOwnerId: t.owner_id,
+    taskAgentId: t.agent_id,
+    myAgentIds: myAgents.value.map((a) => a.id),
+  })
+}
+
+function formatA2aTime(v: unknown): string {
+  if (v == null || v === '') return '—'
+  try {
+    const d = new Date(String(v))
+    if (Number.isNaN(d.getTime())) return '—'
+    return d.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
+  } catch {
+    return '—'
+  }
+}
 function getTaskSkills(t: { skills?: string[] | string }): string[] {
   if (!t.skills) return []
   if (Array.isArray(t.skills)) return t.skills
@@ -882,6 +945,10 @@ const taskComments = ref<TaskCommentItem[]>([])
 const taskCommentsLoading = ref(false)
 const newCommentContent = ref('')
 const postCommentLoading = ref(false)
+const a2aSync = ref<Record<string, unknown> | null>(null)
+const a2aSyncLoading = ref(false)
+const commentKind = ref<'message' | 'status_update'>('message')
+const commentAgentId = ref('')
 const skillProgress = ref<api.SkillNode[]>([])
 
 function openTaskDetail(task: TaskListItem) {
@@ -889,9 +956,13 @@ function openTaskDetail(task: TaskListItem) {
   detailLoading.value = true
   taskComments.value = []
   skillProgress.value = []
+  a2aSync.value = null
+  commentKind.value = 'message'
+  commentAgentId.value = ''
   api.getTaskDetail(task.id).then((res) => {
     selectedTaskDetail.value = res.data as TaskListItem
     const detail = res.data as TaskListItem
+    loadA2aSync(task.id)
     const hasSkills = getTaskSkills(detail).length > 0
     if (hasSkills && detail.agent_id && isExecutor(detail)) {
       api.fetchAgentSkills(Number(detail.agent_id)).then((r) => {
@@ -900,14 +971,53 @@ function openTaskDetail(task: TaskListItem) {
       }).catch(() => { skillProgress.value = [] })
     }
   }).catch(() => {}).finally(() => { detailLoading.value = false })
-  loadTaskComments(task.id)
+  loadTaskComments(task.id, task)
 }
 
-function loadTaskComments(taskId: number) {
+function loadA2aSync(taskId: number) {
+  const t = selectedTaskDetail.value
+  if (!t || !canA2aTask(t)) {
+    a2aSync.value = null
+    return
+  }
+  a2aSyncLoading.value = true
+  api.a2aGetTask(taskId)
+    .then((res) => { a2aSync.value = res.data as Record<string, unknown> })
+    .catch(() => { a2aSync.value = null })
+    .finally(() => { a2aSyncLoading.value = false })
+}
+
+async function loadTaskComments(taskId: number, taskHint?: TaskListItem | null) {
   taskCommentsLoading.value = true
-  api.getTaskComments(taskId).then((res) => {
-    taskComments.value = res.data.comments || []
-  }).catch(() => { taskComments.value = [] }).finally(() => { taskCommentsLoading.value = false })
+  const t = taskHint ?? selectedTaskDetail.value
+  try {
+    if (t && canA2aTask(t)) {
+      try {
+        const res = await api.a2aListMessages(taskId)
+        taskComments.value = res.data.messages || []
+      } catch {
+        const res = await api.getTaskComments(taskId)
+        taskComments.value = res.data.comments || []
+      }
+    } else {
+      const res = await api.getTaskComments(taskId)
+      taskComments.value = res.data.comments || []
+    }
+  } catch {
+    taskComments.value = []
+  } finally {
+    taskCommentsLoading.value = false
+  }
+}
+
+async function copyA2aSyncJson() {
+  if (!a2aSync.value) return
+  try {
+    await navigator.clipboard.writeText(JSON.stringify(a2aSync.value, null, 2))
+    showSuccessLocal(t('task.a2aCopied') || '已复制 A2A JSON')
+  } catch {
+    showSuccessLocal(t('task.a2aCopyFailed') || '复制失败')
+  }
 }
 
 function formatCommentTime(iso: string | null) {
@@ -921,20 +1031,42 @@ function formatCommentTime(iso: string | null) {
   return d.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
 }
 
-function postComment() {
+async function postComment() {
   if (!selectedTaskDetail.value || !newCommentContent.value.trim()) return
+  const tid = selectedTaskDetail.value.id
+  const content = newCommentContent.value.trim()
+  const asA2a = canA2aTask(selectedTaskDetail.value)
+  const agentId = commentAgentId.value ? Number(commentAgentId.value) : undefined
   postCommentLoading.value = true
-  api.postTaskComment(selectedTaskDetail.value.id, { content: newCommentContent.value.trim() }).then((res) => {
-    taskComments.value = [...taskComments.value, res.data]
+  try {
+    if (asA2a) {
+      await api.a2aPostMessage(tid, {
+        content,
+        kind: commentKind.value,
+        ...(agentId != null && !Number.isNaN(agentId) ? { agent_id: agentId } : {}),
+      })
+    } else {
+      await api.postTaskComment(tid, { content })
+    }
     newCommentContent.value = ''
+    commentKind.value = 'message'
+    commentAgentId.value = ''
+    await loadTaskComments(tid)
     showSuccessLocal(t('task.commentPosted'))
-  }).catch(() => {}).finally(() => { postCommentLoading.value = false })
+  } catch {
+    // 静默失败；可后续接全局 toast
+  } finally {
+    postCommentLoading.value = false
+  }
 }
 
 function closeTaskDetail() {
   selectedTaskDetail.value = null
   taskComments.value = []
   skillProgress.value = []
+  a2aSync.value = null
+  commentKind.value = 'message'
+  commentAgentId.value = ''
 }
 
 const TASK_DRAFT_KEY = 'clawjob_task_draft'
@@ -1319,6 +1451,58 @@ function applyPublishAsFromQuery() {
   }
 }
 
+function applySwarmFromQuery() {
+  if (String(route.query.swarm) !== '1') return
+  const leader = Number(route.query.leader)
+  const w1 = Number(route.query.w1)
+  const w2 = Number(route.query.w2)
+  if (![leader, w1, w2].every((n) => Number.isInteger(n) && n > 0)) return
+  if (new Set([leader, w1, w2]).size !== 3) return
+  if (!myAgents.value.length) return
+  const names = new Map(myAgents.value.map((a) => [a.id, a.name]))
+  if (!names.has(leader) || !names.has(w1) || !names.has(w2)) {
+    nextTick(() => {
+      router.replace({ path: '/tasks', query: {} })
+    })
+    showSuccessLocal(String(t('marketplace.swarmInvalidAgents') || '未找到所选 Agent，请重试'))
+    return
+  }
+  const ln = names.get(leader)!
+  const n1 = names.get(w1)!
+  const n2 = names.get(w2)!
+
+  publishForm.title = String(t('marketplace.swarmDefaultTitle', { leader: ln }))
+  publishForm.description = String(t('marketplace.swarmDefaultDesc', { leader: ln, w1: n1, w2: n2 }))
+  publishForm.requirements = String(t('marketplace.swarmDefaultReq'))
+  publishForm.category = 'other'
+  publishForm.skills_text = 'swarm, collaboration'
+  publishForm.reward_points = Math.max(publishForm.reward_points, 10)
+  publishForm.escrow_enabled = true
+  publishForm.escrow_rows = [
+    {
+      title: String(t('marketplace.swarmMilestoneLeader', { name: ln })),
+      weight: 0.34,
+      acceptance_criteria: String(t('marketplace.swarmMilestoneLeaderAc')),
+    },
+    {
+      title: String(t('marketplace.swarmMilestoneW1', { name: n1 })),
+      weight: 0.33,
+      acceptance_criteria: String(t('marketplace.swarmMilestoneW1Ac')),
+    },
+    {
+      title: String(t('marketplace.swarmMilestoneW2', { name: n2 })),
+      weight: 0.33,
+      acceptance_criteria: String(t('marketplace.swarmMilestoneW2Ac')),
+    },
+  ]
+  publishForm.creator_agent_id = leader
+  publishError.value = ''
+  showCreateModal.value = true
+  nextTick(() => {
+    router.replace({ path: '/tasks', query: {} })
+  })
+}
+
 onMounted(() => {
   loadTasks()
   loadCandidates()
@@ -1332,6 +1516,12 @@ onMounted(() => {
 watch(
   () => [route.query.publishAs, myAgents.value.length] as const,
   () => applyPublishAsFromQuery(),
+  { immediate: true }
+)
+
+watch(
+  () => [String(route.query.swarm), route.query.leader, route.query.w1, route.query.w2, myAgents.value.length] as const,
+  () => applySwarmFromQuery(),
   { immediate: true }
 )
 
@@ -1428,6 +1618,26 @@ watch(tab, (newTab) => {
   padding-top: var(--space-5);
   border-top: 1px solid rgba(255,255,255,0.06);
 }
+
+.detail-a2a-sync {
+  margin-top: var(--space-8);
+  padding-top: var(--space-6);
+  border-top: var(--border-hairline);
+}
+.detail-a2a-sync__hint { margin: 0 0 var(--space-6); font-size: var(--font-caption); }
+.detail-a2a-sync__dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-2) var(--space-6);
+  margin: 0 0 var(--space-4);
+  font-size: var(--font-caption);
+}
+.detail-a2a-sync__dl dt { color: var(--text-secondary); margin: 0; }
+.detail-a2a-sync__dl dd { margin: 0; color: var(--text-primary); }
+.task-comment-a2a-opts { display: flex; flex-direction: column; gap: var(--space-3); margin-bottom: var(--space-2); }
+.task-comment-a2a-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+.task-comment-a2a-label { font-size: var(--font-caption); color: var(--text-secondary); min-width: 4.5rem; }
+.task-comment-a2a-select { flex: 1; min-width: 160px; max-width: 100%; }
 
 .task-comments-title {
   font-size: var(--font-section-title);

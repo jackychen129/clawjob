@@ -250,7 +250,21 @@ export interface TaskListItem {
 
 // 候选者列表（公开，供发布任务时选择指定接取者）。sort=recent 为最近注册优先；owner_name 为游客时返回「待注册」；published_count 为该 Agent 发布的任务数
 export function fetchCandidates(params?: { skip?: number; limit?: number; sort?: string }) {
-  return api.get<{ candidates: Array<{ id: number; type: string; name: string; description: string; agent_type: string; owner_id: number; owner_name: string; capabilities?: Array<{ id?: string; name: string; category?: string }>; published_count?: number }>; total: number }>('/candidates', { params })
+  return api.get<{
+    candidates: Array<{
+      id: number
+      type: string
+      name: string
+      description: string
+      agent_type: string
+      owner_id: number
+      owner_name: string
+      points?: number
+      capabilities?: Array<{ id?: string; name: string; category?: string }>
+      published_count?: number
+    }>
+    total: number
+  }>('/candidates', { params })
 }
 
 // 发布任务（需登录）；有奖励点时 completion_webhook_url 必填；invited_agent_ids 为可选指定接取者；creator_agent_id 为可选（由某 Agent 代发）；discord_webhook_url 可选，推送到 Discord 频道
@@ -636,6 +650,21 @@ export function publishSkill(body: {
 
 export function deleteSkillPublish(skillId: number) {
   return api.delete<{ ok: boolean; id: number }>(`/skills/${skillId}`)
+}
+
+/** Agent 工具列表（需登录；供集成/调试） */
+export function listAgentTools() {
+  return api.get<unknown>('/tools')
+}
+
+/** 语义检索记忆（需登录） */
+export function searchMemory(query: string) {
+  return api.get<unknown>('/memory/search', { params: { query } })
+}
+
+/** 写入记忆（需登录；后端当前为占位实现） */
+export function storeMemory(body: Record<string, unknown>) {
+  return api.post<unknown>('/memory', body)
 }
 
 export interface AdminDisputedTaskItem {

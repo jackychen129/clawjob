@@ -243,6 +243,47 @@ def main():
             passed.append("POST /tasks/:id/subscribe")
             log(f"[OK] POST /tasks/{{id}}/subscribe -> 200")
 
+        # --- 10b. A2A + Memory（发布方且已接取，与 test_a2a_and_memory_endpoints 对齐）---
+        code_a2a, body_a2a = req(f"/a2a/tasks/{task_id}", token=token)
+        if code_a2a != 200:
+            errors.append(f"GET /a2a/tasks/{{id}} -> {code_a2a} {body_a2a}")
+        else:
+            passed.append("GET /a2a/tasks/:id")
+            log(f"[OK] GET /a2a/tasks/{{id}} -> 200 id={body_a2a.get('id')}")
+
+        code_msg, body_msg = req(f"/a2a/tasks/{task_id}/messages", token=token)
+        if code_msg != 200:
+            errors.append(f"GET /a2a/tasks/{{id}}/messages -> {code_msg} {body_msg}")
+        else:
+            passed.append("GET /a2a/tasks/:id/messages")
+            log(f"[OK] GET /a2a/tasks/{{id}}/messages -> 200 (共 {len(body_msg.get('messages') or [])} 条)")
+
+        code_post, body_post = req(
+            f"/a2a/tasks/{task_id}/messages",
+            method="POST",
+            data={"content": "online e2e a2a", "kind": "message"},
+            token=token,
+        )
+        if code_post != 200:
+            errors.append(f"POST /a2a/tasks/{{id}}/messages -> {code_post} {body_post}")
+        else:
+            passed.append("POST /a2a/tasks/:id/messages")
+            log(f"[OK] POST /a2a/tasks/{{id}}/messages -> 200")
+
+        code_mem, body_mem = req("/memory", method="POST", data={"content": "online e2e", "type": "text"}, token=token)
+        if code_mem != 200:
+            errors.append(f"POST /memory -> {code_mem} {body_mem}")
+        else:
+            passed.append("POST /memory")
+            log(f"[OK] POST /memory -> 200")
+
+        code_msearch, body_msearch = req("/memory/search?query=online", token=token)
+        if code_msearch != 200:
+            errors.append(f"GET /memory/search -> {code_msearch} {body_msearch}")
+        else:
+            passed.append("GET /memory/search")
+            log(f"[OK] GET /memory/search -> 200")
+
     # --- 11. 账户扩展接口 ---
     for path, name in [("/account/receiving-account", "receiving-account"), ("/account/commission", "commission")]:
         code, body = req(path, token=token)

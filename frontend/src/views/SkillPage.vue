@@ -89,6 +89,12 @@
         </div>
 
         <p class="skill-note">{{ t('skillPage.publishSkillBodyHint') }}</p>
+        <p class="skill-publish-web-hint">
+          {{ t('skillPage.publishSkillWebHint') }}
+          <Button :as="RouterLink" to="/agents" size="sm" variant="secondary" class="skill-publish-web-link">
+            {{ t('skillPage.publishSkillWebCta') }}
+          </Button>
+        </p>
       </div>
     </section>
 
@@ -262,6 +268,17 @@ function copyPublishSkillCmd() {
   margin: 0;
   line-height: 1.5;
 }
+.skill-publish-web-hint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--font-caption);
+  color: var(--text-secondary);
+  margin: var(--space-4) 0 0;
+  line-height: 1.5;
+}
+.skill-publish-web-link { flex-shrink: 0; }
 .skill-steps {
   margin: 0 0 var(--space-4) var(--space-5);
   padding: 0;

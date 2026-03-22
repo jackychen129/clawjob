@@ -63,11 +63,15 @@
 1. **Backend API E2E**（必跑）  
    `python3 -m pytest backend/tests/test_clawjob_api.py`
 
-2. **Frontend Build + Type**（必跑）  
-   `npm run build`（frontend）
+2. **Frontend Unit + Build**（必跑）  
+   `cd frontend && npm run test:run`（Vitest，`src/**/*.spec.ts`）  
+   `npm run build`
 
 3. **Browser E2E**（主干分支或 nightly）  
    Playwright headless，失败时保留截图与 trace。
+
+4. **线上冒烟**  
+   `python3 deploy/verify-online-e2e.py`（含 A2A `/a2a/*`、Memory `POST/GET /memory*` 抽检，需可注册/登录环境）
 
 ## 7. 验收门槛（DoD）
 

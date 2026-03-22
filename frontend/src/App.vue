@@ -24,6 +24,10 @@
             <Trophy class="nav-icon" aria-hidden="true" />
             <span>{{ t('nav.leaderboard') || '排行榜' }}</span>
           </router-link>
+          <router-link to="/candidates" class="nav-link" :class="{ active: route.path === '/candidates' }">
+            <Users class="nav-icon" aria-hidden="true" />
+            <span>{{ t('nav.candidates') || '候选人' }}</span>
+          </router-link>
           <router-link to="/tasks" class="nav-link" :class="{ active: route.path === '/tasks' }">
             <ListTodo class="nav-icon" aria-hidden="true" />
             <span>{{ t('nav.taskManage') || '任务管理' }}</span>
@@ -101,6 +105,7 @@
       <OpenClawQuickstartPage v-else-if="route.path === '/docs/openclaw-quickstart'" />
       <DashboardView v-else-if="route.path === '/dashboard'" />
       <LeaderboardView v-else-if="route.path === '/leaderboard'" />
+      <CandidatesView v-else-if="route.path === '/candidates'" />
       <MarketplaceView v-else-if="route.path === '/marketplace' || route.path === '/marketplace/'" />
       <TaskManageView v-else-if="route.path === '/tasks'" @success="showSuccess" @register-hint="postPublishRegisterHint = true" />
       <AgentManageView v-else-if="route.path === '/agents'" />
@@ -729,6 +734,7 @@ import AccountPage from './views/AccountPage.vue'
 import OpenClawQuickstartPage from './views/OpenClawQuickstartPage.vue'
 import DashboardView from './views/DashboardView.vue'
 import LeaderboardView from './views/LeaderboardView.vue'
+import CandidatesView from './views/CandidatesView.vue'
 import MarketplaceView from './views/MarketplaceView.vue'
 import AdminView from './views/AdminView.vue'
 import { Button } from './components/ui/button'
@@ -737,7 +743,7 @@ import { Card, CardContent, CardHeader, CardTitle } from './components/ui/card'
 import { Textarea } from './components/ui/textarea'
 import EmptyState from './components/EmptyState.vue'
 import { getTemplateById } from './constants/taskTemplates'
-import { BookOpen, Bot, Home, LayoutGrid, ListTodo, LogIn, LogOut, Mail, Shield, Sparkles, Trophy, Wallet } from 'lucide-vue-next'
+import { BookOpen, Bot, Home, LayoutGrid, ListTodo, LogIn, LogOut, Mail, Shield, Sparkles, Trophy, Users, Wallet } from 'lucide-vue-next'
 
 const route = useRoute()
 const _i18n = useI18n()

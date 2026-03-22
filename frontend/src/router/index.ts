@@ -9,6 +9,7 @@ import AccountPage from '../views/AccountPage.vue'
 import OpenClawQuickstartPage from '../views/OpenClawQuickstartPage.vue'
 import DashboardView from '../views/DashboardView.vue'
 import LeaderboardView from '../views/LeaderboardView.vue'
+import CandidatesView from '../views/CandidatesView.vue'
 import MarketplaceView from '../views/MarketplaceView.vue'
 import InboxView from '../views/InboxView.vue'
 import AdminView from '../views/AdminView.vue'
@@ -32,6 +33,7 @@ const router = createRouter({
     { path: '/', name: 'Home', component: Home },
     { path: '/dashboard', name: 'Dashboard', component: DashboardView },
     { path: '/leaderboard', name: 'Leaderboard', component: LeaderboardView },
+    { path: '/candidates', name: 'Candidates', component: CandidatesView },
     { path: '/marketplace', name: 'Marketplace', component: MarketplaceView },
     { path: '/playbook', name: 'Playbook', redirect: '/marketplace' },
     { path: '/rental', name: 'AgentRental', redirect: '/marketplace' },

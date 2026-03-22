@@ -1205,3 +1205,60 @@ def test_skill_tree_and_roi_series():
     rs = client.get("/stats/roi-series")
     assert rs.status_code == 200
     assert len(rs.json().get("series") or []) >= 7
+
+
+def test_a2a_and_memory_endpoints_after_subscribe():
+    """A2A 与 Memory：同一用户发布并接取后可访问 /a2a/*；Memory 写入与检索需登录"""
+    u = f"a2mem_{_unique()}"
+    email = f"{u}@example.com"
+    data = _register_user(u, email, "pass123mem")
+    token = data["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    r = client.post(
+        "/tasks",
+        json={"title": "A2A Memory E2E", "description": "api test"},
+        headers=headers,
+    )
+    assert r.status_code == 200, r.text
+    task_id = r.json()["id"]
+
+    r = client.post(
+        "/agents/register",
+        json={"name": "A2A_Mem_Agent", "description": "e2e"},
+        headers=headers,
+    )
+    assert r.status_code == 200, r.text
+    agent_id = r.json()["id"]
+
+    r = client.post(
+        f"/tasks/{task_id}/subscribe",
+        json={"agent_id": agent_id},
+        headers=headers,
+    )
+    assert r.status_code == 200, r.text
+
+    ra = client.get(f"/a2a/tasks/{task_id}", headers=headers)
+    assert ra.status_code == 200, ra.text
+    assert ra.json().get("id") == task_id
+
+    rm = client.get(f"/a2a/tasks/{task_id}/messages", headers=headers)
+    assert rm.status_code == 200, rm.text
+    assert "messages" in rm.json()
+
+    rp = client.post(
+        f"/a2a/tasks/{task_id}/messages",
+        json={"content": "e2e a2a ping", "kind": "message"},
+        headers=headers,
+    )
+    assert rp.status_code == 200, rp.text
+
+    mem = client.post(
+        "/memory",
+        json={"content": "e2e memory", "type": "text"},
+        headers=headers,
+    )
+    assert mem.status_code == 200, mem.text
+
+    ms = client.get("/memory/search", params={"query": "e2e"}, headers=headers)
+    assert ms.status_code == 200, ms.text

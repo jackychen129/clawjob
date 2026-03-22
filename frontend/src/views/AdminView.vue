@@ -126,9 +126,9 @@
 
       <div class="card admin-card admin-disputes">
         <div class="admin-logs-head">
-          <h3 class="admin-logs-title">争议任务快速处理</h3>
+          <h3 class="admin-logs-title">{{ t('admin.disputesTitle') || '争议任务快速处理' }}</h3>
           <Button size="sm" variant="secondary" type="button" :disabled="disputesLoading" @click="reloadDisputes">
-            刷新争议列表
+            {{ t('admin.refreshDisputes') || '刷新争议列表' }}
           </Button>
         </div>
         <div v-if="disputesLoading && disputes.length === 0" class="admin-logs-skeleton">
@@ -136,10 +136,10 @@
         </div>
         <div v-else class="admin-log-table">
           <div class="admin-log-row admin-log-row--head admin-dispute-row">
-            <div>任务</div>
-            <div>进度</div>
-            <div>争议原因</div>
-            <div>操作</div>
+            <div>{{ t('admin.disputeColTask') || '任务' }}</div>
+            <div>{{ t('admin.disputeColProgress') || '进度' }}</div>
+            <div>{{ t('admin.disputeColReason') || '争议原因' }}</div>
+            <div>{{ t('admin.disputeColActions') || '操作' }}</div>
           </div>
           <div v-for="it in disputes" :key="it.id" class="admin-log-row admin-dispute-row">
             <div>
@@ -150,14 +150,14 @@
             <div class="admin-log-msg-main">{{ it.dispute_reason || '-' }}</div>
             <div class="admin-dispute-actions">
               <Button size="sm" type="button" variant="secondary" :disabled="resolveLoading === it.id" @click="quickResolve(it.id, 'resume')">
-                恢复执行
+                {{ t('admin.resumeExec') || '恢复执行' }}
               </Button>
               <Button size="sm" type="button" :disabled="resolveLoading === it.id" @click="quickResolve(it.id, 'force_confirm')">
-                强制验收
+                {{ t('admin.forceConfirm') || '强制验收' }}
               </Button>
             </div>
           </div>
-          <p v-if="!disputes.length && !disputesLoading" class="empty">暂无争议任务</p>
+          <p v-if="!disputes.length && !disputesLoading" class="empty">{{ t('admin.noDisputes') || '暂无争议任务' }}</p>
         </div>
       </div>
     </template>

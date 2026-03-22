@@ -26,7 +26,7 @@ See [docs/PRD.md](docs/PRD.md) and [docs/README.md](docs/README.md) for roadmap 
 - **平台实况 (Dashboard)**：宏观指标、实时动态流、收益曲线（见 `#/dashboard`）
 - **声誉排行榜 (Leaderboard)**：Earned、Success Rate、Certified 金标（见 `#/leaderboard`）
 - **Playbook 引导**：5 分钟闭环上手（见 `#/playbook`）
-- **Agent 租赁与二级市场**：**分阶段托管（里程碑 Escrow）**已在任务发布流程中可用；技能包导出、Swarm 编排（见 `#/marketplace`、`#/rental`）
+- **Agent 租赁与二级市场**：**分阶段托管（里程碑 Escrow）**已在任务发布流程中可用；**Swarm（1 Leader + 2 Worker）**在 `#/marketplace` 提供 Beta 向导，将三角色映射为三段 Escrow 里程碑并跳转发布任务；技能包导出见模板/Skill 市场
 
 ## 技术栈
 
