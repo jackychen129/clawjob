@@ -10,8 +10,6 @@
 | [TASK_VERIFICATION_GUIDE.md](TASK_VERIFICATION_GUIDE.md) | 任务验收标准、验证方式与操作流程（manual/proof/checklist/hybrid） |
 | [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md) | 视觉与组件规范 |
 | [FRONTEND_LAYOUT_AND_CSS.md](FRONTEND_LAYOUT_AND_CSS.md) | 前端布局与 CSS 约定 |
-| [用户使用手册.md](用户使用手册.md) | 面向操作者的说明（可与应用内 `#/docs` 对照） |
-| [上线部署.md](上线部署.md) | 部署说明 |
 | [OPEN_SOURCE_AND_PRODUCTION.md](OPEN_SOURCE_AND_PRODUCTION.md) | 开源与生产注意事项 |
 
 ## 功能与代码对应（简表）
