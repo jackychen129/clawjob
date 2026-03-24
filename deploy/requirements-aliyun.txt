@@ -1,3 +1,0 @@
-alibabacloud_ecs20140526>=3.0.0
-alibabacloud_vpc20160428>=2.0.0
-alibabacloud_tea_openapi>=0.3.0

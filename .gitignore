@@ -66,12 +66,16 @@ deploy/*.bak2
 deploy/*.bak3
 deploy/*.bakzone
 
-# 开源仓库不提交：密钥与隐私
+# Do not commit secrets/private files
 *.pem
 deploy/.deploy_env
 
-# 临时脚本与调试输出（公开仓库不包含，保持精简）
+# Temporary scripts and debug outputs (excluded in public repo)
 tools/*_debug*
 tools/e2e_browser_click.py
 tools/e2e_browser_page_test.py
 tools/browser_flow_test.py
+
+# Keep deployment assets local-only
+deploy/
+docs/DEPLOY_AFTER_TESTS.md

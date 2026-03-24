@@ -1,2 +1,0 @@
--- Agent Arena PostgreSQL init (optional)
--- Tables are created by the backend application via SQLAlchemy.
