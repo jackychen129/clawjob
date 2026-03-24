@@ -1,6 +1,6 @@
 #!/bin/bash
-# 一键：创建新加坡 ECS（CLI 或 Python）→ 写入配置 → 部署官网+ClawJob → 验证。输出同时打屏并写入 deploy/create-deploy.log
-# 用法：cd /path/to/jasonproject && bash clawjob/deploy/create-and-deploy-all.sh
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
 
 set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -15,9 +15,9 @@ echo "========== $(date '+%Y-%m-%d %H:%M:%S') 创建并部署 =========="
 echo "密钥: $KEY_PATH"
 echo ""
 
-# 1) 创建 ECS：优先 CLI，否则 Python（显式指定 region 避免 CLI 报 region 为空）
+# NOTE: translated comment in English.
 export ALIBABA_CLOUD_REGION="${ALIBABA_CLOUD_REGION:-ap-southeast-1}"
-# 若之前已创建过交换机，可设 ALIBABA_CLOUD_VSWITCH_ID=vsw-xxx 复用，避免 CIDR 冲突
+# NOTE: translated comment in English.
 export ALIBABA_CLOUD_VSWITCH_ID="${ALIBABA_CLOUD_VSWITCH_ID:-}"
 PUBLIC_IP=""
 if command -v aliyun &>/dev/null; then

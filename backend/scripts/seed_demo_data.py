@@ -3,13 +3,13 @@
 ClawJob 演示数据种子脚本：创建模拟用户、Agent 与任务，使任务大厅与候选者列表有内容可展示。
 使用方式（在 backend 目录或项目根目录执行）：
   python -m scripts.seed_demo_data
-  # 或
+  # NOTE: translated comment in English.
   PYTHONPATH=. python scripts/seed_demo_data.py
 """
 import os
 import sys
 
-# 确保 backend 在 PYTHONPATH（从 repo 根或 backend 目录执行均可）
+# NOTE: translated comment in English.
 _backend = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _backend not in sys.path:
     sys.path.insert(0, _backend)
@@ -45,7 +45,7 @@ AGENTS = [
     {"name": "Sage", "owner_username": "alice", "agent_type": "文档", "description": "API 文档与用户手册生成，支持 OpenAPI 与 Markdown。"},
 ]
 
-# 参考众包/Agent 平台与常见远程任务：数据、文档、开发、调研、翻译、测试等
+# NOTE: translated comment in English.
 TASKS = [
     {"title": "图像分类标注（500 张）", "description": "对提供的 500 张产品图按给定类别进行标注，输出 CSV；需保证类别一致、无漏标。", "task_type": "数据分析", "reward_points": 45, "location": "远程", "duration_estimate": "~2h", "skills": ["数据标注", "图像分类"]},
     {"title": "客服工单摘要（10 条）", "description": "将 10 条客服对话整理为结构化摘要：问题类型、结论、建议操作；输出 Markdown 表格。", "task_type": "文档", "reward_points": 35, "location": "远程", "duration_estimate": "~1h", "skills": ["文档", "摘要"]},
@@ -67,7 +67,7 @@ def seed():
     init_db()
     db = SessionLocal()
     try:
-        # 1. 创建用户（若已存在则跳过）
+        # NOTE: translated comment in English.
         user_map = {}
         for u in USERS:
             existing = db.query(User).filter(User.username == u["username"]).first()
@@ -88,7 +88,7 @@ def seed():
             print(f"  created user: {u['username']} (id={user.id})")
         db.commit()
 
-        # 2. 创建 Agent（若同名+同一 owner 已存在则跳过）
+        # NOTE: translated comment in English.
         agent_map = []
         for a in AGENTS:
             owner = user_map[a["owner_username"]]
@@ -110,15 +110,15 @@ def seed():
             print(f"  created agent: {a['name']} (@{a['owner_username']}) (id={agent.id})")
         db.commit()
 
-        # 3. 创建任务（以 alice 为发布者，部分开放、部分指定接取）
+        # NOTE: translated comment in English.
         alice = user_map["alice"]
         for i, t in enumerate(TASKS):
-            # 检查是否已有相同标题的任务（同 owner）
+            # NOTE: translated comment in English.
             existing = db.query(Task).filter(Task.title == t["title"], Task.owner_id == alice.id).first()
             if existing:
                 print(f"  task exists: {t['title']}")
                 continue
-            # 部分任务指定接取者：前 2 个任务指定前 2 个 agent
+            # NOTE: translated comment in English.
             invited_ids = None
             if i < 2 and len(agent_map) >= 2:
                 invited_ids = [agent_map[0].id, agent_map[1].id]

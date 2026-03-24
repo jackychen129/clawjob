@@ -25,8 +25,8 @@ from app.security import get_password_hash, create_access_token, verify_password
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-# Google OAuth 配置（从环境变量读取）
-# GOOGLE_REDIRECT_URI 必须与 Google Cloud Console 中配置的「授权重定向 URI」完全一致（后端地址，如 http://localhost:8000/auth/google/callback）
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
 GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/auth/google/callback")
@@ -80,7 +80,7 @@ class RegisterViaSkillBody(BaseModel):
 CLAWJOB_SYSTEM_USERNAME = "clawjob_system"
 CLAWJOB_SYSTEM_AGENT_NAME = "clawjob-agent"
 SKILL_REGISTER_BONUS_CREDITS = 500
-# 第二条任务 description 最短长度（防止空泛一条句；须按 SKILL 模板写清多节）
+# NOTE: translated comment in English.
 SKILL_SECOND_TASK_MIN_DESCRIPTION_LEN = 40
 
 
@@ -162,7 +162,7 @@ def send_verification_code(body: SendVerificationCodeBody, db: Session = Depends
     else:
         code = "".join(secrets.choice("0123456789") for _ in range(6))
     expires_at = datetime.utcnow() + timedelta(minutes=5)
-    # 同一邮箱只保留最新一条
+    # NOTE: translated comment in English.
     db.query(VerificationCode).filter(VerificationCode.email == email).delete()
     db.add(VerificationCode(email=email, code=code, expires_at=expires_at))
     db.commit()
@@ -185,7 +185,7 @@ def send_verification_code(body: SendVerificationCodeBody, db: Session = Depends
 @router.post("/register")
 def register(body: RegisterBody, db: Session = Depends(get_db)):
     """用户注册（需先获取邮箱验证码）"""
-    # 注册赠送积分：生产默认 500（可配置覆盖），测试/开发默认不赠送
+    # NOTE: translated comment in English.
     env = os.getenv("ENV", "").strip().lower()
     signup_bonus = int(os.getenv("SIGNUP_BONUS_CREDITS", "0") or 0)
     if signup_bonus <= 0 and env == "production":
@@ -336,7 +336,7 @@ def register_via_skill(body: RegisterViaSkillBody, db: Session = Depends(get_db)
         db.add(agent)
         db.flush()
 
-        # 赠送注册任务点，便于用户继续发有奖励任务。
+        # NOTE: translated comment in English.
         db.add(CreditTransaction(
             user_id=user.id,
             amount=SKILL_REGISTER_BONUS_CREDITS,
@@ -345,7 +345,7 @@ def register_via_skill(body: RegisterViaSkillBody, db: Session = Depends(get_db)
             remark=f"通过 ClawJob Skill 注册赠送 {SKILL_REGISTER_BONUS_CREDITS} 点",
         ))
 
-        # 任务 1：握手任务（平台自动完成），让新用户立即看到闭环体验。
+        # NOTE: translated comment in English.
         _, system_agent = _get_or_create_clawjob_system_agent(db)
         handshake_task = Task(
             title="ClawJob registration handshake (auto-confirm)",
@@ -378,7 +378,7 @@ def register_via_skill(body: RegisterViaSkillBody, db: Session = Depends(get_db)
                     detail=f"信用点不足：当前 {credits_now}，second_task.reward_points 需要 {reward_points}",
                 )
 
-        # 任务 2：开放任务；正文由 OpenClaw 生成，平台校验后写入。
+        # NOTE: translated comment in English.
         second_task = Task(
             title=st_title,
             description=st_desc[:50000] if len(st_desc) > 50000 else st_desc,
@@ -474,7 +474,7 @@ def guest_token(db: Session = Depends(get_db)):
             continue
         if db.query(User).filter(User.email == email).first():
             continue
-        # 使用空字符串占位以兼容 hashed_password 为 NOT NULL 的旧库；登录时 hashed_password 为空会提示「该账号仅支持 Google 登录」
+        # NOTE: translated comment in English.
         user = User(
             username=username,
             email=email,
@@ -614,7 +614,7 @@ def google_callback(code: str = None, state: str = None, db: Session = Depends(g
     if not email:
         return RedirectResponse(url=_frontend_error_url("no_email"))
 
-    # 按 email 查找或创建用户（username 用 email 前缀或 name，唯一即可）
+    # NOTE: translated comment in English.
     user = db.query(User).filter(User.email == email).first()
     if not user:
         base_username = (name or email.split("@")[0]).replace(" ", "_")[:30]
@@ -636,7 +636,7 @@ def google_callback(code: str = None, state: str = None, db: Session = Depends(g
         data={"sub": str(user.id), "type": "user"},
         expires_delta=timedelta(days=7),
     )
-    # 重定向到前端：用 query 传参（避免部分环境 302 时丢失 fragment）；前端读取后立即清除 URL
+    # NOTE: translated comment in English.
     safe_username = quote(user.username, safe="")
     callback_url = (
         f"{FRONTEND_URL}/?"

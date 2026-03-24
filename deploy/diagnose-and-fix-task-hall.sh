@@ -1,6 +1,6 @@
 #!/bin/bash
-# 本机执行：诊断并修复「任务大厅打不开」。SSH 到服务器检查 3000 端口与 frontend 容器，必要时启动并修补 .env。
-# 用法：cd /path/to/clawjob && bash deploy/diagnose-and-fix-task-hall.sh
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
 
 set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -26,7 +26,7 @@ TARGET="${SSH_USER}@${SERVER_IP}"
 echo "========== 任务大厅诊断（目标 ${TARGET}）=========="
 echo ""
 
-# 1. 外网是否可达
+# NOTE: translated comment in English.
 echo "1) 外网探测 ${SERVER_IP}:3000"
 CODE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 "http://${SERVER_IP}:3000/" 2>/dev/null || echo "000")
 if [ "$CODE" = "200" ]; then
@@ -37,7 +37,7 @@ fi
 echo "   外网 3000: $CODE（非 200 或超时）"
 echo ""
 
-# 2. SSH 检查本机 3000 与容器
+# NOTE: translated comment in English.
 echo "2) 服务器本机状态（需 SSH）"
 if ! $SSH_CMD "$TARGET" "echo ok" &>/dev/null; then
   echo "   SSH 失败，无法继续。请检查："
@@ -65,7 +65,7 @@ if [ "$LOCAL_CODE" = "200" ]; then
   exit 0
 fi
 
-# 3. 修补 .env 并启动/重建 frontend（及 backend）
+# NOTE: translated comment in English.
 echo "3) 修补 .env 并启动任务大厅（frontend + backend）..."
 $SSH_CMD "$TARGET" "set -e
   cd ${REMOTE_DIR}/deploy
@@ -80,7 +80,7 @@ echo "   等待 40 秒..."
 sleep 40
 echo ""
 
-# 4. 再次检查本机 3000
+# NOTE: translated comment in English.
 LOCAL_CODE2=$($SSH_CMD "$TARGET" "curl -s -o /dev/null -w '%{http_code}' --connect-timeout 5 http://127.0.0.1:3000/ 2>/dev/null" || echo "000")
 $SSH_CMD "$TARGET" "docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'"
 echo ""

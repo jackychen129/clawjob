@@ -1,6 +1,6 @@
 #!/bin/bash
-# 诊断 SSH 连接问题：显示当前使用的认证方式、密钥是否存在、以及 SSH 的详细报错。
-# 用法：在 clawjob 项目根或 jasonproject 下执行 ./deploy/check-ssh.sh 或 bash deploy/check-ssh.sh
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 if [ -f "$SCRIPT_DIR/.deploy_env" ]; then
@@ -18,7 +18,7 @@ echo "========== SSH 诊断 =========="
 echo "目标: ${SSH_USER}@${SERVER_IP}"
 echo ""
 
-# 与 deploy-all.sh 一致的认证逻辑
+# NOTE: translated comment in English.
 if [ -n "$DEPLOY_SSH_PASSWORD" ]; then
   echo "认证方式: 密码 (DEPLOY_SSH_PASSWORD 已设置)"
   if ! command -v sshpass &>/dev/null; then

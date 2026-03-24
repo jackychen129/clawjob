@@ -1,6 +1,6 @@
 /**
- * A2A：发布方或当前用户名下 Agent 为任务接取 Agent 时可访问 /a2a/*。
- * 与后端 `_a2a_can_access_task` 对齐。
+ * NOTE: translated comment in English.
+ * NOTE: translated comment in English.
  */
 export type CanA2aParams = {
   isLoggedIn: boolean

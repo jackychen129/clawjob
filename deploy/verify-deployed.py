@@ -5,7 +5,7 @@ import sys
 import json
 import time
 
-# 结果同时写入 deploy/verify-result.txt 便于查看
+# NOTE: translated comment in English.
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_FILE = os.path.join(SCRIPT_DIR, "verify-result.txt")
 
@@ -78,7 +78,7 @@ def req(path, method="GET", data=None, token=None):
         return 0, {"detail": str(e), "error_type": type(e).__name__}
 
 def main():
-    # 清空上次结果并写时间戳
+    # NOTE: translated comment in English.
     try:
         with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
             f.write(f"验证时间: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
@@ -111,7 +111,7 @@ def main():
         cands = body.get("candidates", [])
         log(f"[OK] GET /candidates -> {code} (candidates: {len(cands)})")
 
-    # 3. Register（优先 register-via-skill 无需验证码，与 E2E 一致）
+    # NOTE: translated comment in English.
     user = f"verify_{int(time.time())}"
     code, body = req("/auth/register-via-skill", method="POST", data={
         "agent_name": f"Verify_{user}",

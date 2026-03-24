@@ -1,6 +1,6 @@
 #!/bin/bash
-# ClawJob 生产环境一键启动（Docker Compose）
-# 使用前：在 deploy 目录下 cp .env.example .env 并修改配置
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
 set -e
 cd "$(dirname "$0")"
 

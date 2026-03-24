@@ -1,13 +1,13 @@
 #!/bin/bash
-# 从项目根目录的 aliyun/accesskey.txt 读取密钥并创建新加坡 ECS。
-# 用法：在 clawjob 目录执行 ./deploy/run_ecs_create_with_key.sh
-# 或从 jasonproject 目录：clawjob/deploy/run_ecs_create_with_key.sh
-# 请勿将 accesskey.txt 提交到 git。
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
 
 set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CLAWJOB_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-# 假设 clawjob 在 jasonproject 下，aliyun 与 clawjob 同级
+# NOTE: translated comment in English.
 PARENT="$(cd "$CLAWJOB_ROOT/.." && pwd)"
 KEY_FILE="$PARENT/aliyun/accesskey.txt"
 

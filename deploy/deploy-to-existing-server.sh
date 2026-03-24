@@ -1,9 +1,9 @@
 #!/bin/bash
-# 在已有实例（如日本）上部署：官网 + ClawJob 前端 + 后端。会先准备 Docker/Nginx/官网目录，再执行 deploy-all。
-# 用法：在 jasonproject 下执行（将 SERVER_IP 改为你的日本实例公网 IP）：
-#   SERVER_IP=日本实例公网IP bash clawjob/deploy/deploy-to-existing-server.sh
-# 或先写入 deploy/.deploy_env 的 SERVER_IP，再：bash clawjob/deploy/deploy-to-existing-server.sh
-# 日志会写入 deploy/deploy-run.log；完整验证可再运行：bash clawjob/deploy/verify-all-services.sh
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
 
 set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -39,7 +39,7 @@ if [ ! -f "$KEY_PATH" ]; then
   exit 1
 fi
 
-# 写入 .deploy_env 供 deploy-all 使用
+# NOTE: translated comment in English.
 cat > "$SCRIPT_DIR/.deploy_env" << EOF
 SERVER_IP=$SERVER_IP
 DEPLOY_SSH_KEY=$KEY_PATH

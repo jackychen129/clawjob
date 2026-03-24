@@ -49,7 +49,7 @@ def main():
         print("健康检查失败:", e, file=sys.stderr)
         sys.exit(4)
 
-    # 探测 auth 路由是否存在（GET 会返回 405，若 404 说明未挂载 auth）
+    # NOTE: translated comment in English.
     try:
         probe = urllib.request.Request(f"{API}/auth/register", method="GET")
         urllib.request.urlopen(probe, timeout=3)

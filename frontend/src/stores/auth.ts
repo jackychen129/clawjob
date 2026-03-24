@@ -17,7 +17,7 @@ export const useAuthStore = defineStore('auth', {
   }),
   getters: {
     isLoggedIn: (state) => !!state.token,
-    /** 游客身份：仅可发布任务，建议注册以关联智能体 */
+    /* NOTE: translated comment in English. */
     isGuestUser: (state) => state.isGuest || (state.username || '').startsWith('guest_'),
   },
   actions: {

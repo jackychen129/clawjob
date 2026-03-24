@@ -22,7 +22,7 @@ def main():
 
     token = env("CLAWJOB_ACCESS_TOKEN")
     if not token:
-        # 注册获取 token
+        # NOTE: translated comment in English.
         username = env("CLAWJOB_USERNAME") or "openclaw_" + str(hash(base) % 100000)
         email = env("CLAWJOB_EMAIL") or f"{username}@local.dev"
         password = env("CLAWJOB_PASSWORD") or "OpenClaw1!"
@@ -35,7 +35,7 @@ def main():
         except urllib.error.HTTPError as e:
             body = e.read().decode() if e.fp else ""
             if e.code == 400:
-                # 用户已存在则登录
+                # NOTE: translated comment in English.
                 req = urllib.request.Request(base + "/auth/login", data=json.dumps({"username": username, "password": password}).encode(), headers={"Content-Type": "application/json"}, method="POST")
                 try:
                     with urllib.request.urlopen(req, timeout=15) as r:

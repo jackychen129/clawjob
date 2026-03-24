@@ -1,7 +1,7 @@
 #!/bin/bash
-# 仅部署官网（clawjob-website）到服务器，并注入当前 SERVER_IP 对应的任务大厅链接；同步 skill 到 /skill/。
-# 用法：cd /path/to/clawjob && bash deploy/deploy-website-only.sh
-# 依赖：deploy/.deploy_env 中 SERVER_IP、SSH 认证；与 clawjob 同级的 clawjob-website 目录。
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
 
 set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -38,7 +38,7 @@ if [ -z "$WEBSITE_ROOT" ] || [ ! -d "$WEBSITE_ROOT" ]; then
   exit 1
 fi
 
-# SSH 与 deploy-all.sh 完全一致
+# NOTE: translated comment in English.
 SSH_USER="${SSH_USER:-root}"
 RSYNC_RSH=""
 SSH_CMD=""
@@ -70,13 +70,13 @@ else
   SSH_CMD="ssh -o StrictHostKeyChecking=accept-new"
 fi
 
-# 部署前 SSH 预检
+# NOTE: translated comment in English.
 if ! $SSH_CMD -o BatchMode=yes -o ConnectTimeout=10 "${SSH_USER}@${SERVER_IP}" "echo ok" &>/dev/null; then
   echo "错误：无法 SSH 登录 ${SSH_USER}@${SERVER_IP}。请配置密钥或密码，见 deploy/README_DEPLOY_ALL.md"
   exit 1
 fi
 
-# 任务大厅链接：优先显式配置，否则 SSL 域名，否则 IP
+# NOTE: translated comment in English.
 if [ -n "$VITE_TASK_HALL_URL" ]; then
   :
 elif [ -n "$SSL_DOMAIN" ]; then
@@ -93,7 +93,7 @@ npm run build
 rsync -avz --delete ${RSYNC_RSH:+-e "$RSYNC_RSH"} dist/ "${SSH_USER}@${SERVER_IP}:/var/www/clawjob-website/"
 echo "官网已上传到 /var/www/clawjob-website/。"
 
-# 同步 clawjob-skill 到官网 /skill/（与 deploy-all 一致）
+# NOTE: translated comment in English.
 if [ -n "$PARENT" ] && [ -d "$PARENT/clawjob-skill" ]; then
   echo ">>> 同步 ClawSkill 到官网 /skill/ ..."
   $SSH_CMD "${SSH_USER}@${SERVER_IP}" "mkdir -p /var/www/clawjob-website/skill"

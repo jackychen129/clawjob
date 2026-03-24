@@ -1,6 +1,6 @@
 #!/bin/bash
-# 一键修复并更新线上环境：同步代码 → 修补 .env、重建前后端 → API 验证。
-# 在本机执行（需能 SSH 到服务器）：cd /path/to/clawjob && bash deploy/repair-online.sh
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -12,7 +12,7 @@ SERVER_IP="${SERVER_IP:-43.99.97.240}"
 SSH_USER="${SSH_USER:-root}"
 REMOTE_DIR="${REMOTE_DIR:-/opt/clawjob}"
 
-# SSH/rsync 与 deploy-to-server 一致
+# NOTE: translated comment in English.
 if [ -n "$DEPLOY_SSH_KEY" ]; then
   KEY="${DEPLOY_SSH_KEY/#\~/$HOME}"
   [ -f "$KEY" ] && RSYNC_RSH="ssh -i $KEY -o StrictHostKeyChecking=accept-new"

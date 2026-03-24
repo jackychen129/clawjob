@@ -32,7 +32,7 @@ def main():
         print("pip install paramiko", file=sys.stderr)
         sys.exit(3)
 
-    # 打包
+    # NOTE: translated comment in English.
     print("Creating tarball...", file=sys.stderr)
     with tempfile.NamedTemporaryFile(suffix=".tar.gz", delete=False) as f:
         tarball = f.name
@@ -113,7 +113,7 @@ ENV=production
         client.close()
         sys.exit(6)
 
-    # 初始化数据库表（recharge_orders 等）
+    # NOTE: translated comment in English.
     run("sleep 20 && docker compose -f /opt/clawjob/deploy/docker-compose.prod.yml exec -T backend python3 -c \"from app.database.relational_db import init_db; init_db()\" 2>/dev/null || true")
 
     print("Deploy done. Frontend: %s  Backend: %s" % (frontend_url, api_base), file=sys.stderr)

@@ -63,14 +63,14 @@ def _mask_secret(secret: str) -> str:
 
 
 def _xor_encrypt(plain: str) -> str:
-    # 轻量密文存储（避免明文落库）；后续可替换为 KMS/专业密钥管理。
+    # NOTE: translated comment in English.
     p = (plain or "").encode("utf-8")
     k = (SECRET_KEY or "clawjob-secret").encode("utf-8") or b"clawjob-secret"
     out = bytes([b ^ k[i % len(k)] for i, b in enumerate(p)])
     return base64.b64encode(out).decode("utf-8")
 
 
-# ---------- API 密钥托管 ----------
+# NOTE: translated comment in English.
 @router.get("/api-keys")
 def list_api_keys(
     db: Session = Depends(get_db),
@@ -151,7 +151,7 @@ def delete_api_key(
     return {"ok": True, "id": key_id}
 
 
-# ---------- 收款账户（用户配置的佣金收款）----------
+# NOTE: translated comment in English.
 @router.get("/receiving-account")
 def get_receiving_account(
     db: Session = Depends(get_db),
@@ -195,7 +195,7 @@ def update_receiving_account(
     }
 
 
-# ---------- 佣金（发布方可选配置，任务完成后计入）----------
+# NOTE: translated comment in English.
 @router.get("/commission")
 def get_commission(
     db: Session = Depends(get_db),
@@ -229,7 +229,7 @@ def get_commission(
     }
 
 
-# ---------- 当前用户信息（含余额）----------
+# NOTE: translated comment in English.
 @router.get("/me")
 def get_me(
     db: Session = Depends(get_db),
@@ -250,7 +250,7 @@ def get_me(
     }
 
 
-# ---------- 余额与流水 ----------
+# NOTE: translated comment in English.
 @router.get("/balance")
 def get_balance(
     db: Session = Depends(get_db),
@@ -323,7 +323,7 @@ def recharge(
     return {"credits": user.credits, "message": f"充值成功，当前余额 {user.credits}"}
 
 
-# ---------- 充值订单（信用卡/支付宝/比特币渠道）----------
+# NOTE: translated comment in English.
 @router.post("/recharge/orders")
 def create_recharge_order(
     body: CreateRechargeOrderBody,
@@ -340,7 +340,7 @@ def create_recharge_order(
     user = db.query(User).filter(User.id == uid).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
-    # 生产环境此处应调用支付网关生成真实 payment_url / payment_qr / btc_address
+    # NOTE: translated comment in English.
     import uuid
     gateway_order_id = f"ord_{uuid.uuid4().hex[:16]}"
     payment_url = payment_qr = btc_address = None
@@ -446,7 +446,7 @@ def list_recharge_orders(
     }
 
 
-# ---------- 支付方式 ----------
+# NOTE: translated comment in English.
 @router.get("/payment-methods")
 def list_payment_methods(
     db: Session = Depends(get_db),

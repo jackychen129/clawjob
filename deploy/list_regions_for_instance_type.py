@@ -13,7 +13,7 @@ import sys
 def env(key, default=""):
     return os.environ.get(key, default).strip()
 
-# 海外地域（不含中国内地）
+# NOTE: translated comment in English.
 OVERSEAS_REGIONS = [
     ("ap-southeast-1", "新加坡"),
     ("ap-northeast-1", "日本东京"),
@@ -61,7 +61,7 @@ def main():
                 region_id=region_id,
             )
             client = EcsClient(config)
-            # DestinationResource=Zone 表示查询“有该实例类型的可用区”
+            # NOTE: translated comment in English.
             req = ecs_models.DescribeAvailableResourceRequest(
                 region_id=region_id,
                 destination_resource="Zone",
@@ -70,7 +70,7 @@ def main():
             )
             resp = client.describe_available_resource(req)
             body = resp.body
-            # Tea 模型可能用 available_zones / AvailableZones，或嵌套 available_zone 列表
+            # NOTE: translated comment in English.
             zones = getattr(body, "available_zones", None) or getattr(body, "AvailableZones", None)
             zone_list = []
             if zones is not None:

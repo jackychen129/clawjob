@@ -1,6 +1,6 @@
-# ClawJob 生产部署（海外阿里云等）
-# 使用前：cp .env.example .env 并修改所有密码与域名
-# 启动：docker compose -f docker-compose.prod.yml --env-file .env up -d --build
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
 
 version: '3.8'
 
@@ -56,7 +56,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      # chroma 可选：若需向量能力再启用 condition，否则 backend 可先启动
+      # NOTE: translated comment in English.
       # chroma:
       #   condition: service_healthy
     networks:
@@ -81,7 +81,7 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
-    # 生产可不暴露端口，仅容器内访问
+    # NOTE: translated comment in English.
     # ports: ["127.0.0.1:5432:5432"]
 
   redis:

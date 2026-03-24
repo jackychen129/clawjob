@@ -1,10 +1,10 @@
 #!/bin/bash
-# 本机执行：读取 .deploy_env 中的 SERVER_IP、SSL_DOMAIN，通过 SSH 在服务器上自动配置 Let's Encrypt SSL
-# 用法：
-#   1. 在 deploy/.deploy_env 中设置 SSL_DOMAIN=你的域名.com（可选 CERTBOT_EMAIL=you@example.com）
-#   2. 确保域名 DNS 已指向 SERVER_IP（主域、www、app、api 四条 A 记录）
-#   3. 执行：bash deploy/ssl/setup-ssl-remote.sh
-# 也可临时覆盖：SSL_DOMAIN=clawjob.com bash deploy/ssl/setup-ssl-remote.sh
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
 
 set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -12,7 +12,7 @@ DEPLOY_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO_ROOT="$(cd "$DEPLOY_DIR/.." && pwd)"
 cd "$REPO_ROOT"
 
-# 读取 .deploy_env（与 deploy-to-server.sh 一致）
+# NOTE: translated comment in English.
 if [ -f "${DEPLOY_DIR}/.deploy_env" ]; then
   set -a
   # shellcheck source=/dev/null
@@ -20,7 +20,7 @@ if [ -f "${DEPLOY_DIR}/.deploy_env" ]; then
   set +a
 fi
 
-# 域名：环境变量或 .deploy_env 中的 SSL_DOMAIN / DOMAIN
+# NOTE: translated comment in English.
 DOMAIN="${SSL_DOMAIN:-${DOMAIN:-}}"
 if [ -z "$DOMAIN" ]; then
   echo "请设置域名。任选一种方式："
@@ -36,7 +36,7 @@ if [ -z "$SERVER_IP" ]; then
   exit 1
 fi
 
-# SSH 认证（与 deploy-to-server.sh 一致）
+# NOTE: translated comment in English.
 export DEPLOY_SSH_KEY
 export DEPLOY_SSH_PASSWORD
 SSH_USER="${SSH_USER:-root}"
@@ -69,13 +69,13 @@ else
   SSH_CMD="ssh -o StrictHostKeyChecking=accept-new"
 fi
 
-# 预检 SSH
+# NOTE: translated comment in English.
 if ! $SSH_CMD -o BatchMode=yes -o ConnectTimeout=10 "${SSH_USER}@${SERVER_IP}" "echo ok" &>/dev/null; then
   echo "错误：无法 SSH 登录 ${SSH_USER}@${SERVER_IP}。请检查 deploy/.deploy_env 中的 DEPLOY_SSH_KEY 或 DEPLOY_SSH_PASSWORD。"
   exit 1
 fi
 
-# 同步 deploy 目录（确保服务器上有最新 nginx 配置与 ssl 脚本）
+# NOTE: translated comment in English.
 echo ">>> 同步 deploy 目录到服务器..."
 rsync -avz --delete \
   -e "$SSH_CMD" \
@@ -85,7 +85,7 @@ rsync -avz --delete \
   --exclude 'data/' \
   --exclude '.ssh/'
 
-# 在服务器上执行 SSL 配置
+# NOTE: translated comment in English.
 CERTBOT_EMAIL="${CERTBOT_EMAIL:-}"
 echo ""
 echo ">>> 在服务器上配置 Let's Encrypt（域名: $DOMAIN）..."

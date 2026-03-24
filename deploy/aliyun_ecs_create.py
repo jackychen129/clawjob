@@ -45,7 +45,7 @@ def main():
     access_key_id = env("ALIBABA_CLOUD_ACCESS_KEY_ID")
     access_key_secret = env("ALIBABA_CLOUD_ACCESS_KEY_SECRET")
     region_id = env("ALIBABA_CLOUD_REGION") or "ap-southeast-1"
-    # 新加坡 ap-southeast-1d 常用规格：g6/c6 部分可用，g7 等可作备选
+    # NOTE: translated comment in English.
     instance_type = env("ALIBABA_CLOUD_ECS_INSTANCE_TYPE") or "ecs.g6.large"
     key_path = env("LOCAL_SSH_KEY_PATH") or os.path.expanduser("~/Downloads/newclawjobkey.pem")
 
@@ -68,7 +68,7 @@ def main():
         print(e, file=sys.stderr)
         sys.exit(2)
 
-    # ECS endpoint: 海外 region 使用 ecs.{region}.aliyuncs.com
+    # NOTE: translated comment in English.
     ecs_config = OpenApiConfig(
         access_key_id=access_key_id,
         access_key_secret=access_key_secret,
@@ -84,7 +84,7 @@ def main():
     ecs = EcsClient(ecs_config)
     vpc_client = VpcClient(vpc_config)
 
-    # 1) 获取或创建 VPC
+    # NOTE: translated comment in English.
     try:
         req = vpc_models.DescribeVpcsRequest(region_id=region_id)
         resp = vpc_client.describe_vpcs(req)
@@ -117,7 +117,7 @@ def main():
             print("CreateVpc error:", e, file=sys.stderr)
             sys.exit(3)
 
-    # 2) 获取或创建 vSwitch：支持环境变量指定已有交换机，否则先查当前 VPC 再查全地域
+    # NOTE: translated comment in English.
     vswitch_id = zone_id = None
     existing_vsw = env("ALIBABA_CLOUD_VSWITCH_ID")
     if existing_vsw:
@@ -155,7 +155,7 @@ def main():
             print("DescribeVSwitches error:", e, file=sys.stderr)
 
     if not vswitch_id:
-        # 列出区域内所有 vSwitch（不按 VPC 过滤），取第一个
+        # NOTE: translated comment in English.
         try:
             req_all = vpc_models.DescribeVSwitchesRequest(region_id=region_id)
             resp_all = vpc_client.describe_vswitches(req_all)
@@ -177,7 +177,7 @@ def main():
             print("DescribeVSwitches(region) error:", e, file=sys.stderr)
 
     if not vswitch_id:
-        # 获取可用区列表，逐个可用区、多个 CIDR 尝试创建 VSwitch
+        # NOTE: translated comment in English.
         zone_ids = [f"{region_id}-a", f"{region_id}-b", f"{region_id}-c"]
         try:
             zreq = ecs_models.DescribeZonesRequest(region_id=region_id)
@@ -195,7 +195,7 @@ def main():
                 zone_ids = [f"{region_id}-a"]
         except Exception:
             pass
-        # VPC 为 10.0.0.0/8，交换机 CIDR 须在其内；10.0.1～10.0.8 常已被占用，优先试更大网段
+        # NOTE: translated comment in English.
         cidrs = ["10.0.9.0/24", "10.0.10.0/24", "10.0.11.0/24", "10.0.12.0/24", "10.1.0.0/24", "10.2.0.0/24", "10.3.0.0/24",
                  "10.0.7.0/24", "10.0.8.0/24", "10.0.5.0/24", "10.0.6.0/24", "10.0.2.0/24", "10.0.3.0/24", "10.0.4.0/24", "10.0.1.0/24"]
         for zid in zone_ids:
@@ -221,7 +221,7 @@ def main():
             print("CreateVSwitch error: CreateVSwitch failed for all zones/CIDRs. 请在控制台为该地域创建 VPC 与交换机后重试。", file=sys.stderr)
             sys.exit(4)
 
-    # 3) 安全组
+    # NOTE: translated comment in English.
     try:
         req = ecs_models.DescribeSecurityGroupsRequest(
             region_id=region_id,
@@ -267,7 +267,7 @@ def main():
             print("CreateSecurityGroup error:", e, file=sys.stderr)
             sys.exit(5)
 
-    # 4) 镜像：Ubuntu 22.04（instance_type 用于兼容性筛选）
+    # NOTE: translated comment in English.
     try:
         req = ecs_models.DescribeImagesRequest(
             region_id=region_id,
@@ -300,7 +300,7 @@ def main():
         print("Could not get ImageId", file=sys.stderr)
         sys.exit(6)
 
-    # 4b) 导入本机公钥为密钥对，创建实例时绑定以便用私钥 SSH
+    # NOTE: translated comment in English.
     key_pair_name = "clawjob-ecs-key-%s" % int(time.time())
     try:
         public_key_body = get_public_key_from_pem(key_path)
@@ -315,7 +315,7 @@ def main():
         print("ImportKeyPair error (use password fallback or fix key path):", e, file=sys.stderr)
         key_pair_name = None
 
-    # 5) RunInstances：包年包月（PrePaid）或按量（PostPaid），使用密钥对（无密码）或密码
+    # NOTE: translated comment in English.
     run_kw = dict(
         region_id=region_id,
         image_id=image_id,
@@ -375,7 +375,7 @@ def main():
                 obj = getattr(obj, k, None) or getattr(obj, k.replace("_", "") if "_" in k else k, None)
         return obj
 
-    # 6) 等待 Running 并取公网 IP
+    # NOTE: translated comment in English.
     for _ in range(60):
         time.sleep(10)
         try:

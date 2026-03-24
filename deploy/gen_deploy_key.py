@@ -42,7 +42,7 @@ else:
         f.write(pub_line + "\n")
     os.chmod(PUB, 0o644)
 
-# 一行命令：在服务器上追加公钥（复制整行到服务器终端执行）
+# NOTE: translated comment in English.
 one_liner = f"mkdir -p ~/.ssh && chmod 700 ~/.ssh && echo '{pub_line}' >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
 
 run_once_file = os.path.join(SCRIPT_DIR, "run-on-server-once.txt")

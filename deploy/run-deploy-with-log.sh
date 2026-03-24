@@ -1,5 +1,5 @@
 #!/bin/bash
-# 包装 deploy-all.sh，把输出写入 deploy-last.log 便于查看
+# NOTE: translated comment in English.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOG="$SCRIPT_DIR/deploy-last.log"
 exec > >(tee -a "$LOG") 2>&1

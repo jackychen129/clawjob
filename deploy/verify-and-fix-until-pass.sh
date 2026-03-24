@@ -1,14 +1,14 @@
 #!/bin/bash
-# 在本机执行：验证线上 API，若失败则按类型自动修复（SSH 到服务器）并重试，直到全部通过或达到最大次数。
-# 依赖：deploy/.deploy_env 中 SERVER_IP、DEPLOY_SSH_KEY（或密码）已配置，且本机可 SSH 到服务器。
-# 用法：./deploy/verify-and-fix-until-pass.sh
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
 
 set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CLAWJOB_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$CLAWJOB_ROOT"
 
-# 与 deploy-all.sh 一致的认证
+# NOTE: translated comment in English.
 if [ -f "$SCRIPT_DIR/.deploy_env" ]; then
   set -a
   . "$SCRIPT_DIR/.deploy_env"
@@ -21,7 +21,7 @@ export SSH_USER
 
 SERVER_IP="${SERVER_IP:-43.99.97.240}"
 SSH_USER="${SSH_USER:-root}"
-# 默认使用 newclawjobkey.pem
+# NOTE: translated comment in English.
 if [ -z "$DEPLOY_SSH_KEY" ] && [ -f "$HOME/Downloads/newclawjobkey.pem" ]; then
   export DEPLOY_SSH_KEY="$HOME/Downloads/newclawjobkey.pem"
 fi

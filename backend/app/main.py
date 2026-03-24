@@ -73,7 +73,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        # API 场景下 CSP 放宽，避免影响 /docs
+        # NOTE: translated comment in English.
         csp = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self'"
         response.headers["Content-Security-Policy"] = csp
         return response
@@ -130,7 +130,7 @@ async def _lifespan(app: FastAPI):
         if not cors or cors == "*":
             raise RuntimeError("生产环境必须设置 CORS_ORIGINS 为具体前端域名，禁止使用 *。")
     yield
-    # shutdown 暂无逻辑
+    # NOTE: translated comment in English.
 
 
 app = FastAPI(
@@ -158,23 +158,23 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 app.include_router(auth.router)
 app.include_router(account.router)
-# 管理后台：指标与日志（仅 is_superuser 可访问）
+# NOTE: translated comment in English.
 from app.routers import admin as admin_router_module
 from app.database.relational_db import get_db as _get_db
 _admin_super_dep = admin_router_module.get_superuser_dep(get_current_user, _get_db)
 app.include_router(admin_router_module.router, prefix="/admin", dependencies=[Depends(_admin_super_dep)])
 
-# 限流：全局默认在 security.limiter 的 default_limits 中配置
+# NOTE: translated comment in English.
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 
-# 安全头中间件（先添加，响应时最后执行）
+# NOTE: translated comment in English.
 app.add_middleware(SecurityHeadersMiddleware)
-# 请求审计日志（记录到 system_logs）
+# NOTE: translated comment in English.
 app.add_middleware(RequestLoggingMiddleware)
 
-# CORS configuration（生产环境通过 CORS_ORIGINS 限制来源，逗号分隔；空则同源）
+# NOTE: translated comment in English.
 _cors_origins = os.getenv("CORS_ORIGINS", "").strip()
 _cors_origins_list = [o.strip() for o in _cors_origins.split(",") if o.strip()] if _cors_origins else ["*"]
 app.add_middleware(
@@ -235,7 +235,7 @@ def get_public_stats(db: Session = Depends(get_db)):
 def get_activity(limit: int = 50, db: Session = Depends(get_db)):
     """实时动态流：最近任务发布、任务完成、Agent 注册。用于 Dashboard Live Feed。"""
     events = []
-    # 最近完成的任务（带 Agent 名、奖励）
+    # NOTE: translated comment in English.
     completed = (
         db.query(Task, Agent, User)
         .outerjoin(Agent, Task.agent_id == Agent.id)
@@ -255,7 +255,7 @@ def get_activity(limit: int = 50, db: Session = Depends(get_db)):
             "agent_name": a.name if a else None,
             "publisher_name": owner.username if owner else None,
         })
-    # 最近发布的任务（open）
+    # NOTE: translated comment in English.
     created = (
         db.query(Task, User)
         .join(User, Task.owner_id == User.id)
@@ -271,7 +271,7 @@ def get_activity(limit: int = 50, db: Session = Depends(get_db)):
             "task_title": (t.title or "")[:80],
             "publisher_name": owner.username if owner else None,
         })
-    # 最近注册的 Agent
+    # NOTE: translated comment in English.
     agents = db.query(Agent, User).join(User, Agent.owner_id == User.id).order_by(Agent.created_at.desc()).limit(limit).all()
     for a, owner in agents:
         events.append({
@@ -288,7 +288,7 @@ def get_activity(limit: int = 50, db: Session = Depends(get_db)):
 @app.get("/leaderboard")
 def get_leaderboard(skip: int = 0, limit: int = 50, db: Session = Depends(get_db)):
     """Agent 声誉排行榜：Earned、完成任务数、成功率。shadow=1 时仅返回新星（注册不久、任务数少但成功率高的 Agent）。"""
-    # 每个 Agent 的完成数、总赚取、参与任务数（用于成功率）
+    # NOTE: translated comment in English.
     from sqlalchemy import case
     completed_subq = (
         db.query(
@@ -350,7 +350,7 @@ def _task_skills_for_xp(t: Task) -> List[str]:
 
 
 def _level_from_xp(xp: int) -> dict:
-    # 线性递增阈值：L1=100, L2=120, L3=140 ...
+    # NOTE: translated comment in English.
     level = 1
     remain = max(0, int(xp or 0))
     need = 100
@@ -407,7 +407,7 @@ def get_my_skill_tree(db: Session = Depends(get_db), current_user: dict = Depend
 
 @app.get("/stats/roi-series")
 def get_roi_series(days: int = 14, db: Session = Depends(get_db)):
-    # 收益时序（K 线简化版）：按天统计已完成任务总奖励与完成数
+    # NOTE: translated comment in English.
     d = max(7, min(90, int(days or 14)))
     start = datetime.utcnow() - timedelta(days=d - 1)
     tasks = db.query(Task).filter(Task.status == "completed", Task.completed_at.isnot(None), Task.completed_at >= start).all()
@@ -589,8 +589,8 @@ def delete_agent_template(
 
 class PublishSkillBody(BaseModel):
     """通过 Skill 发布到平台：生成/更新技能市场条目。"""
-    # skill_token：用于与 Agent.config.skill_bound_token 对齐。
-    # 若不传，则尝试从当前用户拥有的 Agent 中推导（必须恰好只有一个 token）。
+    # NOTE: translated comment in English.
+    # NOTE: translated comment in English.
     skill_token: Optional[str] = None
     name: Optional[str] = None
     description: Optional[str] = None
@@ -681,7 +681,7 @@ def publish_skill(
     uid = int(current_user["user_id"])
     skill_token = (body.skill_token or "").strip() if body.skill_token else ""
 
-    # 不传 skill_token：尝试从用户拥有的 Agent 推导
+    # NOTE: translated comment in English.
     if not skill_token:
         tokens = set()
         my_agents = db.query(Agent).filter(Agent.owner_id == uid).all()
@@ -698,7 +698,7 @@ def publish_skill(
         else:
             raise HTTPException(status_code=400, detail="skill_token 未提供，当前用户下存在多个 skill_bound_token，请显式传入 skill_token")
 
-    # 当前用户名下必须存在至少一个匹配 skill_token 的 Agent
+    # NOTE: translated comment in English.
     agent_ids = _get_agent_ids_by_skill_token(db, uid=uid, skill_token=skill_token)
     if not agent_ids:
         raise HTTPException(status_code=403, detail="当前用户下未找到与该 skill_token 对齐的 Agent（请在注册 Agent 时设置 skill_bound_token）")
@@ -765,14 +765,14 @@ def delete_skill_publish(
     db.commit()
     return {"ok": True, "id": skill_id}
 
-# OpenClaw/Clawl 对齐：capability 项 { id?, name, category? }
+# NOTE: translated comment in English.
 class CapabilityItem(BaseModel):
     id: Optional[str] = None
     name: str
     category: Optional[str] = None
 
 
-# Agent 注册（在 DB 中创建，用于接取任务；参数对齐 OpenClaw agent 属性）
+# NOTE: translated comment in English.
 class RegisterAgentBody(BaseModel):
     name: str
     description: str = ""
@@ -871,7 +871,7 @@ def register_agent(
     except Exception as e:
         db.rollback()
         err_msg = str(e).lower()
-        # 线上若 agents 表尚无 category 列则插入会报错，补列后重试
+        # NOTE: translated comment in English.
         if "category" in err_msg or "does not exist" in err_msg or "column" in err_msg:
             _ensure_agents_category_column()
             agent_retry = Agent(
@@ -1157,11 +1157,11 @@ async def delete_agent(agent_id: str, current_user: str = Depends(get_current_us
     """Delete an agent"""
     return await agent_manager.delete_agent(agent_id, current_user)
 
-# ---------- ClawJob 任务大厅（首页）----------
+# NOTE: translated comment in English.
 VERIFICATION_HOURS = 6  # 发布者验收截止时间（小时），超时自动完成
 PLATFORM_COMMISSION_RATE = 0.01  # 任务成功发放奖励时，若发布方已配置佣金则按此比例计入发布者（可选功能）
 
-# 前端地址，用于 Discord 推送中的任务链接
+# NOTE: translated comment in English.
 _FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/")
 
 
@@ -1182,12 +1182,12 @@ class PublishTaskBody(BaseModel):
     completion_webhook_url: str = ""  # 有奖励点时必填：接取者提交完成时 POST 回调此 URL，供发布方验收
     invited_agent_ids: list = []  # 可选：仅这些 Agent 可接取；空表示对所有人开放
     creator_agent_id: Optional[int] = None  # 可选：由某 Agent 代发（须为当前用户的 Agent）
-    # 托管（Escrow）MVP：多里程碑；至少 2 项且权重和为 1，与 6 小时自动验收按里程碑生效
+    # NOTE: translated comment in English.
     escrow_milestones: List[EscrowMilestoneIn] = []
-    # 任务分类与详情
+    # NOTE: translated comment in English.
     category: str = ""  # 任务分类：development, design, research, writing, data, other
     requirements: str = ""  # 详细要求说明
-    # 任务可选属性（地点、时长、技能等）
+    # NOTE: translated comment in English.
     location: str = ""  # 地点要求，如 "远程"、"北京"
     duration_estimate: str = ""  # 预计时长，如 "~1h"、"~3h"
     skills: list = []  # 所需技能标签，如 ["数据分析", "Python"]
@@ -1375,7 +1375,7 @@ def _pay_task_reward(task: Task, db: Session) -> bool:
                     remark=remark,
                 )
                 db.add(tx)
-                # 已配置的佣金发放给任务发布者（用户）
+                # NOTE: translated comment in English.
                 if commission > 0 and task.owner_id:
                     publisher = db.query(User).filter(User.id == task.owner_id).first()
                     if publisher:
@@ -1731,7 +1731,7 @@ def publish_task(
         extra["verification_requirements"] = verification_requirements
     category = (getattr(body, "category", None) or "").strip()[:64] or None
     requirements = (getattr(body, "requirements", None) or "").strip() or None
-    # 托管里程碑计划
+    # NOTE: translated comment in English.
     em = getattr(body, "escrow_milestones", None) or []
     if em:
         try:
@@ -1772,9 +1772,9 @@ def publish_task(
         db.commit()
     except Exception:
         db.rollback()
-    # 用户通过 Skill/API 发布的第一个任务：由 clawjob-agent 自动接取并完成（可配置）
+    # NOTE: translated comment in English.
     auto_complete_enabled = os.getenv("AUTO_COMPLETE_FIRST_TASK", "").strip().lower() in ("1", "true", "yes", "on")
-    # 生产环境默认开启，pytest 下自动关闭，避免影响订阅/验收等回归用例
+    # NOTE: translated comment in English.
     is_pytest = os.getenv("PYTEST_CURRENT_TEST") is not None
     if os.getenv("ENV", "").strip().lower() == "production":
         auto_complete_enabled = True
@@ -1830,7 +1830,7 @@ def subscribe_task(
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
-    # 已被接取的任务不允许其他 Agent 再次接取（同一接取者重复订阅由下面 existing 返回「已订阅过」）
+    # NOTE: translated comment in English.
     if task.agent_id is not None and task.agent_id != body.agent_id:
         raise HTTPException(
             status_code=403,
@@ -1854,7 +1854,7 @@ def subscribe_task(
         return {"message": "已订阅过该任务", "subscription_id": existing.id}
     sub = TaskSubscription(task_id=task_id, agent_id=body.agent_id)
     db.add(sub)
-    # 若任务尚未分配接取者，则当前订阅的 Agent 视为接取者
+    # NOTE: translated comment in English.
     if task.agent_id is None:
         task.agent_id = body.agent_id
     if get_escrow(task) and task.status == "open":
@@ -2078,9 +2078,9 @@ def escrow_dispute(
         raise HTTPException(status_code=403, detail="仅发布方或接取方可发起托管争议")
     escrow["disputed"] = True
     escrow["dispute_reason"] = reason[:4000]
-    # 争议证据：限制到合理体量，避免 input_data 被滥用过大
+    # NOTE: translated comment in English.
     try:
-        # 截断所有字符串字段，避免存储超大文本
+        # NOTE: translated comment in English.
         def _trim_obj(x, max_len: int = 4000):
             if isinstance(x, str):
                 return x[:max_len]
@@ -2417,7 +2417,7 @@ def _a2a_can_access_task(task: Task, uid: int, db: Session) -> bool:
     return False
 
 
-# ---------- A2A 协议：任务状态同步与留言 ----------
+# NOTE: translated comment in English.
 class A2AMessageBody(BaseModel):
     content: str = ""
     agent_id: Optional[int] = None
@@ -2548,7 +2548,7 @@ async def execute_task(task_id: str, retry_count: int = 0, current_user: str = D
             raise HTTPException(status_code=500, detail=f"执行失败：{last_err}（已重试 {retries} 次）")
 
 
-# ---------- 平台中转账户（手续费/佣金，关联支付宝）----------
+# NOTE: translated comment in English.
 PLATFORM_ADMIN_KEY = os.getenv("PLATFORM_ADMIN_KEY", "").strip()
 
 

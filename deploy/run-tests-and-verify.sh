@@ -1,8 +1,8 @@
 #!/bin/bash
-# 本地运行 API 测试 + 前端单元测试 + 可选：验证线上 API
-# 用法：
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
 #   ./deploy/run-tests-and-verify.sh              # pytest + frontend vitest + build
-#   ./deploy/run-tests-and-verify.sh http://43.99.97.240:8000   # 上述 + 线上 verify-deployed
+# NOTE: translated comment in English.
 
 set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

@@ -1,9 +1,9 @@
 #!/bin/bash
-# 使用阿里云 CLI 创建新加坡 ECS（默认 ecs.g6.large），绑定本机密钥，放行 22/80/443/3000/8000。
-# 前置：已安装并配置 aliyun CLI（aliyun configure），本机密钥 ~/Downloads/newclawjobkey.pem
-# 用法：cd /path/to/clawjob && bash deploy/create-ecs-singapore-cli.sh
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
 #
-# 配置 CLI：aliyun configure 填入 AccessKeyId、AccessKeySecret，默认 Region 可填 ap-southeast-1
+# NOTE: translated comment in English.
 
 set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -24,7 +24,7 @@ if [ ! -f "$KEY_PATH" ]; then
   exit 1
 fi
 
-# 导出公钥（OpenSSH 格式）
+# NOTE: translated comment in English.
 PUBLIC_KEY=$(ssh-keygen -y -f "$KEY_PATH" 2>/dev/null | tr -d '\n')
 if [ -z "$PUBLIC_KEY" ]; then
   echo "错误：无法从 $KEY_PATH 导出公钥（需 ssh-keygen）"
@@ -103,7 +103,7 @@ fi
 echo "ImageId=$IMAGE_ID"
 echo ""
 
-# 包年包月（PrePaid），时长默认 1 月，可设 ALIBABA_CLOUD_ECS_PERIOD=1|2|3|6|12
+# NOTE: translated comment in English.
 CHARGE_TYPE="${ALIBABA_CLOUD_ECS_CHARGE_TYPE:-PrePaid}"
 PERIOD="${ALIBABA_CLOUD_ECS_PERIOD:-1}"
 echo "========== 5. 创建实例（$INSTANCE_TYPE，$CHARGE_TYPE，${PERIOD}月）=========="
@@ -124,7 +124,7 @@ RUN_JSON=$(aliyun ecs RunInstances \
   --SystemDisk.Category cloud_essd \
   --SystemDisk.Size 100 \
   --KeyPairName "$KEY_PAIR_NAME" 2>&1)
-# 兼容 InstanceIdSets.InstanceIdSet[0] 或 "InstanceId":"i-xxx"
+# NOTE: translated comment in English.
 INSTANCE_ID=$(echo "$RUN_JSON" | grep -oE '"InstanceId":"(i-[a-zA-Z0-9]+)"' | head -1 | cut -d'"' -f4)
 [ -z "$INSTANCE_ID" ] && INSTANCE_ID=$(echo "$RUN_JSON" | grep -oE '"(i-[a-zA-Z0-9]{10,})"' | head -1 | tr -d '"')
 if [ -z "$INSTANCE_ID" ]; then

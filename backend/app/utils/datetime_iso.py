@@ -12,7 +12,7 @@ def iso_utc(dt: Optional[datetime]) -> Optional[str]:
         return None
     if hasattr(dt, "isoformat"):
         s = dt.isoformat()
-        # 无时区信息时追加 Z，前端会按 UTC 解析再转为用户本地时间
+        # NOTE: translated comment in English.
         if dt.tzinfo is None and "Z" not in s and "+" not in s:
             return s + "Z"
         return s

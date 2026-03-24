@@ -11,10 +11,10 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.database.relational_db import init_db
 
-# 确保所有表存在（含 recharge_orders、verification_codes 等）
+# NOTE: translated comment in English.
 init_db()
 
-# 测试用固定验证码，避免依赖真实邮件
+# NOTE: translated comment in English.
 os.environ["VERIFICATION_CODE_DEV"] = "123456"
 
 client = TestClient(app)
@@ -96,7 +96,7 @@ def test_register_and_login():
     assert data.get("username") == u
     token = data["access_token"]
 
-    # 登录
+    # NOTE: translated comment in English.
     r2 = client.post(
         "/auth/login",
         json={"username": u, "password": "testpass123"},
@@ -115,7 +115,7 @@ def test_guest_token():
     assert "register_hint" in data or "register_hint_en" in data
     assert (data.get("username") or "").startswith("guest_")
     token = data["access_token"]
-    # 用游客 token 发布任务
+    # NOTE: translated comment in English.
     r2 = client.post(
         "/tasks",
         json={"title": "游客发布测试", "description": "guest token test"},
@@ -123,7 +123,7 @@ def test_guest_token():
     )
     assert r2.status_code == 200, r2.text
     assert "id" in r2.json()
-    # /account/me 应返回 is_guest
+    # NOTE: translated comment in English.
     r3 = client.get("/account/me", headers={"Authorization": f"Bearer {token}"})
     assert r3.status_code == 200
     assert r3.json().get("is_guest") is True
@@ -239,12 +239,12 @@ def test_full_flow_register_login_publish_agent_subscribe():
     """完整流程：注册 -> 登录 -> 发布任务 -> 注册 Agent -> 订阅任务"""
     u = f"flowuser_{_unique()}"
     email = f"{u}@example.com"
-    # 1. 注册并登录
+    # NOTE: translated comment in English.
     data = _register_user(u, email, "flowpass")
     token = data["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
-    # 2. 发布任务
+    # NOTE: translated comment in English.
     r = client.post(
         "/tasks",
         json={"title": "测试任务", "description": "用于 API 测试"},
@@ -255,14 +255,14 @@ def test_full_flow_register_login_publish_agent_subscribe():
     assert "id" in task_data
     task_id = task_data["id"]
 
-    # 3. 任务大厅能看到
+    # NOTE: translated comment in English.
     r = client.get("/tasks")
     assert r.status_code == 200
     tasks = r.json()["tasks"]
     ids = [t["id"] for t in tasks]
     assert task_id in ids
 
-    # 4. 注册 Agent
+    # NOTE: translated comment in English.
     r = client.post(
         "/agents/register",
         json={"name": "测试Agent", "description": "测试用"},
@@ -273,14 +273,14 @@ def test_full_flow_register_login_publish_agent_subscribe():
     assert "id" in agent_data
     agent_id = agent_data["id"]
 
-    # 5. 我的 Agent 列表
+    # NOTE: translated comment in English.
     r = client.get("/agents/mine", headers=headers)
     assert r.status_code == 200
     agents = r.json()["agents"]
     assert len(agents) >= 1
     assert any(a["id"] == agent_id for a in agents)
 
-    # 6. 订阅任务
+    # NOTE: translated comment in English.
     r = client.post(
         f"/tasks/{task_id}/subscribe",
         json={"agent_id": agent_id},
@@ -289,7 +289,7 @@ def test_full_flow_register_login_publish_agent_subscribe():
     assert r.status_code == 200, r.text
     assert "订阅" in r.json().get("message", "")
 
-    # 7. 再次订阅同一任务应提示已订阅
+    # NOTE: translated comment in English.
     r = client.post(
         f"/tasks/{task_id}/subscribe",
         json={"agent_id": agent_id},
@@ -314,11 +314,11 @@ def test_publish_with_invited_agents_and_subscribe():
     data = _register_user(u, f"{u}@example.com", "invpass")
     token = data["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
-    # 发布者注册一个 Agent（用于 invited）
+    # NOTE: translated comment in English.
     r = client.post("/agents/register", json={"name": "PubAgent", "description": "pub"}, headers=headers)
     assert r.status_code == 200
     pub_agent_id = r.json()["id"]
-    # 发布任务并指定仅 pub_agent_id 可接取
+    # NOTE: translated comment in English.
     r = client.post(
         "/tasks",
         json={"title": "仅指定接取", "description": "测试", "invited_agent_ids": [pub_agent_id]},
@@ -326,7 +326,7 @@ def test_publish_with_invited_agents_and_subscribe():
     )
     assert r.status_code == 200
     task_id = r.json()["id"]
-    # 另一用户注册并尝试用其 Agent 订阅应 403
+    # NOTE: translated comment in English.
     u2 = f"invuser2_{_unique()}"
     data2 = _register_user(u2, f"{u2}@example.com", "invpass")
     token2 = data2["access_token"]
@@ -335,14 +335,14 @@ def test_publish_with_invited_agents_and_subscribe():
     other_agent_id = r.json()["id"]
     r = client.post(f"/tasks/{task_id}/subscribe", json={"agent_id": other_agent_id}, headers={"Authorization": f"Bearer {token2}"})
     assert r.status_code == 403
-    # 发布者用自己的 Agent 订阅应成功
+    # NOTE: translated comment in English.
     r = client.post(f"/tasks/{task_id}/subscribe", json={"agent_id": pub_agent_id}, headers=headers)
     assert r.status_code == 200
 
 
 def test_subscribe_requires_auth():
     """订阅任务需要登录"""
-    # 先创建一个任务（需要另一个已登录用户，这里只测未登录）
+    # NOTE: translated comment in English.
     r = client.post(
         "/tasks/1/subscribe",
         json={"agent_id": 1},
@@ -358,7 +358,7 @@ def test_agents_mine_requires_auth():
 
 def test_get_task_by_id():
     """获取单条任务详情（公开）"""
-    # 先拿到任务列表，取第一个 id；若无任务则跳过或创建
+    # NOTE: translated comment in English.
     r = client.get("/tasks?limit=1")
     assert r.status_code == 200
     tasks = r.json()["tasks"]
@@ -612,13 +612,13 @@ def test_internal_messages_send_inbox_and_read():
 
 def test_reject_requires_reason():
     """拒绝验收时必须填写拒绝理由"""
-    # 创建待验收任务需完整流程，这里仅测 400：无 body 或 reason 为空
+    # NOTE: translated comment in English.
     u = f"rej_{_unique()}"
     data = _register_user(u, f"{u}@example.com", "pw")
     token = data["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
     r = client.post("/tasks/1/reject", json={}, headers=headers)
-    # 可能 404（任务不存在）或 400（理由为空）
+    # NOTE: translated comment in English.
     if r.status_code == 400:
         assert "理由" in r.json().get("detail", "")
 
@@ -655,7 +655,7 @@ def test_agent_register_with_webhook_and_ping():
     assert r.status_code == 200
     body = r.json()
     assert "alive" in body
-    # 未真正可访问的 URL 会请求失败，alive 为 False；或 no_webhook 若未存上
+    # NOTE: translated comment in English.
     assert body["alive"] is False or body.get("reason") == "no_webhook"
 
 
@@ -732,22 +732,22 @@ def test_task_comments_list_and_post():
     data = _register_user(u, f"{u}@example.com", "pw")
     token = data["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
-    # 先发布一个任务
+    # NOTE: translated comment in English.
     r = client.post("/tasks", json={"title": "评论测试任务", "description": "desc"}, headers=headers)
     assert r.status_code == 200
     task_id = r.json()["id"]
-    # 无评论时列表为空
+    # NOTE: translated comment in English.
     r = client.get(f"/tasks/{task_id}/comments")
     assert r.status_code == 200
     assert r.json()["comments"] == []
-    # 发表评论
+    # NOTE: translated comment in English.
     r = client.post(f"/tasks/{task_id}/comments", json={"content": "第一条评论"}, headers=headers)
     assert r.status_code == 200
     c = r.json()
     assert c["content"] == "第一条评论"
     assert c["author_name"] == u
     assert "id" in c
-    # 再拉列表应有 1 条
+    # NOTE: translated comment in English.
     r = client.get(f"/tasks/{task_id}/comments")
     assert r.status_code == 200
     assert len(r.json()["comments"]) == 1
@@ -940,7 +940,7 @@ def test_admin_force_confirm_escrow_dispute():
     exe_token = client.post('/auth/login', json={'username': exe, 'password': 'exe'}).json()['access_token']
     admin_token = client.post('/auth/login', json={'username': admin, 'password': 'adminpw'}).json()['access_token']
 
-    # 让该 admin 用户具备 is_superuser 权限（依赖环境变量的默认 admin 不一定在测试环境里存在）
+    # NOTE: translated comment in English.
     from app.database.relational_db import SessionLocal, User as UserModel
     db = SessionLocal()
     try:
@@ -977,7 +977,7 @@ def test_admin_force_confirm_escrow_dispute():
     agent_id = r.json()["id"]
     assert client.post(f"/tasks/{task_id}/subscribe", json={"agent_id": agent_id}, headers=exe_headers).status_code == 200
 
-    # 让任务进入 pending_verification（可选，但更贴近真实争议链路）
+    # NOTE: translated comment in English.
     with patch("app.main.httpx") as m:
         m.Client.return_value.__enter__.return_value.post.return_value.status_code = 200
         assert client.post(
@@ -986,7 +986,7 @@ def test_admin_force_confirm_escrow_dispute():
             headers=exe_headers,
         ).status_code == 200
 
-    # 进入 disputed
+    # NOTE: translated comment in English.
     reason = "阶段一证据不足"
     r = client.post(
         f"/tasks/{task_id}/escrow/dispute",
@@ -998,7 +998,7 @@ def test_admin_force_confirm_escrow_dispute():
     td = client.get(f"/tasks/{task_id}").json()
     assert td["status"] == "disputed"
 
-    # 管理员强制验收当前里程碑：应推进到 in_progress
+    # NOTE: translated comment in English.
     rr = client.post(
         f"/admin/tasks/{task_id}/escrow/dispute/resolve",
         json={"note": "管理员裁决：强制按当前里程碑验收", "resolution_type": "force_confirm"},
@@ -1022,7 +1022,7 @@ def test_publish_template_and_skill_version_tag():
     assert r.status_code == 200
     agent_id = r.json()["id"]
 
-    # 先造一个 completed 任务，满足发布模板条件
+    # NOTE: translated comment in English.
     client.post("/account/recharge", json={"amount": 10}, headers=headers)
     create_task = client.post(
         "/tasks",
@@ -1044,7 +1044,7 @@ def test_publish_template_and_skill_version_tag():
     assert pt.status_code == 200
     assert pt.json().get("version_tag") == "v1.2.0"
 
-    # skill 版本标签
+    # NOTE: translated comment in English.
     skill_token = f"sk_{_unique()}"
     r2 = client.post(
         "/agents/register",

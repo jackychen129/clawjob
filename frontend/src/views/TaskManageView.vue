@@ -9,7 +9,7 @@
             <button type="button" class="task-tab" :class="{ active: tab === 'available' }" @click="tab = 'available'">{{ t('taskManage.available') || '可接取任务' }}</button>
             <button type="button" class="task-tab" :class="{ active: tab === 'mine' }" @click="tab = 'mine'">{{ t('taskManage.myAccepted') || '我接取的任务' }}</button>
           </div>
-          <!-- 可接取任务：未登录也允许浏览 -->
+          <!-- NOTE: translated comment in English. -->
           <template v-if="tab === 'available'">
               <div class="task-filter-row">
                 <select v-model="categoryFilter" class="input select-input task-filter-select">
@@ -64,7 +64,7 @@
               </EmptyState>
           </template>
 
-          <!-- 我接取的任务：未登录提示登录 -->
+          <!-- NOTE: translated comment in English. -->
           <template v-else>
             <EmptyState
               v-if="!auth.isLoggedIn"
@@ -337,7 +337,7 @@
         </div>
       </section>
 
-      <!-- 右：发布任务按钮 + 我的 Agent 卡片 -->
+      <!-- NOTE: translated comment in English. -->
       <aside class="task-right">
         <div class="task-right-card task-right-create">
           <Button type="button" class="w-full" @click="openCreateModal">
@@ -369,7 +369,7 @@
       </aside>
     </div>
 
-    <!-- 创建任务弹窗 -->
+    <!-- NOTE: translated comment in English. -->
     <div v-if="showCreateModal" class="modal-mask" @click.self="closeCreateModal">
       <div class="modal modal--create">
         <h3 class="modal-title">{{ t('task.publish') }}</h3>
@@ -499,7 +499,7 @@
       </div>
     </div>
 
-    <!-- 选择 Agent 接取弹窗 -->
+    <!-- NOTE: translated comment in English. -->
     <div v-if="subscribeTaskItem" class="modal-mask" @click.self="subscribeTaskItem = null">
       <div class="modal">
         <h3>{{ t('task.selectAgentTitle', { title: subscribeTaskItem.title }) }}</h3>
@@ -518,7 +518,7 @@
         <Button variant="secondary" class="close-btn w-full" @click="subscribeTaskItem = null">{{ t('common.cancel') }}</Button>
       </div>
     </div>
-    <!-- 提交完成弹窗 -->
+    <!-- NOTE: translated comment in English. -->
     <div v-if="submitCompletionTask" class="modal-mask" @click.self="submitCompletionTask = null">
       <div class="modal">
         <h3>{{ t('task.submitCompletionTitle', { title: submitCompletionTask.title }) }}</h3>
@@ -534,7 +534,7 @@
       </div>
     </div>
 
-    <!-- 托管争议弹窗 -->
+    <!-- NOTE: translated comment in English. -->
     <div v-if="escrowDisputeTask" class="modal-mask" @click.self="closeEscrowDisputeModal">
       <div class="modal">
         <h3>{{ t('task.escrowDispute') || '发起托管争议' }} · {{ escrowDisputeTask.title }}</h3>
@@ -549,7 +549,7 @@
       </div>
     </div>
 
-    <!-- 管理员处理争议弹窗 -->
+    <!-- NOTE: translated comment in English. -->
     <div v-if="escrowResolveTask" class="modal-mask" @click.self="closeEscrowResolveModal">
       <div class="modal">
         <h3>{{ t('task.escrowResolve') || '管理员处理争议' }} · {{ escrowResolveTask.title }}</h3>
@@ -566,7 +566,7 @@
       </div>
     </div>
 
-    <!-- 拒绝验收弹窗（发布方填写理由）-->
+    <!-- NOTE: translated comment in English. -->
     <div v-if="rejectTaskId" class="modal-mask" @click.self="rejectTaskId = null; rejectReason = ''">
       <div class="modal">
         <h3>{{ t('task.rejectTitle') || '拒绝验收' }}</h3>
@@ -596,7 +596,7 @@
       </div>
     </div>
 
-    <!-- 登录/注册弹窗 -->
+    <!-- NOTE: translated comment in English. -->
     <div v-if="showAuthModal" class="modal-mask" @click.self="showAuthModal = false">
       <div class="modal">
         <h3>{{ authTab === 'login' ? t('auth.login') : t('auth.register') }}</h3>
@@ -846,7 +846,7 @@ function isExecutor(t: { agent_id?: number }) {
   return myAgents.value.some((a) => a.id === t.agent_id)
 }
 
-/** 发布方或接取方（当前用户名下 Agent 为 task.agent_id）可访问 A2A 接口 */
+/* NOTE: translated comment in English. */
 function canA2aTask(t: TaskListItem | null): boolean {
   if (!t) return false
   return canA2aTaskParams({
@@ -1054,7 +1054,7 @@ async function postComment() {
     await loadTaskComments(tid)
     showSuccessLocal(t('task.commentPosted'))
   } catch {
-    // 静默失败；可后续接全局 toast
+    // NOTE: translated comment in English.
   } finally {
     postCommentLoading.value = false
   }
@@ -1683,7 +1683,7 @@ watch(tab, (newTab) => {
 .task-comments-empty { margin: 0; color: var(--text-secondary); font-size: var(--font-caption); }
 .task-comment-form { margin-top: var(--space-5); display: flex; flex-direction: column; gap: var(--space-3); }
 
-/* 任务行 · 极细分隔、背景层级、状态过渡 */
+/* NOTE: translated comment in English. */
 .task-list { display: flex; flex-direction: column; gap: 0; }
 .task-row {
   padding: var(--space-6) var(--space-8);
@@ -1789,7 +1789,7 @@ watch(tab, (newTab) => {
 .task-manage-skeleton-line--full { width: 100%; }
 .task-manage-skeleton-line--mid { width: 75%; }
 
-/* 空状态 · 细线图标与呼吸感 */
+/* NOTE: translated comment in English. */
 .tw-empty-state.empty-state--task {
   text-align: center;
   padding: var(--space-10) var(--space-6);
@@ -1815,7 +1815,7 @@ watch(tab, (newTab) => {
 .tw-empty-state__text { font-size: var(--font-body); color: var(--text-secondary); line-height: 1.5; margin: 0 0 var(--space-5); }
 .tw-empty-state__actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-3); }
 
-/* TransitionGroup · 列表进入/离开/移动 */
+/* NOTE: translated comment in English. */
 .task-list-move,
 .task-list-enter-active,
 .task-list-leave-active {

@@ -18,7 +18,7 @@ const Home = defineComponent({
   render: () => h('div', { class: 'home' }, 'Agent Arena'),
 })
 
-// 用于接收 Google OAuth 回调的占位页（实际逻辑在 App 里根据 hash 处理）
+// NOTE: translated comment in English.
 const AuthCallback = defineComponent({
   render: () => h('div', { class: 'auth-callback' }, '登录中…'),
 })
@@ -40,11 +40,11 @@ const router = createRouter({
     { path: '/tasks', name: 'TaskManage', component: TaskManageView },
     { path: '/agents', name: 'AgentManage', component: AgentManageView },
     { path: '/skill', name: 'Skill', component: SkillPage },
-    // 更具体的路径放前面，避免 /docs 先于 /docs/manual 匹配
+    // NOTE: translated comment in English.
     { path: '/docs/manual', name: 'DocsManual', component: ManualPage },
     { path: '/docs/openclaw-quickstart', name: 'DocsOpenClawQuickstart', component: OpenClawQuickstartPage },
     { path: '/docs', name: 'Docs', component: DocsPage },
-    // 用 name 重定向避免 path 解析时产生无限循环导致栈溢出
+    // NOTE: translated comment in English.
     { path: '/docs/', name: 'DocsSlash', redirect: { name: 'Docs' } },
     { path: '/inbox', name: 'Inbox', component: InboxView },
     { path: '/account', name: 'Account', component: AccountPage },

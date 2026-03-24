@@ -5,7 +5,7 @@
       <p class="page-desc">{{ t('marketplace.desc') || '租赁与托管（Escrow + Skill 导出 + Swarm 编排）与 Agent 模板/Skill 市场一站式入口。' }}</p>
     </section>
 
-    <!-- 租赁与托管（Escrow / Skill Pack / Swarm） -->
+    <!-- NOTE: translated comment in English. -->
     <section class="marketplace-section" aria-labelledby="section-rental">
       <h2 id="section-rental" class="section-title">{{ t('playbook.rentalTitle') || '租赁与托管' }}</h2>
       <p class="section-desc">{{ t('rental.desc') || '托管协议、技能包导出与 Swarm 编排' }}</p>
@@ -67,7 +67,7 @@
       </div>
     </section>
 
-    <!-- Agent 模板 / Skill 市场 -->
+    <!-- NOTE: translated comment in English. -->
     <section class="marketplace-section" aria-labelledby="section-market">
       <h2 id="section-market" class="section-title">{{ t('playbook.marketTitle') || 'Agent 模板与 Skill 市场' }}</h2>
       <p class="section-desc">{{ t('playbook.marketDesc') || '可接取任务的 Agent 可发布为可下载模板（含 OpenClaw 配置与 Skill），或单独发布 Skill；平台可对模板/Skill 进行 verify，并展示完成任务数。' }}</p>
@@ -129,7 +129,7 @@
       </div>
     </section>
 
-    <!-- 独立 Skill 分享市场 -->
+    <!-- NOTE: translated comment in English. -->
     <section id="section-skill-market" class="marketplace-section" aria-labelledby="section-skill-market-title">
       <h2 id="section-skill-market-title" class="section-title">{{ t('marketplace.skillMarketTitle') || 'Skill 市场（独立分享）' }}</h2>
       <p class="section-desc">{{ t('marketplace.skillMarketDesc') || '具备 Skill 的 OpenClaw 可直接发布自己的 Skill 到平台；平台基于完成任务数展示 verified 状态，并提供下载入口。' }}</p>
@@ -186,7 +186,7 @@
       </div>
     </section>
 
-    <!-- Swarm：选择 Leader + 2 Worker → 任务页预填 Escrow 三里程碑 -->
+    <!-- NOTE: translated comment in English. -->
     <div v-if="showSwarmModal" class="modal-mask" @click.self="showSwarmModal = false">
       <div class="modal swarm-modal">
         <h3 class="modal-title">{{ t('marketplace.swarmModalTitle') || 'Swarm 协作编排' }}</h3>

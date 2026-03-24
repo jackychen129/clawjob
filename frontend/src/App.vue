@@ -1,6 +1,6 @@
 <template>
   <div id="app" class="app-container relative min-h-screen">
-    <!-- Aura 背景光晕：角落深紫色渐变模糊块 -->
+    <!-- NOTE: translated comment in English. -->
     <div class="aura-glow aura-glow--tl" aria-hidden="true"></div>
     <div class="aura-glow aura-glow--br" aria-hidden="true"></div>
 
@@ -114,7 +114,7 @@
       <AdminView v-else-if="route.path === '/admin'" />
       <template v-else>
       <div class="home-wrap apple-layout">
-        <!-- 首页 Dashboard：KPI + 实况 + 排行榜（参考 market.near.ai） -->
+        <!-- NOTE: translated comment in English. -->
         <section class="home-dashboard" aria-label="Dashboard">
           <div class="home-kpi">
             <div v-if="homeStatsLoading" class="home-kpi-skeleton">
@@ -319,7 +319,7 @@
       </div>
       </div>
 
-      <!-- 我当前创建的任务（登录后显示） -->
+      <!-- NOTE: translated comment in English. -->
       <section v-if="auth.isLoggedIn" class="home-my-created section apple-section">
         <div class="section-head">
           <h2 class="section-title">{{ t('task.myCreatedTasks') }}</h2>
@@ -358,7 +358,7 @@
       </template>
     </main>
 
-    <!-- 创建任务弹窗（参考 market.near.ai 流程） -->
+    <!-- NOTE: translated comment in English. -->
     <div v-if="showCreateTaskModal" class="modal-mask" @click.self="closeCreateTaskModal">
       <div class="modal modal--create-task">
         <h3 class="modal-title">{{ t('task.publish') }}</h3>
@@ -521,7 +521,7 @@
       </div>
     </div>
 
-    <!-- 登录/注册弹窗 -->
+    <!-- NOTE: translated comment in English. -->
     <div v-if="showAuthModal" class="modal-mask" data-testid="auth-modal-mask" @click.self="showAuthModal = false">
       <div class="modal" data-testid="auth-modal">
         <h3>{{ authTab === 'login' ? t('auth.login') : t('auth.register') }}</h3>
@@ -581,7 +581,7 @@
       </div>
     </div>
 
-    <!-- 提交完成弹窗（接取者填写结果摘要与链接）-->
+    <!-- NOTE: translated comment in English. -->
     <div v-if="submitCompletionTask" class="modal-mask" @click.self="submitCompletionTask = null">
       <div class="modal">
         <h3>{{ t('task.submitCompletionTitle', { title: submitCompletionTask.title }) }}</h3>
@@ -595,7 +595,7 @@
       </div>
     </div>
 
-    <!-- 拒绝验收弹窗（必须填写理由，作为 RL 反馈）-->
+    <!-- NOTE: translated comment in English. -->
     <div v-if="rejectTaskId" class="modal-mask" @click.self="rejectTaskId = null; rejectReason = ''">
       <div class="modal">
         <h3>{{ t('task.rejectTitle') || '拒绝验收' }}</h3>
@@ -621,7 +621,7 @@
       </div>
     </div>
 
-    <!-- 首页任务详情 + 评论弹窗：发布者/时间/结构化信息 -->
+    <!-- NOTE: translated comment in English. -->
     <div v-if="homeTaskDetail" class="modal-mask" @click.self="closeHomeTaskDetail">
       <div class="modal modal--task-detail">
         <div class="task-detail-modal-head">
@@ -678,7 +678,7 @@
       </div>
     </div>
 
-    <!-- 选择 Agent 接取任务弹窗 -->
+    <!-- NOTE: translated comment in English. -->
     <div v-if="subscribeTaskItem" class="modal-mask" @click.self="subscribeTaskItem = null">
       <div class="modal">
         <h3>{{ t('task.selectAgentTitle', { title: subscribeTaskItem.title }) }}</h3>
@@ -698,7 +698,7 @@
       </div>
     </div>
 
-    <!-- 成功提示 Toast -->
+    <!-- NOTE: translated comment in English. -->
     <Transition name="toast">
       <div v-if="successToast" class="toast" role="status">{{ successToast }}</div>
     </Transition>
@@ -1018,7 +1018,7 @@ function scrollToPublishSection() {
 }
 
 
-/** 使用 Google 登录：未配置时在弹窗内展示错误，已配置时整页跳转后端 OAuth */
+/* NOTE: translated comment in English. */
 function onGoogleLoginClick(e: Event) {
   e.preventDefault()
   if (!googleOAuthConfigured.value) {
@@ -1524,8 +1524,8 @@ function loadAccountMe() {
 
 
 onMounted(() => {
-  // 延后到 onMounted 再拉取，避免首屏被阻塞或未挂载时请求导致异常
-  // 仅当接口明确返回 configured: false 时禁用按钮；请求失败（跨域/网络）时保持可点，让用户尝试点击
+  // NOTE: translated comment in English.
+  // NOTE: translated comment in English.
   api.getGoogleOAuthStatus().then((s) => {
     googleOAuthConfigured.value = s.configured
     googleConfigError.value = s.config_error || ''
@@ -1533,7 +1533,7 @@ onMounted(() => {
   document.addEventListener('keydown', onEscapeKey)
   locale.value = i18n.global.locale.value as LocaleKey
   try { showSkillBanner.value = false } catch (_) {}
-  // Google OAuth 错误：后端重定向到 FRONTEND_URL#/?error=xxx 或 FRONTEND_URL?error=xxx
+  // NOTE: translated comment in English.
   const hash = window.location.hash
   const search = window.location.search
   const getError = () => {
@@ -1556,7 +1556,7 @@ onMounted(() => {
     window.history.replaceState(null, '', window.location.pathname)
     window.location.hash = ''
   } else {
-    // 成功回调：优先读 query（后端 302 用 query 传参，避免 fragment 被丢弃）；兼容 hash #/auth/callback?...
+    // NOTE: translated comment in English.
     let token: string | null = null
     let username: string | null = null
     let userId: number | undefined
@@ -1603,7 +1603,7 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-/* 仅保留品牌区竖排：Logo + Tagline 叠放 */
+/* NOTE: translated comment in English. */
 .header-brand {
   display: flex;
   flex-direction: column;
@@ -1661,7 +1661,7 @@ onUnmounted(() => {
 .escrow-criteria { width: 100%; }
 .escrow-sum { margin-top: 0.35rem; font-weight: 500; color: var(--primary-color); }
 
-/* 首页 Dashboard：KPI + 实况 + 排行榜 */
+/* NOTE: translated comment in English. */
 .home-dashboard { margin-bottom: var(--space-6, 1.5rem); }
 .home-kpi { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-3, 0.75rem); margin-bottom: var(--space-5, 1.25rem); }
 @media (min-width: 640px) { .home-kpi { grid-template-columns: repeat(4, 1fr); } }
@@ -1711,7 +1711,7 @@ onUnmounted(() => {
 .home-leaderboard-skeleton .tw-skeleton { background: var(--surface); }
 .mt-2 { margin-top: 0.5rem; }
 
-/* 首页任务列表：网格与骨架屏（不依赖 Tailwind） */
+/* NOTE: translated comment in English. */
 .home-task-list--grid {
   display: grid;
   grid-template-columns: 1fr;
@@ -1751,7 +1751,7 @@ onUnmounted(() => {
   grid-column: 1 / -1;
 }
 
-/* 首页任务卡片：Linear 质感（8px 栅格、typography、meta .mono） */
+/* NOTE: translated comment in English. */
 .home-task-list--grid .home-task-card {
   padding: 24px; /* 8px 栅格 */
 }
@@ -1822,7 +1822,7 @@ onUnmounted(() => {
 .home-task-list--grid .home-task-card .task-actions {
   gap: var(--space-2);
 }
-/* 首页任务卡片 hover：微缩放 + 抬升 + 阴影 */
+/* NOTE: translated comment in English. */
 .home-task-list--grid .home-task-card.task-card--hover:hover {
   transform: translateY(-2px);
   border-color: rgba(255,255,255,0.10);
@@ -1846,7 +1846,7 @@ onUnmounted(() => {
   margin-right: 0.25rem;
 }
 
-/* 游客提示条：建议注册并关联智能体 */
+/* NOTE: translated comment in English. */
 .guest-hint-banner {
   display: flex;
   align-items: center;

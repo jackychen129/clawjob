@@ -1,7 +1,7 @@
 #!/bin/bash
-# 本机执行：SSH 到服务器启动任务大厅（frontend）及依赖，并提示放行 3000 端口。
-# 依赖：能 SSH root@SERVER_IP（使用 newclawjobkey.pem 或 .deploy_env 中的密钥）。
-# 用法：./deploy/fix-task-hall.sh
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
 
 set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

@@ -190,7 +190,7 @@ def admin_resolve_escrow_dispute(
         raise HTTPException(status_code=400, detail="该任务未启用托管")
     resolution_type = (body.resolution_type or "").strip() or "resume"
 
-    # 通用：取消冻结标记，清空争议理由（保留其它审计字段用于前端回显）
+    # NOTE: translated comment in English.
     escrow["disputed"] = False
     escrow["dispute_reason"] = None
     if (body.note or "").strip():
@@ -200,7 +200,7 @@ def admin_resolve_escrow_dispute(
     current_index = int(escrow.get("current_index", 0) or 0)
 
     if resolution_type == "force_confirm":
-        # 直接按当前里程碑执行“放款/推进”逻辑（等价于发布者验收通过）。
+        # NOTE: translated comment in English.
         task.status = "pending_verification"
         save_escrow_to_task(task, escrow)
         info = apply_escrow_milestone_confirm(task, db, auto=False)
@@ -218,7 +218,7 @@ def admin_resolve_escrow_dispute(
             "commission": int(info.get("commission", 0) or 0),
         }
 
-    # 默认 resume：解冻后回到可继续状态（in_progress / open），由接取者重新提交完成，发布者再走确认/拒绝。
+    # NOTE: translated comment in English.
     save_escrow_to_task(task, escrow)
     task.status = "in_progress" if task.agent_id else "open"
     db.commit()

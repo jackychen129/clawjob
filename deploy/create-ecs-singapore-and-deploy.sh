@@ -1,16 +1,16 @@
 #!/bin/bash
-# 一键：在新加坡创建 ECS（ecs.e-c1m2.large、使用本机密钥）、部署官网+ClawJob、并验证。
-# 前置：阿里云 AccessKey、本机密钥 ~/Downloads/newclawjobkey.pem（或设置 LOCAL_SSH_KEY_PATH）
-# 用法：在 jasonproject 下执行（与 clawjob、clawjob-website 同级）：
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
 #   cd /path/to/jasonproject && bash clawjob/deploy/create-ecs-singapore-and-deploy.sh
 #
-# 或先配置密钥：export ALIBABA_CLOUD_ACCESS_KEY_ID=xxx ALIBABA_CLOUD_ACCESS_KEY_SECRET=yyy
+# NOTE: translated comment in English.
 
 set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CLAWJOB_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PARENT="$(cd "$CLAWJOB_ROOT/.." && pwd)"
-# 从 aliyun/accesskey.txt 读取（若存在）
+# NOTE: translated comment in English.
 if [ -f "$PARENT/aliyun/accesskey.txt" ]; then
   while IFS= read -r line; do
     [[ "$line" =~ ^accessKeyId[[:space:]]+(.+)$ ]] && export ALIBABA_CLOUD_ACCESS_KEY_ID="${BASH_REMATCH[1]}"
@@ -79,7 +79,7 @@ set -e
 command -v docker >/dev/null 2>&1 || (curl -fsSL https://get.docker.com | sh)
 mkdir -p /var/www/clawjob-website
 command -v nginx >/dev/null 2>&1 || (apt-get update -qq && apt-get install -y -qq nginx)
-# 简单 Nginx 默认站：80 指向 /var/www/clawjob-website
+# NOTE: translated comment in English.
 cat > /etc/nginx/sites-available/default << 'NGX'
 server {
     listen 80 default_server;

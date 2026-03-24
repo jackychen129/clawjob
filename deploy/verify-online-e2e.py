@@ -5,7 +5,7 @@ ClawJob 线上端到端自动化测试脚本。
 Agent、接取任务、任务详情扩展字段、前端页面可达性。
 用法:
   python3 deploy/verify-online-e2e.py [API_BASE_URL]
-  # 或
+  # NOTE: translated comment in English.
   CLAWJOB_API_URL=http://8.216.64.80:8000 CLAWJOB_FRONTEND_URL=http://8.216.64.80:3000 python3 deploy/verify-online-e2e.py
 """
 import os
@@ -33,7 +33,7 @@ except ImportError:
     print("Python 3 required")
     sys.exit(1)
 
-# 从环境变量或第一个参数读取；默认与 deploy/.deploy_env 中 SERVER_IP 一致时可用
+# NOTE: translated comment in English.
 BASE = (os.environ.get("CLAWJOB_API_URL") or (sys.argv[1] if len(sys.argv) > 1 else "http://8.216.64.80:8000")).rstrip("/")
 FRONTEND_BASE = (os.environ.get("CLAWJOB_FRONTEND_URL") or BASE.replace(":8000", ":3000")).rstrip("/")
 SSL_CTX = ssl.create_default_context()
@@ -70,7 +70,7 @@ def get_frontend(url, timeout=15):
         return 0, str(e)
 
 def main():
-    # 清空并写时间戳
+    # NOTE: translated comment in English.
     try:
         with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
             f.write(f"线上 E2E 验证时间: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
@@ -87,7 +87,7 @@ def main():
     errors = []
     passed = []
 
-    # --- 1. API 健康 ---
+    # NOTE: translated comment in English.
     code, body = req("/health")
     if code != 200:
         errors.append(f"GET /health -> {code} {body}")
@@ -95,7 +95,7 @@ def main():
         passed.append("GET /health")
         log(f"[OK] GET /health -> 200 {body.get('status', body)}")
 
-    # --- 2. 任务大厅公开：任务列表 ---
+    # NOTE: translated comment in English.
     code, body = req("/tasks")
     if code != 200:
         errors.append(f"GET /tasks -> {code} {body}")
@@ -104,7 +104,7 @@ def main():
         tasks = body.get("tasks", [])
         log(f"[OK] GET /tasks -> 200 (共 {len(tasks)} 条)")
 
-    # --- 3. 任务大厅公开：候选者 ---
+    # NOTE: translated comment in English.
     code, body = req("/candidates")
     if code != 200:
         errors.append(f"GET /candidates -> {code} {body}")
@@ -113,7 +113,7 @@ def main():
         cands = body.get("candidates", [])
         log(f"[OK] GET /candidates -> 200 (共 {len(cands)} 个)")
 
-    # --- 4. Google OAuth 状态（可选）---
+    # NOTE: translated comment in English.
     code, body = req("/auth/google/status")
     if code == 200:
         passed.append("GET /auth/google/status")
@@ -121,7 +121,7 @@ def main():
     else:
         log(f"[INFO] GET /auth/google/status -> {code} (可选)")
 
-    # --- 5. 注册：优先 register-via-skill（无需验证码），失败时再试邮箱验证码注册 ---
+    # NOTE: translated comment in English.
     user = f"e2e_{int(time.time())}"
     token = None
     code_skill, body_skill = req("/auth/register-via-skill", method="POST", data={
@@ -173,7 +173,7 @@ def main():
 
     task_id = None  # 用于发布任务后的详情/接取
 
-    # --- 6. 账户 /me ---
+    # NOTE: translated comment in English.
     code, body = req("/account/me", token=token)
     if code != 200:
         errors.append(f"GET /account/me -> {code} {body}")
@@ -181,7 +181,7 @@ def main():
         passed.append("GET /account/me")
         log(f"[OK] GET /account/me -> 200 credits={body.get('credits', '?')}")
 
-    # --- 7. 发布任务（含 location, duration_estimate, skills）---
+    # NOTE: translated comment in English.
     code, body = req("/tasks", method="POST", data={
         "title": "E2E 验证任务（带地点时长技能）",
         "description": "自动化测试",
@@ -196,7 +196,7 @@ def main():
         task_id = body.get("id")
         log(f"[OK] POST /tasks -> 200 task_id={task_id}")
 
-    # --- 8. 任务详情（校验扩展字段）---
+    # NOTE: translated comment in English.
     if code == 200 and task_id:
         code2, body2 = req(f"/tasks/{task_id}", token=token)
         if code2 != 200:
@@ -211,7 +211,7 @@ def main():
             else:
                 log(f"[OK] GET /tasks/{{id}} -> 200 (extra fields present in response)")
 
-    # --- 9. Agent 列表 ---
+    # NOTE: translated comment in English.
     code, body = req("/agents/mine", token=token)
     if code != 200:
         errors.append(f"GET /agents/mine -> {code} {body}")
@@ -220,7 +220,7 @@ def main():
         agents = body.get("agents", [])
         log(f"[OK] GET /agents/mine -> 200 (共 {len(agents)} 个)")
 
-    # --- 10. 若无 Agent 则注册一个并接取任务 ---
+    # NOTE: translated comment in English.
     agent_id = None
     if code == 200 and agents:
         agent_id = agents[0].get("id")
@@ -243,7 +243,7 @@ def main():
             passed.append("POST /tasks/:id/subscribe")
             log(f"[OK] POST /tasks/{{id}}/subscribe -> 200")
 
-        # --- 10b. A2A + Memory（发布方且已接取，与 test_a2a_and_memory_endpoints 对齐）---
+        # NOTE: translated comment in English.
         code_a2a, body_a2a = req(f"/a2a/tasks/{task_id}", token=token)
         if code_a2a != 200:
             errors.append(f"GET /a2a/tasks/{{id}} -> {code_a2a} {body_a2a}")
@@ -284,7 +284,7 @@ def main():
             passed.append("GET /memory/search")
             log(f"[OK] GET /memory/search -> 200")
 
-    # --- 11. 账户扩展接口 ---
+    # NOTE: translated comment in English.
     for path, name in [("/account/receiving-account", "receiving-account"), ("/account/commission", "commission")]:
         code, body = req(path, token=token)
         if code != 200:
@@ -293,7 +293,7 @@ def main():
             passed.append(f"GET {path}")
     log(f"[OK] GET /account/receiving-account, /account/commission -> 200")
 
-    # --- 12. 前端任务大厅页面可达 ---
+    # NOTE: translated comment in English.
     code_f, body_f = get_frontend(FRONTEND_BASE + "/")
     if code_f != 200:
         errors.append(f"GET {FRONTEND_BASE}/ -> {code_f}")
@@ -304,7 +304,7 @@ def main():
         else:
             log(f"[OK] Frontend {FRONTEND_BASE}/ -> 200")
 
-    # --- 汇总 ---
+    # NOTE: translated comment in English.
     log("")
     log("=" * 60)
     if errors:

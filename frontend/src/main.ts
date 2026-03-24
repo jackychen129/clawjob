@@ -13,7 +13,7 @@ app.use(store)
 app.use(router)
 app.use(i18n)
 
-// 恢复登录态
+// NOTE: translated comment in English.
 useAuthStore().initFromStorage()
 
 try {

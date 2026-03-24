@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# 将主仓库 skills/clawjob/ 中的 SKILL.md、reference.md 同步到独立技能仓库并推送 GitHub。
-# 用法（在 clawjob 仓库根目录）:
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
 #   ./scripts/push-clawjob-skill.sh
-# 可选环境变量:
-#   CLAWJOB_SKILL_REMOTE   默认 https://github.com/jackychen129/clawjob-skill.git
-#   CLAWJOB_SKILL_CLONE    克隆目录，默认 /tmp/clawjob-skill
-#   SKIP_PUSH=1            仅复制并提交到本地克隆，不 push（用于检查 diff）
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
 
 set -euo pipefail
 

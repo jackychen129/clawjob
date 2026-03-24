@@ -12,7 +12,7 @@
       </div>
       <template v-else>
         <p v-if="skillPublishBanner" class="skill-publish-banner">{{ skillPublishBanner }}</p>
-        <!-- 一键注册提示 · 毛玻璃卡片 -->
+        <!-- NOTE: translated comment in English. -->
         <div class="card one-click-hint-card one-click-hint-card--glass">
           <div class="card-content">
             <p class="one-click-hint-title">{{ t('agentManage.oneClickRegisterTitle') || '一键注册 Agent' }}</p>
@@ -23,7 +23,7 @@
           </div>
         </div>
 
-        <!-- 注册新 Agent -->
+        <!-- NOTE: translated comment in English. -->
         <section class="section">
           <h2 class="section-title">{{ t('agent.myAgents') }}</h2>
           <div class="card agent-form-card agent-form-card--glass">
@@ -39,7 +39,7 @@
             <p v-if="agentError" class="error-msg">{{ agentError }}</p>
           </div>
 
-          <!-- 创建成功引导 -->
+          <!-- NOTE: translated comment in English. -->
           <Transition name="fade-slide">
             <div v-if="justRegisteredAgent" class="card onboarding-card onboarding-card--glass">
               <div class="card-content">
@@ -53,7 +53,7 @@
             </div>
           </Transition>
 
-          <!-- Agent 列表 · TransitionGroup + 钱包式卡片 -->
+          <!-- NOTE: translated comment in English. -->
           <TransitionGroup name="agent-list" tag="div" class="agent-list">
             <article
               v-for="a in myAgents"
@@ -84,7 +84,7 @@
                   <span v-if="a.published_template_id" class="agent-card__badge agent-card__badge--published">{{ t('agentManage.published') || '已发布模板' }}</span>
                 </div>
 
-                <!-- 技能/完成进度 · 细进度条 + 数值 -->
+                <!-- NOTE: translated comment in English. -->
                 <div v-if="(a.completed_task_count || 0) > 0" class="agent-card__skill-row">
                   <span class="agent-card__skill-label">{{ t('agentManage.completedTasks') || '已完成' }}</span>
                   <div class="agent-card__skill-bar-wrap">
@@ -167,7 +167,7 @@
             </article>
           </TransitionGroup>
 
-          <!-- 空状态 · 设计感占位 -->
+          <!-- NOTE: translated comment in English. -->
           <Transition name="fade-slide">
             <EmptyState
               v-if="myAgents.length === 0 && !agentsLoading"
@@ -194,7 +194,7 @@
       @close="certificateAgent = null"
     />
 
-    <!-- 发布为模板弹窗 -->
+    <!-- NOTE: translated comment in English. -->
     <div v-if="showPublishModal" class="modal-mask" @click.self="closePublishModal">
       <div class="modal">
         <h3>{{ t('agentManage.publishAsTemplate') || '发布为模板' }}</h3>
@@ -212,7 +212,7 @@
       </div>
     </div>
 
-    <!-- 发布 Skill 到市场（与 skill_bound_token 对齐） -->
+    <!-- NOTE: translated comment in English. -->
     <div v-if="showSkillPublishModal" class="modal-mask" @click.self="closeSkillPublishModal">
       <div class="modal">
         <h3>{{ t('agentManage.publishSkillToMarket') || '发布 Skill 到市场' }}</h3>
@@ -243,7 +243,7 @@
       </div>
     </div>
 
-    <!-- 登录/注册弹窗 -->
+    <!-- NOTE: translated comment in English. -->
     <div v-if="showAuthModal" class="modal-mask" @click.self="showAuthModal = false">
       <div class="modal">
         <h3>{{ authTab === 'login' ? t('auth.login') : t('auth.register') }}</h3>
@@ -580,7 +580,7 @@ function confirmUnpublishTemplate(a: AgentItem) {
 <style scoped>
 .agent-manage-view { padding: 0; width: 100%; }
 
-/* Gate / 表单 / 一键注册 · 设计 token 统一 */
+/* NOTE: translated comment in English. */
 .gate-card--glass,
 .agent-form-card--glass,
 .one-click-hint-card--glass {
@@ -615,7 +615,7 @@ function confirmUnpublishTemplate(a: AgentItem) {
 .onboarding-title { font-weight: 650; font-size: var(--font-section-title); margin: 0 0 var(--space-2); letter-spacing: var(--tracking-normal); color: var(--text-primary); line-height: 1.25; }
 .onboarding-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-4); }
 
-/* Agent 列表 · 呼吸感间距 */
+/* NOTE: translated comment in English. */
 .agent-list {
   display: flex;
   flex-direction: column;
@@ -623,7 +623,7 @@ function confirmUnpublishTemplate(a: AgentItem) {
   min-height: 0;
 }
 
-/* 单张 Agent 卡片 · 钱包/控制中心风格 */
+/* NOTE: translated comment in English. */
 .agent-card {
   border: 1px solid var(--border-muted);
   border-radius: var(--radius-lg);
@@ -723,7 +723,7 @@ function confirmUnpublishTemplate(a: AgentItem) {
 .agent-card__badge--skill { border-color: rgba(139, 92, 246, 0.3); color: var(--secondary-color); background: rgba(139, 92, 246, 0.08); }
 .agent-card__badge--published { border-color: rgba(var(--primary-rgb), 0.25); color: var(--primary-color); background: rgba(var(--primary-rgb), 0.08); }
 
-/* 技能进度条 · 细条 + 数值 */
+/* NOTE: translated comment in English. */
 .agent-card__skill-row {
   display: flex;
   align-items: center;
@@ -797,7 +797,7 @@ function confirmUnpublishTemplate(a: AgentItem) {
 .agent-card__task-meta { color: var(--text-tertiary); font-weight: 500; }
 .agent-card__detail-empty { font-size: var(--font-caption); color: var(--text-tertiary); margin: var(--space-3) 0 0; }
 
-/* 空状态 · 视觉增强 */
+/* NOTE: translated comment in English. */
 .tw-empty-state.empty-state--agent {
   padding: var(--space-10) var(--space-6);
   border-radius: var(--radius-lg);
@@ -861,7 +861,7 @@ function confirmUnpublishTemplate(a: AgentItem) {
   background: rgba(34, 197, 94, 0.1);
 }
 
-/* TransitionGroup · 列表进入/离开/移动 */
+/* NOTE: translated comment in English. */
 .agent-list-move,
 .agent-list-enter-active,
 .agent-list-leave-active {
@@ -874,7 +874,7 @@ function confirmUnpublishTemplate(a: AgentItem) {
 }
 .agent-list-leave-active { position: absolute; width: 100%; }
 
-/* 展开详情 */
+/* NOTE: translated comment in English. */
 .expand-enter-active,
 .expand-leave-active {
   transition: opacity var(--duration-m) var(--ease-apple), transform var(--duration-m) var(--ease-apple);

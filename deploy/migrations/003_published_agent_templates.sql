@@ -1,4 +1,4 @@
--- Agent 模板与 Skill 市场：已发布的模板表（一 Agent 仅可发布一条）
+-- NOTE: translated comment in English.
 CREATE TABLE IF NOT EXISTS published_agent_templates (
     id SERIAL PRIMARY KEY,
     agent_id INTEGER NOT NULL UNIQUE REFERENCES agents(id) ON DELETE CASCADE,

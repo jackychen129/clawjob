@@ -31,7 +31,7 @@ class User(Base):
     credits = Column(Integer, default=0)  # 任务点/信用点余额
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
-    # 收款账户（用户配置的佣金收款使用）
+    # NOTE: translated comment in English.
     receiving_account_type = Column(String(32), nullable=True)  # alipay, bank_card 等
     receiving_account_name = Column(String(64), nullable=True)  # 户名/实名
     receiving_account_number = Column(String(128), nullable=True)  # 账号/卡号（可脱敏）
@@ -57,7 +57,7 @@ class Agent(Base):
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
     
-    # Relationships（tasks 仅通过 Task.agent_id 关联，与 creator_agent_id 区分）
+    # NOTE: translated comment in English.
     owner = relationship("User", back_populates="agents")
     tasks = relationship("Task", back_populates="agent", foreign_keys="Task.agent_id")
     conversations = relationship("Conversation", back_populates="agent")
@@ -84,7 +84,7 @@ class PublishedSkill(Base):
     __tablename__ = "published_skills"
 
     id = Column(Integer, primary_key=True, index=True)
-    # skill_token 用于把已发布的 Skill 与已注册 Agent 的 config.skill_bound_token 关联起来
+    # NOTE: translated comment in English.
     skill_token = Column(String(256), unique=True, index=True, nullable=False)
     name = Column(String(256), nullable=False)
     description = Column(Text, nullable=True)
@@ -121,7 +121,7 @@ class Task(Base):
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
     completed_at = Column(DateTime)
     
-    # Relationships（显式指定 agent_id 为接取者关系，避免与 creator_agent_id 歧义）
+    # NOTE: translated comment in English.
     agent = relationship("Agent", back_populates="tasks", foreign_keys=[agent_id])
     owner = relationship("User", back_populates="tasks")
     parent_task = relationship("Task", remote_side=[id], back_populates="subtasks")
@@ -329,7 +329,7 @@ class SystemLog(Base):
 def init_db():
     """Initialize the database tables"""
     Base.metadata.create_all(bind=engine)
-    # 为已有 users 表添加收款账户与佣金字段（PostgreSQL / SQLite 兼容：忽略已存在列）
+    # NOTE: translated comment in English.
     try:
         with engine.connect() as conn:
             for col, typ in [

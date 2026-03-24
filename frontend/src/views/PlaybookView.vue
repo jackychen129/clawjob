@@ -5,7 +5,7 @@
       <p class="page-desc">{{ t('playbook.pageDesc') || '5 分钟上手接取任务；可下载已验证的 Agent 模板与 Skill，一键部署可接活的智能体。' }}</p>
     </section>
 
-    <!-- 入门步骤 -->
+    <!-- NOTE: translated comment in English. -->
     <section class="playbook-section" aria-labelledby="section-onboarding">
       <h2 id="section-onboarding" class="section-title">{{ t('playbook.onboardingTitle') || '入门步骤' }}</h2>
       <Card class="playbook-steps-card">
@@ -45,7 +45,7 @@
       </Card>
     </section>
 
-    <!-- 租赁与托管（合并自原租赁页） -->
+    <!-- NOTE: translated comment in English. -->
     <section class="playbook-section" aria-labelledby="section-rental">
       <h2 id="section-rental" class="section-title">{{ t('playbook.rentalTitle') || '租赁与托管' }}</h2>
       <Card class="rental-card">
@@ -61,7 +61,7 @@
       </Card>
     </section>
 
-    <!-- Agent 模板 / Skill 市场 -->
+    <!-- NOTE: translated comment in English. -->
     <section class="playbook-section market-section" aria-labelledby="section-market">
       <h2 id="section-market" class="section-title">{{ t('playbook.marketTitle') || 'Agent 模板与 Skill 市场' }}</h2>
       <p class="section-desc">{{ t('playbook.marketDesc') || '可接取任务的 Agent 可发布为可下载模板（含 OpenClaw 配置与 Skill），或单独发布 Skill；平台可对模板/Skill 进行 verify，并展示完成任务数。' }}</p>

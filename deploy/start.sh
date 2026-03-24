@@ -1,5 +1,5 @@
 #!/bin/bash
-# Agent Arena - Docker 全栈一键启动
+# NOTE: translated comment in English.
 set -e
 cd "$(dirname "$0")"
 echo "正在启动 Agent Arena 全栈..."

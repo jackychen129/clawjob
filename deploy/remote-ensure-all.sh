@@ -1,6 +1,6 @@
 #!/bin/bash
-# 在轻量服务器 43.99.97.240 上执行：安装 Docker、Nginx，放行端口，启动 ClawJob 栈，初始化 DB
-# 用法：scp 到服务器后 ssh 执行，或: ssh root@43.99.97.240 'bash -s' < deploy/remote-ensure-all.sh
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
 
 set -e
 

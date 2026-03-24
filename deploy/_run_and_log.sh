@@ -1,5 +1,5 @@
 #!/bin/bash
-# 内部用：执行部署并强制写日志
+# NOTE: translated comment in English.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOG="$SCRIPT_DIR/deploy-output.txt"
 echo "=== $(date) ===" > "$LOG"

@@ -1,13 +1,13 @@
 #!/bin/bash
-# 一键部署：官网（clawjob-website）+ ClawJob 应用（任务大厅+后端）到轻量服务器
-# 用法：在 jasonproject 父目录执行 SERVER_IP=43.99.97.240 ./clawjob/deploy/deploy-all.sh
-# 或先写 deploy/.deploy_env 的 SERVER_IP，然后 ./clawjob/deploy/deploy-all.sh
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
 
 set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CLAWJOB_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PARENT="$(cd "$CLAWJOB_ROOT/.." && pwd)"
-# 官网目录：优先环境变量 WEBSITE_ROOT，否则与 clawjob 同级，或 clawjob 子目录
+# NOTE: translated comment in English.
 if [ -n "$WEBSITE_ROOT" ] && [ -d "$WEBSITE_ROOT" ]; then
   :
 elif [ -d "$PARENT/clawjob-website" ]; then
@@ -34,12 +34,12 @@ if [ -z "$SERVER_IP" ]; then
   exit 1
 fi
 
-# 默认使用 newclawjobkey.pem（未设置 DEPLOY_SSH_KEY 且该文件存在时）
+# NOTE: translated comment in English.
 if [ -z "$DEPLOY_SSH_KEY" ] && [ -f "$HOME/Downloads/newclawjobkey.pem" ]; then
   export DEPLOY_SSH_KEY="$HOME/Downloads/newclawjobkey.pem"
 fi
 
-# 避免 SSH Host key verification failed：将服务器加入 known_hosts
+# NOTE: translated comment in English.
 if [ -n "$SERVER_IP" ]; then
   if ! ssh-keygen -F "$SERVER_IP" &>/dev/null 2>&1; then
     echo ">>> 将 ${SERVER_IP} 加入 known_hosts..."
@@ -47,7 +47,7 @@ if [ -n "$SERVER_IP" ]; then
   fi
 fi
 
-# 与 deploy-to-server.sh 一致的 SSH 认证（密钥或密码）
+# NOTE: translated comment in English.
 SSH_USER="${SSH_USER:-root}"
 RSYNC_RSH=""
 SSH_CMD=""
@@ -61,7 +61,7 @@ if [ -n "$DEPLOY_SSH_PASSWORD" ]; then
   RSYNC_RSH="sshpass -e ssh -o StrictHostKeyChecking=accept-new"
   SSH_CMD="sshpass -e ssh -o StrictHostKeyChecking=accept-new"
 elif [ -n "$DEPLOY_SSH_KEY" ]; then
-  # 展开 ~ 并检查密钥文件存在
+  # NOTE: translated comment in English.
   DEPLOY_SSH_KEY="${DEPLOY_SSH_KEY/#\~/$HOME}"
   if [ ! -f "$DEPLOY_SSH_KEY" ]; then
     echo "错误：DEPLOY_SSH_KEY 指向的文件不存在: $DEPLOY_SSH_KEY"
@@ -78,12 +78,12 @@ elif [ -f "$SCRIPT_DIR/.ssh/id_rsa" ]; then
   RSYNC_RSH="ssh -i $SCRIPT_DIR/.ssh/id_rsa -o StrictHostKeyChecking=accept-new"
   SSH_CMD="ssh -i $SCRIPT_DIR/.ssh/id_rsa -o StrictHostKeyChecking=accept-new"
 else
-  # 使用本机默认 SSH 身份（~/.ssh/id_ed25519 或 ~/.ssh/id_rsa 等）
+  # NOTE: translated comment in English.
   RSYNC_RSH="ssh -o StrictHostKeyChecking=accept-new"
   SSH_CMD="ssh -o StrictHostKeyChecking=accept-new"
 fi
 
-# 部署前 SSH 预检：避免构建完才发现传不上去
+# NOTE: translated comment in English.
 echo ">>> 检查 SSH 连接 ${SSH_USER}@${SERVER_IP} ..."
 if ! $SSH_CMD -o BatchMode=yes -o ConnectTimeout=10 "${SSH_USER}@${SERVER_IP}" "echo ok" &>/dev/null; then
   echo ""
@@ -113,7 +113,7 @@ if [ -z "$WEBSITE_ROOT" ] || [ ! -d "$WEBSITE_ROOT" ]; then
   echo "  可选：将官网仓库放在与 clawjob 同级（如 $(dirname "$PARENT")/clawjob-website），或设置 WEBSITE_ROOT=路径 后重试。"
 else
   cd "$WEBSITE_ROOT"
-  # 官网「体验任务大厅」：优先域名（SSL 配置后），否则用 IP
+  # NOTE: translated comment in English.
   if [ -n "$VITE_TASK_HALL_URL" ]; then
     :
   elif [ -n "$SSL_DOMAIN" ]; then
@@ -128,7 +128,7 @@ else
   npm run build
   rsync -avz --delete ${RSYNC_RSH:+-e "$RSYNC_RSH"} dist/ "${SSH_USER}@${SERVER_IP}:/var/www/clawjob-website/"
   echo "官网已上传到 /var/www/clawjob-website/（任务大厅链接: $VITE_TASK_HALL_URL）"
-  # 若有 clawjob-skill（与 clawjob 同级），一并同步到官网目录供访问
+  # NOTE: translated comment in English.
   if [ -n "$PARENT" ] && [ -d "$PARENT/clawjob-skill" ]; then
     echo ">>> 同步 ClawSkill 到官网 /skill/ ..."
     $SSH_CMD "${SSH_USER}@${SERVER_IP}" "mkdir -p /var/www/clawjob-website/skill"

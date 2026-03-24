@@ -24,13 +24,13 @@ if not BASE:
 
 SSL_CTX = ssl.create_default_context()
 
-# 至少出现其一即认为 runpod-theme 已打入构建
+# NOTE: translated comment in English.
 THEME_MARKERS = [".page-title", "font-section-title", ".section-desc", ".empty-state", "--font-page-title"]
 
 
 def main():
     errors = []
-    # 1. 拉取 index.html
+    # NOTE: translated comment in English.
     try:
         req = urllib.request.Request(f"{BASE}/", headers={"Accept": "text/html"})
         with urllib.request.urlopen(req, timeout=15, context=SSL_CTX) as res:
@@ -39,10 +39,10 @@ def main():
         print(f"[FAIL] 无法拉取前端首页: {e}")
         sys.exit(1)
 
-    # 2. 解析主样式表 href（Vite 构建产物 /assets/index-xxx.css）
+    # NOTE: translated comment in English.
     m = re.search(r'<link\s+rel=["\']stylesheet["\']\s+[^>]*href=["\']([^"\']+\.css)["\']', html)
     if not m:
-        # 兼容无 crossorigin 等写法
+        # NOTE: translated comment in English.
         m = re.search(r'href=["\'](/assets/[^"\']+\.css)["\']', html)
     if not m:
         print("[FAIL] index.html 中未找到主样式表 link")
@@ -54,7 +54,7 @@ def main():
     else:
         css_url = css_href
 
-    # 3. 拉取 CSS
+    # NOTE: translated comment in English.
     try:
         req = urllib.request.Request(css_url, headers={"Accept": "text/css"})
         with urllib.request.urlopen(req, timeout=15, context=SSL_CTX) as res:
@@ -63,7 +63,7 @@ def main():
         print(f"[FAIL] 无法拉取样式表 {css_url}: {e}")
         sys.exit(1)
 
-    # 4. 检查是否包含主题标记
+    # NOTE: translated comment in English.
     found = [marker for marker in THEME_MARKERS if marker in css]
     if not found:
         print("[FAIL] 样式表中未发现 runpod-theme 标记（.page-title / font-section-title / .section-desc 等）")

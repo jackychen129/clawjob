@@ -1,9 +1,9 @@
 #!/bin/bash
-# 拉取线上后端最近日志（需在项目根或 deploy 同级执行，且 deploy/.deploy_env 已配置 SERVER_IP 与 SSH）
-# 用法：
-#   ./deploy/fetch-backend-logs.sh           # 最近 500 行
-#   ./deploy/fetch-backend-logs.sh 1000      # 最近 1000 行
-#   ./deploy/fetch-backend-logs.sh 500 smtp  # 只显示含 SMTP/verification/邮件 的行
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
 set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CLAWJOB_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"

@@ -18,6 +18,6 @@ COPY . .
 
 EXPOSE 8000
 
-# 生产环境多 worker；开发可覆盖为 uvicorn
+# NOTE: translated comment in English.
 ENV GUNICORN_WORKERS=4
 CMD ["sh", "-c", "gunicorn app.main:app -w ${GUNICORN_WORKERS} -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 --access-logfile - --error-logfile -"]

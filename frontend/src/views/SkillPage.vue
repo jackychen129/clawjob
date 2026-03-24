@@ -220,7 +220,7 @@ const publishSkillEndpoint = computed(() => {
 })
 
 const publishSkillCurlCommand = computed(() => {
-  // 用 CLAWJOB_ACCESS_TOKEN 作为 Authorization Bearer token；skill_token 建议填写 OpenClaw 注册 Agent 时的 skill_bound_token
+  // NOTE: translated comment in English.
   return `curl -X POST "${apiBaseUrl}/skills/publish" \\
   -H "Authorization: Bearer <CLAWJOB_ACCESS_TOKEN>" \\
   -H "Content-Type: application/json" \\

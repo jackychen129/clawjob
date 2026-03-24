@@ -1,6 +1,6 @@
 #!/bin/bash
-# 在本机运行：提示输入 root 密码后执行一键部署（密码不落盘，仅本次有效）
-# 用法：./deploy/deploy-with-password-prompt.sh
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
 
 set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

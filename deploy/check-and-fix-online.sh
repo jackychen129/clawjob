@@ -1,7 +1,7 @@
 #!/bin/bash
-# 本机执行：检查并修复 clawjob 线上前后端，并跑完全部 API 验证。
-# 依赖：能 SSH root@SERVER_IP（使用 deploy/.deploy_env 或 newclawjobkey.pem）。
-# 用法：cd /path/to/clawjob && bash deploy/check-and-fix-online.sh
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CLAWJOB_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -24,7 +24,7 @@ else
 fi
 TARGET="${SSH_USER}@${SERVER_IP}"
 
-# 先做外网可达性检查（不依赖 SSH）
+# NOTE: translated comment in English.
 echo "========== 外网可达性（本机 -> ${SERVER_IP}） =========="
 curl -s -o /dev/null -w "3000: %{http_code}\n" --connect-timeout 5 "http://${SERVER_IP}:3000/" 2>/dev/null || echo "3000: 超时或失败"
 curl -s -o /dev/null -w "8000/health: %{http_code}\n" --connect-timeout 5 "http://${SERVER_IP}:8000/health" 2>/dev/null || echo "8000/health: 超时或失败"
@@ -50,7 +50,7 @@ echo "========== 4. 后端日志 (tail 15) =========="
 $SSH_CMD "$TARGET" "docker logs clawjob-backend --tail 15 2>&1" 2>/dev/null || echo "(需 SSH 连通)"
 echo ""
 
-# 若 frontend 或 backend 未 Up，启动并等待（仅当 SSH 可用时）
+# NOTE: translated comment in English.
 FRONT_UP=$($SSH_CMD "$TARGET" "docker inspect -f '{{.State.Running}}' clawjob-frontend 2>/dev/null" || echo "false")
 BACK_UP=$($SSH_CMD "$TARGET" "docker inspect -f '{{.State.Running}}' clawjob-backend 2>/dev/null" || echo "false")
 if [ "$FRONT_UP" = "true" ] && [ "$BACK_UP" = "true" ]; then

@@ -1,6 +1,6 @@
 #!/bin/bash
-# 使用 ~/Downloads/newclawjobkey.pem 密钥执行完整部署（官网 + ClawJob）
-# 用法：在 jasonproject 目录下执行 ./clawjob/deploy/deploy-with-newclawjobkey.sh
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PARENT="$(cd "$SCRIPT_DIR/../.." && pwd)"

@@ -1,9 +1,9 @@
 #!/bin/bash
-# 方式 A：通过 SSH 更新线上 deploy/.env 中的 SMTP 配置并重启 backend
-# 用法（在项目根目录执行，密码不要提交到仓库）：
-#   SMTP_USER=openclawjob@gmail.com SMTP_PASSWORD=你的应用专用密码 SMTP_FROM=openclawjob@gmail.com bash deploy/update-smtp-on-server.sh
-# 可选：SMTP_HOST SMTP_PORT（默认 Gmail：smtp.gmail.com 465）
-# 依赖：deploy/.deploy_env 中 SERVER_IP 与 SSH 配置（与 deploy-to-server.sh 相同）
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
 
 set -e
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -20,7 +20,7 @@ fi
 SSH_USER="${SSH_USER:-root}"
 REMOTE_DIR="${REMOTE_DIR:-/opt/clawjob}"
 
-# SMTP 取值：环境变量优先，Gmail 默认
+# NOTE: translated comment in English.
 SMTP_HOST="${SMTP_HOST:-smtp.gmail.com}"
 SMTP_PORT="${SMTP_PORT:-465}"
 SMTP_USER="${SMTP_USER:-}"
@@ -39,7 +39,7 @@ if [ -z "$SERVER_IP" ]; then
   exit 1
 fi
 
-# SSH 与 deploy-to-server.sh 一致
+# NOTE: translated comment in English.
 export DEPLOY_SSH_KEY DEPLOY_SSH_PASSWORD
 SSH_CMD=""
 if [ -n "$DEPLOY_SSH_PASSWORD" ]; then

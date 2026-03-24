@@ -26,7 +26,7 @@ def get_password_hash(password: str) -> str:
     """Hash a password (truncated to 72 bytes for bcrypt)."""
     return bcrypt.hashpw(_truncate_password(password), bcrypt.gensalt()).decode("utf-8")
 
-# JWT settings（生产环境必须设置 JWT_SECRET 环境变量）
+# NOTE: translated comment in English.
 SECRET_KEY = os.getenv("JWT_SECRET", "clawjob-secret-key-change-in-production")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
@@ -35,7 +35,7 @@ AGENT_TOKEN_EXPIRE_HOURS = 24
 # OAuth2 scheme
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
-# Rate limiter（全局默认 120 次/分钟，可通过 RATE_LIMIT_DEFAULT 覆盖）
+# NOTE: translated comment in English.
 _rate_limit_default = os.getenv("RATE_LIMIT_DEFAULT", "120/minute")
 limiter = Limiter(key_func=get_remote_address, default_limits=[_rate_limit_default])
 

@@ -3,7 +3,7 @@
 检查 Google OAuth 配置是否就绪。
 用法：
   python3 tools/check_google_oauth.py
-  # 或指定后端地址
+  # NOTE: translated comment in English.
   CLAWJOB_API_URL=https://api.xxx.com python3 tools/check_google_oauth.py
 """
 import os

@@ -1,5 +1,5 @@
 #!/bin/bash
-# 一次性执行：生成部署用 SSH 密钥，并提示你把公钥加到服务器，解决 Permission denied (publickey)
+# NOTE: translated comment in English.
 set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 if [ -f "$SCRIPT_DIR/.deploy_env" ]; then

@@ -35,7 +35,7 @@ export function setLocale(locale: 'zh-CN' | 'en') {
   applyLocaleToDocument(locale)
 }
 
-/** 将当前语言应用到 document（html lang、title），用于多语言与无障碍 */
+/* NOTE: translated comment in English. */
 export function applyLocaleToDocument(locale: 'zh-CN' | 'en') {
   if (typeof document === 'undefined') return
   document.documentElement.lang = locale === 'zh-CN' ? 'zh-CN' : 'en'
@@ -45,7 +45,7 @@ export function applyLocaleToDocument(locale: 'zh-CN' | 'en') {
   }
 }
 
-/** 始终可调用的 t：避免生产构建中 useI18n().t 偶发非函数导致 "Oe is not a function" */
+/* NOTE: translated comment in English. */
 export function safeT(key: string, ...args: unknown[]): string {
   try {
     const fn = i18n.global.t

@@ -1,6 +1,6 @@
 #!/bin/bash
-# 在多个海外地域依次尝试用 ecs.e-c1m2.large 创建 ECS，第一个成功的地域创建完后自动部署官网+ClawJob。
-# 用法：cd /path/to/jasonproject && bash clawjob/deploy/create-ecs-overseas-e1-and-deploy.sh
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
 
 set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -12,7 +12,7 @@ exec > >(tee -a "$LOG") 2>&1
 KEY_PATH="${LOCAL_SSH_KEY_PATH:-$HOME/Downloads/newclawjobkey.pem}"
 KEY_PATH="${KEY_PATH/#\~/$HOME}"
 INSTANCE_TYPE="ecs.e-c1m2.large"
-# 海外地域顺序：香港、日本、悉尼、美国西/东、马来、印尼、德国、英国等
+# NOTE: translated comment in English.
 REGIONS="cn-hongkong ap-northeast-1 ap-southeast-2 us-west-1 us-east-1 ap-southeast-3 ap-southeast-5 ap-southeast-1 eu-central-1 eu-west-1"
 
 echo "========== $(date '+%Y-%m-%d %H:%M:%S') 海外 ecs.e-c1m2.large 创建并部署 =========="

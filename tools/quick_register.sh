@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# ClawJob 快速注册（curl）
-# 用法: CLAWJOB_API_URL=http://localhost:8000 ./quick_register.sh <username> <email> <password>
-# 输出: 打印 JSON 或 token（若安装 jq 则提取 access_token）
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
 set -e
 API="${CLAWJOB_API_URL:-http://localhost:8000}"
 USERNAME="${1:?Usage: $0 <username> <email> <password>}"

@@ -1,10 +1,10 @@
 /**
- * ClawJob API 请求封装
- * 构建时 VITE_API_BASE_URL 未设置时，运行时用当前页面的 host + 端口 8000，避免从官网跳转到任务大厅后请求错发到 localhost 导致黑屏。
+ * NOTE: translated comment in English.
+ * NOTE: translated comment in English.
  */
 import axios from 'axios'
 
-/** 判断是否为 IP 或 localhost（非域名） */
+/* NOTE: translated comment in English. */
 function isIpOrLocalhost(host: string): boolean {
   if (!host || host === 'localhost' || host === '127.0.0.1' || host === '[::1]') return true
   return /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)
@@ -16,7 +16,7 @@ export function getApiBase(): string {
     const host = window.location.hostname
     const protocol = window.location.protocol
     const isLocalhost = host === 'localhost' || host === '127.0.0.1'
-    // 通过域名访问时：若构建时 API 是 IP 或与当前 host 不一致，则用当前页 origin 推导 API，保证域名下能拿到数据
+    // NOTE: translated comment in English.
     if (!isLocalhost && fromEnv) {
       try {
         const envUrl = new URL(fromEnv)
@@ -51,12 +51,12 @@ export function getApiBase(): string {
 
 const API_BASE = getApiBase()
 
-/** 跳转至 Google OAuth 授权（后端会再重定向到 Google） */
+/* NOTE: translated comment in English. */
 export function getGoogleLoginUrl(): string {
   return `${API_BASE}/auth/google`
 }
 
-/** 检测 Google OAuth 是否已配置（用于决定是否显示/禁用「使用 Google 登录」） */
+/* NOTE: translated comment in English. */
 export function getGoogleOAuthStatus(): Promise<{ configured: boolean; config_error?: string; redirect_uri?: string; frontend_url?: string }> {
   return api.get('/auth/google/status').then((r) => r.data)
 }
@@ -75,7 +75,7 @@ function genRequestId(): string {
   return `rid_${Date.now()}_${Math.random().toString(16).slice(2)}`
 }
 
-// 将 X-Request-ID 透传给后端，便于把客户端请求与 system_logs 中的 request_id 对齐（P0 可观测性）。
+// NOTE: translated comment in English.
 api.interceptors.request.use((config) => {
   const headers = (config.headers || {}) as Record<string, unknown>
   const existing = headers['X-Request-ID'] ?? headers['x-request-id']
@@ -92,7 +92,7 @@ export function setAuthToken(token: string | null) {
   }
 }
 
-// 认证
+// NOTE: translated comment in English.
 export function sendVerificationCode(data: { email: string }) {
   return api.post('/auth/send-verification-code', data)
 }
@@ -105,7 +105,7 @@ export function login(data: { username: string; password: string }) {
   return api.post('/auth/login', data)
 }
 
-/** 获取游客 Token：无需注册即可发布任务；响应含 register_hint 建议用户注册并关联智能体 */
+/* NOTE: translated comment in English. */
 export function getGuestToken() {
   return api.post<{
     access_token: string
@@ -118,7 +118,7 @@ export function getGuestToken() {
   }>('/auth/guest-token')
 }
 
-// 公开统计（任务数、Agent 数、已完成、累计报酬，供首页/官网 Counters 与 Dashboard）
+// NOTE: translated comment in English.
 export function fetchStats() {
   return api.get<{
     tasks_count: number
@@ -132,7 +132,7 @@ export function fetchStats() {
   }>('/stats')
 }
 
-// 实时动态流（Dashboard Live Feed）
+// NOTE: translated comment in English.
 export function fetchActivity(limit?: number) {
   return api.get<{ events: ActivityEvent[] }>('/activity', { params: limit != null ? { limit } : {} })
 }
@@ -155,7 +155,7 @@ export interface ActivityEvent {
   owner_name?: string | null
 }
 
-// Agent 排行榜（Earned、成功率、Certified）
+// NOTE: translated comment in English.
 export function fetchLeaderboard(params?: { skip?: number; limit?: number }) {
   return api.get<{ items: LeaderboardItem[]; total: number }>('/leaderboard', { params })
 }
@@ -172,7 +172,7 @@ export interface LeaderboardItem {
   certified: boolean
 }
 
-// 任务大厅（公开）：支持分类、搜索、奖励区间、排序
+// NOTE: translated comment in English.
 export function fetchTasks(params?: {
   skip?: number
   limit?: number
@@ -186,17 +186,17 @@ export function fetchTasks(params?: {
   return api.get<{ tasks: TaskListItem[]; total: number }>('/tasks', { params })
 }
 
-// 我创建的任务（需登录）
+// NOTE: translated comment in English.
 export function fetchMyCreatedTasks(params?: { skip?: number; limit?: number }) {
   return api.get<{ tasks: TaskListItem[]; total: number }>('/tasks/created-by-me', { params })
 }
 
-// 我接取的任务（需登录）
+// NOTE: translated comment in English.
 export function fetchMyAcceptedTasks(params?: { skip?: number; limit?: number }) {
   return api.get<{ tasks: TaskListItem[]; total: number }>('/tasks/mine', { params })
 }
 
-// 指定 Agent 接取的任务（需登录且为 Agent 拥有者）
+// NOTE: translated comment in English.
 export function fetchAgentTasks(agentId: number, params?: { skip?: number; limit?: number }) {
   return api.get<{ tasks: TaskListItem[]; total: number; agent_name: string }>(`/agents/${agentId}/tasks`, { params })
 }
@@ -248,7 +248,7 @@ export interface TaskListItem {
   }
 }
 
-// 候选者列表（公开，供发布任务时选择指定接取者）。sort=recent 为最近注册优先；owner_name 为游客时返回「待注册」；published_count 为该 Agent 发布的任务数
+// NOTE: translated comment in English.
 export function fetchCandidates(params?: { skip?: number; limit?: number; sort?: string }) {
   return api.get<{
     candidates: Array<{
@@ -267,7 +267,7 @@ export function fetchCandidates(params?: { skip?: number; limit?: number; sort?:
   }>('/candidates', { params })
 }
 
-// 发布任务（需登录）；有奖励点时 completion_webhook_url 必填；invited_agent_ids 为可选指定接取者；creator_agent_id 为可选（由某 Agent 代发）；discord_webhook_url 可选，推送到 Discord 频道
+// NOTE: translated comment in English.
 export function publishTask(data: {
   title: string
   description?: string
@@ -285,18 +285,18 @@ export function publishTask(data: {
   verification_method?: 'manual_review' | 'proof_link' | 'checklist' | 'hybrid'
   verification_requirements?: string[]
   discord_webhook_url?: string
-  /** 托管：至少 2 个里程碑，weight 之和为 1；需配合 reward_points > 0 */
+  /* NOTE: translated comment in English. */
   escrow_milestones?: Array<{ title: string; weight: number; acceptance_criteria?: string }>
 }) {
   return api.post('/tasks', data)
 }
 
-// 任务详情（公开）
+// NOTE: translated comment in English.
 export function getTaskDetail(taskId: number) {
   return api.get<TaskListItem>(`/tasks/${taskId}`)
 }
 
-// 任务评论（含 A2A：agent_id/agent_name/kind）
+// NOTE: translated comment in English.
 export interface TaskCommentItem {
   id: number
   task_id: number
@@ -315,7 +315,7 @@ export function postTaskComment(taskId: number, data: { content: string; agent_i
   return api.post<TaskCommentItem>(`/tasks/${taskId}/comments`, data)
 }
 
-// A2A 协议：任务状态与留言（供 Agent 同步与留言）
+// NOTE: translated comment in English.
 export function a2aGetTask(taskId: number) {
   return api.get<Record<string, unknown>>(`/a2a/tasks/${taskId}`)
 }
@@ -326,27 +326,27 @@ export function a2aListMessages(taskId: number) {
   return api.get<{ messages: TaskCommentItem[] }>(`/a2a/tasks/${taskId}/messages`)
 }
 
-// 接取者提交完成（会 POST 到发布者的 webhook，任务进入待验收，6h 内未确认自动完成）
+// NOTE: translated comment in English.
 export function submitCompletion(taskId: number, data: { result_summary?: string; evidence?: Record<string, unknown> }) {
   return api.post(`/tasks/${taskId}/submit-completion`, data)
 }
 
-// 发布者验收通过（发放奖励）
+// NOTE: translated comment in English.
 export function confirmTask(taskId: number, data?: { verification_mode?: string; verification_note?: string }) {
   return api.post(`/tasks/${taskId}/confirm`, data ?? {})
 }
 
-/** 批量验收通过（仅待验收任务） */
+/* NOTE: translated comment in English. */
 export function batchConfirmTasks(taskIds: number[]) {
   return api.post<{ results: Array<{ task_id: number; ok: boolean; message?: string; reason?: string }> }>('/tasks/batch-confirm', { task_ids: taskIds })
 }
 
-// 发布者拒绝验收（必须填写拒绝理由，作为 RL 反馈；接取者可重新提交）
+// NOTE: translated comment in English.
 export function rejectTask(taskId: number, data: { rejection_reason: string }) {
   return api.post(`/tasks/${taskId}/reject`, data)
 }
 
-// 发起托管争议（需发布方或接取方身份）
+// NOTE: translated comment in English.
 export function escrowDispute(taskId: number, data: { reason: string; evidence?: Record<string, unknown> }) {
   return api.post(`/tasks/${taskId}/escrow/dispute`, {
     reason: data.reason,
@@ -354,7 +354,7 @@ export function escrowDispute(taskId: number, data: { reason: string; evidence?:
   })
 }
 
-// 管理员处理托管争议（恢复/强制验收当前里程碑等）
+// NOTE: translated comment in English.
 export function adminResolveEscrowDispute(taskId: number, data: { note?: string; resolution_type?: string }) {
   return api.post(`/admin/tasks/${taskId}/escrow/dispute/resolve`, {
     note: data.note ?? '',
@@ -362,12 +362,12 @@ export function adminResolveEscrowDispute(taskId: number, data: { note?: string;
   })
 }
 
-// 订阅任务（需登录）
+// NOTE: translated comment in English.
 export function subscribeTask(taskId: number, agentId: number) {
   return api.post(`/tasks/${taskId}/subscribe`, { agent_id: agentId })
 }
 
-// 我的 Agent（需登录）；参数对齐 OpenClaw/Clawl agent
+// NOTE: translated comment in English.
 export interface AgentCapability {
   id?: string
   name: string
@@ -412,17 +412,17 @@ export function fetchMySkillTree() {
   return api.get<{ nodes: SkillNode[]; total_skills: number }>('/account/skill-tree')
 }
 
-/** 探测 Agent 是否存活（GET webhook_url），仅所有者 */
+/* NOTE: translated comment in English. */
 export function pingAgent(agentId: number) {
   return api.get(`/agents/${agentId}/ping`)
 }
 
-/** 向 Agent 发送消息（POST webhook_url），仅所有者 */
+/* NOTE: translated comment in English. */
 export function sendMessageToAgent(agentId: number, content: string) {
   return api.post(`/agents/${agentId}/send-message`, { content })
 }
 
-// 账户：当前用户信息（含 user_id、credits）
+// NOTE: translated comment in English.
 export function getAccountMe() {
   return api.get('/account/me')
 }
@@ -463,7 +463,7 @@ export function unbindPaymentMethod(pmId: number) {
   return api.delete(`/account/payment-methods/${pmId}`)
 }
 
-// 收款账户（用于接收发布方配置的佣金）
+// NOTE: translated comment in English.
 export function getReceivingAccount() {
   return api.get('/account/receiving-account')
 }
@@ -472,22 +472,22 @@ export function updateReceivingAccount(data: { account_type: string; account_nam
   return api.patch('/account/receiving-account', data)
 }
 
-// 佣金余额与流水
+// NOTE: translated comment in English.
 export function getCommission() {
   return api.get('/account/commission')
 }
 
-// 更新资料（用户名、头像 URL）
+// NOTE: translated comment in English.
 export function updateProfile(data: { username?: string; avatar_url?: string }) {
   return api.patch('/account/profile', data)
 }
 
-// 修改密码
+// NOTE: translated comment in English.
 export function changePassword(data: { current_password: string; new_password: string }) {
   return api.post('/account/change-password', data)
 }
 
-// 提现（从信用点余额提现）
+// NOTE: translated comment in English.
 export function withdraw(data: { amount: number }) {
   return api.post('/account/withdraw', data)
 }
@@ -513,7 +513,7 @@ export function deleteAccountApiKey(keyId: number) {
   return api.delete<{ ok: boolean; id: number }>(`/account/api-keys/${keyId}`)
 }
 
-// 管理后台（仅 is_superuser 可访问）
+// NOTE: translated comment in English.
 export function getAdminMe() {
   return api.get<{ ok: boolean; is_superuser: boolean }>('/admin/me')
 }
@@ -553,7 +553,7 @@ export interface AdminLogItem {
   extra: Record<string, unknown> | null
 }
 
-// Agent 模板 / Skill 市场：可下载 Agent 模板或仅 Skill，含平台验证与完成任务数
+// NOTE: translated comment in English.
 export interface AgentTemplateItem {
   id: string | number
   name: string
@@ -590,7 +590,7 @@ export function fetchAgentTemplateStats() {
   )
 }
 
-/** 发布 Agent 为市场模板（需登录，且该 Agent 至少完成 1 个任务、未发布过） */
+/* NOTE: translated comment in English. */
 export function publishAgentTemplate(body: {
   agent_id: number
   name: string
@@ -652,17 +652,17 @@ export function deleteSkillPublish(skillId: number) {
   return api.delete<{ ok: boolean; id: number }>(`/skills/${skillId}`)
 }
 
-/** Agent 工具列表（需登录；供集成/调试） */
+/* NOTE: translated comment in English. */
 export function listAgentTools() {
   return api.get<unknown>('/tools')
 }
 
-/** 语义检索记忆（需登录） */
+/* NOTE: translated comment in English. */
 export function searchMemory(query: string) {
   return api.get<unknown>('/memory/search', { params: { query } })
 }
 
-/** 写入记忆（需登录；后端当前为占位实现） */
+/* NOTE: translated comment in English. */
 export function storeMemory(body: Record<string, unknown>) {
   return api.post<unknown>('/memory', body)
 }

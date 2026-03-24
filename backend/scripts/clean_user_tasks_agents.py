@@ -3,7 +3,7 @@
 清理指定用户（如 chen zheng）发布的所有任务与智能体。
 用法：
   CLEAN_USERNAME="chen zheng" PYTHONPATH=. python scripts/clean_user_tasks_agents.py
-  # 或匹配用户名包含某关键词（逗号分隔）
+  # NOTE: translated comment in English.
   CLEAN_USERNAME="chen,zheng" PYTHONPATH=. python scripts/clean_user_tasks_agents.py
   DRY_RUN=1 仅预览不删除。
 """
@@ -24,7 +24,7 @@ def main():
         print("       Or CLEAN_USERNAME='chen,zheng' to match any username containing either.")
         sys.exit(1)
     dry_run = os.environ.get("DRY_RUN", "").strip() == "1"
-    # 支持精确或逗号分隔关键词（任一匹配即清理）
+    # NOTE: translated comment in English.
     parts = [p.strip().lower() for p in raw.replace("，", ",").split(",") if p.strip()]
     db = SessionLocal()
     try:

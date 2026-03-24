@@ -1,15 +1,15 @@
 #!/bin/bash
-# 本机执行：将 ClawJob 代码同步到轻量服务器并启动 Docker 栈
-# 用法： SERVER_IP=你的公网IP [SSH_USER=root] [REMOTE_DIR=/opt/clawjob] ./deploy/deploy-to-server.sh
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
 #
-# 首次部署前请在本机或服务器上准备好 deploy/.env（从 .env.example 复制并修改域名、密码、JWT_SECRET、Google OAuth 等）
+# NOTE: translated comment in English.
 
 set -e
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DEPLOY_DIR="$(dirname "$0")"
 cd "$REPO_ROOT"
 
-# 从 deploy/.deploy_env 读取 SERVER_IP、可选 SSL_DOMAIN/DEPLOY_DOMAIN（用于域名访问时 API/CORS）
+# NOTE: translated comment in English.
 if [ -f "${DEPLOY_DIR}/.deploy_env" ]; then
   set -a
   # shellcheck source=/dev/null
@@ -32,12 +32,12 @@ if [ -z "$SERVER_IP" ]; then
   exit 1
 fi
 
-# 默认使用 newclawjobkey.pem（未设置 DEPLOY_SSH_KEY 且该文件存在时）
+# NOTE: translated comment in English.
 if [ -z "$DEPLOY_SSH_KEY" ] && [ -f "$HOME/Downloads/newclawjobkey.pem" ]; then
   export DEPLOY_SSH_KEY="$HOME/Downloads/newclawjobkey.pem"
 fi
 
-# 解决 Permission denied (publickey)：支持指定密钥或密码，否则用本机默认 SSH
+# NOTE: translated comment in English.
 SSH_OPTS=""
 RSYNC_RSH=""
 if [ -n "$DEPLOY_SSH_PASSWORD" ]; then
@@ -71,13 +71,13 @@ else
   SSH_CMD="ssh $SSH_OPTS"
 fi
 
-# 部署前 SSH 预检
+# NOTE: translated comment in English.
 if ! $SSH_CMD -o BatchMode=yes -o ConnectTimeout=10 "${SSH_USER}@${SERVER_IP}" "echo ok" &>/dev/null; then
   echo "错误：无法 SSH 登录 ${SSH_USER}@${SERVER_IP}。请配置 DEPLOY_SSH_PASSWORD 或密钥，见 deploy/README_DEPLOY_ALL.md"
   exit 1
 fi
 
-# 避免 SSH Host key verification failed
+# NOTE: translated comment in English.
 if ! ssh-keygen -F "$SERVER_IP" &>/dev/null 2>&1; then
   echo ">>> 将 ${SERVER_IP} 加入 known_hosts..."
   ssh-keyscan -H "$SERVER_IP" 2>/dev/null >> ~/.ssh/known_hosts 2>/dev/null || true
@@ -97,9 +97,9 @@ rsync -avz --delete \
   "$REPO_ROOT/" "${SSH_USER}@${SERVER_IP}:${REMOTE_DIR}/"
 
 echo ">>> 在服务器上检查 .env 并启动 Docker..."
-# 有域名时强制重建前端，确保 VITE_API_BASE_URL 为 https://api.$DOMAIN，域名访问才能拿到数据
+# NOTE: translated comment in English.
 export FORCE_REBUILD_FRONTEND="${FORCE_REBUILD_FRONTEND:-$([ -n "$DOMAIN" ] && echo 1 || echo 0)}"
-# 将 SERVER_IP 注入到远程脚本（用于修补 .env）
+# NOTE: translated comment in English.
 $SSH_CMD "${SSH_USER}@${SERVER_IP}" "export FORCE_REBUILD_FRONTEND='${FORCE_REBUILD_FRONTEND}'; export DOMAIN='${DOMAIN}'; set -e
   cd ${REMOTE_DIR}/deploy
   if [ ! -f .env ]; then

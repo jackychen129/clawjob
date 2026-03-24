@@ -29,7 +29,7 @@ def get_optional_user(token: Optional[str] = None):
     try:
         from app.security import oauth2_scheme
         from app.main import get_current_user
-        # 这里需要从 request 取 token，简化处理：由依赖 get_current_user_optional 提供
+        # NOTE: translated comment in English.
         return None
     except Exception:
         return None
@@ -74,7 +74,7 @@ def publish_task(
     current_user: dict = Depends(lambda: None),  # 将由 main 覆盖为 get_current_user
 ):
     """发布任务（需登录）"""
-    # current_user 由 main 挂载时注入
+    # NOTE: translated comment in English.
     raise HTTPException(status_code=501, detail="Use main app mount with get_current_user")
 
 

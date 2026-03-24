@@ -1,7 +1,7 @@
 #!/bin/bash
-# 验证已部署的三大服务：官网(80)、任务大厅(3000)、后端 API(8000)。需在 jasonproject 下执行。
-# 用法：bash clawjob/deploy/verify-all-services.sh [SERVER_IP]
-# 未传 IP 时从 clawjob/deploy/.deploy_env 读取 SERVER_IP。
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
 
 set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

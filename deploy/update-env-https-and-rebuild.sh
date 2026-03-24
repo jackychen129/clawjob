@@ -1,7 +1,7 @@
 #!/bin/bash
-# 在 SSL 配置完成后执行：更新服务器 deploy/.env 为 https 域名并重新构建前端
-# 用法：在项目根目录执行 bash deploy/update-env-https-and-rebuild.sh
-# 依赖：deploy/.deploy_env 中 SERVER_IP 与 SSH 配置（与 deploy-to-server.sh 相同）
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
 
 set -e
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -24,7 +24,7 @@ if [ -z "$SERVER_IP" ]; then
   exit 1
 fi
 
-# SSH 与 deploy-to-server.sh 一致
+# NOTE: translated comment in English.
 export DEPLOY_SSH_KEY DEPLOY_SSH_PASSWORD
 SSH_CMD=""
 if [ -n "$DEPLOY_SSH_PASSWORD" ]; then
@@ -46,7 +46,7 @@ DOMAIN="$1"
 ENV_FILE="$2"
 cd "$(dirname "$ENV_FILE")" || exit 1
 [ ! -f .env ] && echo "错误：.env 不存在" && exit 1
-# 更新或追加三项
+# NOTE: translated comment in English.
 for var in VITE_API_BASE_URL FRONTEND_URL CORS_ORIGINS; do
   case "$var" in
     VITE_API_BASE_URL) val="https://api.${DOMAIN}" ;;

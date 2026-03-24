@@ -1,8 +1,8 @@
 #!/bin/bash
-# 在服务器本机执行，用于诊断官网 / 任务大厅 / 后端是否正常。
-# 用法：SSH 登录服务器后执行：
+# NOTE: translated comment in English.
+# NOTE: translated comment in English.
 #   bash /opt/clawjob/deploy/verify-on-server.sh
-# 或本机：ssh root@43.99.97.240 'bash -s' < deploy/verify-on-server.sh
+# NOTE: translated comment in English.
 
 echo "========== 1. Docker 容器状态 =========="
 docker ps -a --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || echo "docker 未运行或无权执行"

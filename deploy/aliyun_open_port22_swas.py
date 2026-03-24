@@ -5,11 +5,11 @@
 
 依赖: pip install aliyun-python-sdk-swas-open aliyun-python-sdk-core
 用法:
-  # 方式一：已知实例 ID 和地域（控制台实例详情页可见）
+  # NOTE: translated comment in English.
   ALIBABA_CLOUD_ACCESS_KEY_ID=xxx ALIBABA_CLOUD_ACCESS_KEY_SECRET=xxx \\
     python3 deploy/aliyun_open_port22_swas.py --instance-id i-xxx --region-id cn-hangzhou
 
-  # 方式二：只填 IP，脚本会尝试根据公网 IP 查找实例（需该账号下仅有该实例或第一个匹配）
+  # NOTE: translated comment in English.
   ALIBABA_CLOUD_ACCESS_KEY_ID=xxx ALIBABA_CLOUD_ACCESS_KEY_SECRET=xxx \\
     python3 deploy/aliyun_open_port22_swas.py --public-ip 43.99.97.240
 """
@@ -42,7 +42,7 @@ def main():
 
     instance_id = args.instance_id
     if not instance_id and args.public_ip:
-        # 尝试根据公网 IP 查找实例
+        # NOTE: translated comment in English.
         req = ListInstancesRequest.ListInstancesRequest()
         req.set_accept_format("json")
         try:

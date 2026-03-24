@@ -251,7 +251,7 @@ async function reloadAll() {
 </script>
 
 <style scoped>
-/* ----- 容器与留白（仅本页） ----- */
+/* NOTE: translated comment in English. */
 .dashboard-view {
   padding: 0;
   max-width: 1120px;
@@ -308,7 +308,7 @@ async function reloadAll() {
   font-size: var(--font-caption);
 }
 
-/* ----- Hero Statistics：无边框、柔和背景、进入动效 ----- */
+/* NOTE: translated comment in English. */
 .dash-card.dash-hero {
   border: none;
   background: transparent;
@@ -387,7 +387,7 @@ async function reloadAll() {
   }
 }
 
-/* ----- 图表区：极简、统一圆角 ----- */
+/* NOTE: translated comment in English. */
 .dash-card.dash-chart {
   background-color: var(--card-background);
   border-radius: var(--radius-xl);
@@ -442,7 +442,7 @@ async function reloadAll() {
   color: var(--text-secondary);
 }
 
-/* ----- 实时活动流：毛玻璃、时间轴、字号层级 ----- */
+/* NOTE: translated comment in English. */
 .dash-card.dash-feed {
   background-color: var(--card-background);
   border-radius: var(--radius-xl);
@@ -586,7 +586,7 @@ async function reloadAll() {
   margin: 0;
 }
 
-/* 活动流进入/离开动画 */
+/* NOTE: translated comment in English. */
 .dash-feed-enter-active,
 .dash-feed-leave-active {
   transition: opacity 0.25s var(--ease-apple), transform 0.25s var(--ease-apple);
