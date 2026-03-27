@@ -95,6 +95,18 @@
             {{ t('skillPage.publishSkillWebCta') }}
           </Button>
         </p>
+
+        <div class="skill-contract-tool">
+          <h3 class="section-title skill-contract-tool__title">Skill Contract Validator</h3>
+          <p class="skill-note">Validate JSON schema, failure semantics and sample payload before publish.</p>
+          <textarea v-model="contractSchemaText" class="skill-contract-tool__input" rows="7" />
+          <textarea v-model="failureSemanticsText" class="skill-contract-tool__input" rows="6" />
+          <textarea v-model="samplePayloadText" class="skill-contract-tool__input" rows="5" />
+          <Button type="button" :disabled="contractValidateLoading" @click="runContractValidate">
+            {{ contractValidateLoading ? 'Validating...' : 'Validate Contract' }}
+          </Button>
+          <pre v-if="contractValidateResult" class="skill-pre"><code>{{ contractValidateResult }}</code></pre>
+        </div>
       </div>
     </section>
 
@@ -150,6 +162,7 @@ import { ref, computed } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Button } from '../components/ui/button'
+import * as api from '../api'
 import { safeT } from '../i18n'
 
 const _i18n = useI18n()
@@ -188,6 +201,11 @@ const copyApiUrlDone = ref(false)
 const copyQuickRegisterDone = ref(false)
 const copyOneClickDone = ref(false)
 const copyPublishSkillCmdDone = ref(false)
+const contractValidateLoading = ref(false)
+const contractValidateResult = ref('')
+const contractSchemaText = ref('{\n  "type": "object",\n  "properties": {\n    "query": { "type": "string" },\n    "limit": { "type": "integer", "enum": [10, 20, 50] }\n  },\n  "required": ["query"]\n}')
+const failureSemanticsText = ref('{\n  "codes": [\n    { "code": "RETRYABLE_TIMEOUT", "retryable": true },\n    { "code": "INVALID_ARGUMENT", "retryable": false }\n  ]\n}')
+const samplePayloadText = ref('{\n  "query": "hello",\n  "limit": 20\n}')
 
 function copyToClipboard(text: string, doneRef: { value: boolean }) {
   if (typeof navigator?.clipboard?.writeText === 'function') {
@@ -234,6 +252,26 @@ const publishSkillCurlCommand = computed(() => {
 
 function copyPublishSkillCmd() {
   copyToClipboard(publishSkillCurlCommand.value, copyPublishSkillCmdDone)
+}
+
+async function runContractValidate() {
+  contractValidateLoading.value = true
+  contractValidateResult.value = ''
+  try {
+    const contract = JSON.parse(contractSchemaText.value)
+    const failure = JSON.parse(failureSemanticsText.value)
+    const sample = JSON.parse(samplePayloadText.value)
+    const res = await api.validateSkillContract({
+      contract_schema: contract,
+      failure_semantics: failure,
+      sample_payload: sample,
+    })
+    contractValidateResult.value = JSON.stringify(res.data, null, 2)
+  } catch (e: unknown) {
+    contractValidateResult.value = JSON.stringify({ ok: false, error: String(e) }, null, 2)
+  } finally {
+    contractValidateLoading.value = false
+  }
 }
 </script>
 
@@ -339,6 +377,22 @@ function copyPublishSkillCmd() {
   word-break: break-all;
 }
 .skill-pre code { color: var(--text-primary); font-family: ui-monospace, monospace; }
+.skill-contract-tool {
+  margin-top: var(--space-5);
+  display: grid;
+  gap: var(--space-3);
+}
+.skill-contract-tool__title { margin: 0; }
+.skill-contract-tool__input {
+  width: 100%;
+  border: var(--border-hairline);
+  border-radius: var(--radius-md);
+  background: rgba(0,0,0,0.2);
+  color: var(--text-primary);
+  padding: var(--space-3);
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+}
 .skill-oneclick-card {
   border-color: rgba(var(--primary-rgb), 0.25);
   background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.06) 0%, transparent 50%);

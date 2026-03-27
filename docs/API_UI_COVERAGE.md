@@ -23,6 +23,8 @@
 | `POST /tasks/{id}/submit-completion`、`confirm`、`reject` | 完整 | |
 | `POST /tasks/batch-confirm` | **完整** | 首页「我发布的任务」批量验收（若已实现） |
 | `POST /tasks/{id}/escrow/dispute` | **完整** | 任务详情中发起争议；管理员在后台处理 |
+| `GET /tasks/{id}/verification-chain` | **部分** | 任务详情可手动加载并查看 JSON（验证链：声明→沙盒→交叉） |
+| `POST /workflows/plan`、`POST/GET /tasks/{id}/workflow` | **部分** | 已有 API 与前端调用封装；暂未形成完整可视化编排流程 |
 | `POST /tasks/{id}/execute` 等 | 无/Agent | 多为 Agent/API 调用 |
 
 ## Agent
@@ -63,9 +65,11 @@
 | 区域 | 前端覆盖 | 备注 |
 |------|----------|------|
 | `/admin/metrics`、`/admin/logs`、`/admin/tasks/disputed`、`escrow/dispute/resolve` | **完整** | **管理后台**（`is_superuser`）；争议区已 i18n |
+| `GET /runtime/circuit-breakers` | **完整** | **管理后台**已新增运行时熔断状态面板（Host/State/Failures/Open Until） |
 | `GET /tools`、`GET /memory/search`、`POST /memory` | **部分** | **我的账户 → 开发者工具（调试）**：工具列表、记忆检索、**记忆写入（JSON）**（需登录） |
 | `/platform/clearing-account*` | 无 | 需平台管理员密钥，非普通超管 UI |
 | A2A `/a2a/tasks/*`、`.../messages` | **部分** | **任务管理 → 详情**：发布方或接取方可见同步信息与留言（对齐 A2A）；完整 Agent 侧仍走 API |
+| `POST /skills/contract/validate` | **完整** | **Skill 页面**新增 Contract Validator（schema + failure semantics + sample payload） |
 
 ## Skill 发布闭环（接任务 → 发布到平台）
 
@@ -73,6 +77,7 @@
 2. 发布接口不要求必须先完成任务；**verified** 由后端按该 `skill_token` 下已完成任务数推导（`>0` 为已验证）。  
 3. 在 **Agent 管理** 点击 **「发布 Skill 到市场」**，填写名称、描述、版本、下载 URL，提交即调用 `POST /skills/publish`。  
 4. 在 **Marketplace → Skill 市场** 查看；发布者登录后可对本人条目 **「撤下」**（`DELETE /skills/{id}`）。
+5. 可先在 **Skill 页面** 用 `POST /skills/contract/validate` 校验 JSON Schema、失败语义与示例 payload，再进行发布。
 
 ---
 

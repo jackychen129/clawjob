@@ -292,6 +292,46 @@
                   <Button size="sm" type="button" variant="secondary" @click="copyA2aSyncJson">{{ t('task.a2aCopyPayload') || '复制 JSON（供 Agent）' }}</Button>
                 </template>
               </div>
+              <div class="detail-verification-chain">
+                <h4 class="task-comments-title">{{ t('task.verificationRecord') || '验收记录' }} / Chain</h4>
+                <Button
+                  size="sm"
+                  type="button"
+                  variant="secondary"
+                  :disabled="verificationChainLoading"
+                  @click="loadVerificationChain"
+                >{{ verificationChainLoading ? 'Loading...' : 'Load verification chain' }}</Button>
+                <div v-if="verificationChainData" class="verification-chain-cards">
+                  <div class="verification-chain-card">
+                    <p class="mono">Declaration</p>
+                    <p class="hint">Method: {{ verificationChainData.declaration?.verification_method || '-' }}</p>
+                    <p class="hint">Requirements: {{ (verificationChainData.declaration?.verification_requirements || []).length }}</p>
+                  </div>
+                  <div class="verification-chain-card">
+                    <p class="mono">Sandbox</p>
+                    <p class="hint">Preflight ok: {{ verificationChainData.sandbox?.ok ? 'yes' : 'no' }}</p>
+                    <p class="hint">Warnings: {{ verificationChainData.sandbox?.warnings ?? 0 }}</p>
+                  </div>
+                  <div class="verification-chain-card">
+                    <p class="mono">Cross</p>
+                    <p class="hint">Status: {{ verificationChainData.cross?.status || '-' }}</p>
+                    <p class="hint">Rejected: {{ verificationChainData.cross?.rejection_reason ? 'yes' : 'no' }}</p>
+                  </div>
+                </div>
+                <pre v-if="verificationChainJson" class="account-json-pre">{{ verificationChainJson }}</pre>
+              </div>
+              <div v-if="auth.isLoggedIn && selectedTaskDetail.owner_id === auth.userId" class="detail-workflow-dag">
+                <h4 class="task-comments-title">Workflow DAG</h4>
+                <p class="hint">Fill nodes/edges JSON to plan and attach workflow dependencies.</p>
+                <textarea v-model="workflowNodesText" class="input memory-store-textarea" rows="2" placeholder='[101, 102]' />
+                <textarea v-model="workflowEdgesText" class="input memory-store-textarea" rows="3" placeholder='[{"from":101,"to":102}]' />
+                <div class="memory-search-row">
+                  <Button size="sm" type="button" variant="secondary" :disabled="workflowLoading" @click="planWorkflowNow">Plan</Button>
+                  <Button size="sm" type="button" :disabled="workflowLoading || !selectedTaskDetail" @click="attachWorkflowNow">Attach To Task</Button>
+                  <Button size="sm" type="button" variant="ghost" :disabled="workflowLoading || !selectedTaskDetail" @click="loadWorkflowNow">Refresh</Button>
+                </div>
+                <pre v-if="workflowJson" class="account-json-pre">{{ workflowJson }}</pre>
+              </div>
               <div class="task-comments">
                 <h4 class="task-comments-title">{{ canA2aTask(selectedTaskDetail) ? (t('task.a2aCommentsTitle') || '协作留言 (A2A)') : (t('task.comments') || '评论') }}</h4>
                 <div v-if="taskCommentsLoading" class="loading"><div class="spinner"></div></div>
@@ -344,6 +384,19 @@
             {{ t('task.publish') || '发布任务' }}
           </Button>
         </div>
+              <div
+                v-if="selectedTaskDetail.status === 'pending_verification' && selectedTaskDetail.owner_id === auth.userId"
+                class="task-verification-ops-hint"
+              >
+                <p class="hint">
+                  {{ t('task.verifyReleaseHint') || 'Approving now will release reward to the executor.' }}
+                  <span class="mono">{{ verificationReleaseText(selectedTaskDetail) }}</span>
+                </p>
+                <p class="hint">
+                  {{ t('task.verifyDeadlineHint') || 'Auto-approval countdown:' }}
+                  <span class="mono">{{ verificationDeadlineCountdown(selectedTaskDetail.verification_deadline_at) }}</span>
+                </p>
+              </div>
         <div class="task-right-card task-right-agents">
           <h3 class="task-right-title">{{ t('taskManage.myAgents') || '我的 Agent' }}</h3>
           <div v-if="!auth.isLoggedIn" class="task-right-hint">
@@ -572,6 +625,15 @@
         <h3>{{ t('task.rejectTitle') || '拒绝验收' }}</h3>
         <p class="hint">{{ t('task.rejectHint') || '请填写拒绝理由，以便接取者改进（将作为强化学习反馈）。' }}</p>
         <div class="form">
+          <div class="reject-quick-templates">
+            <button
+              v-for="tpl in rejectReasonTemplates"
+              :key="tpl"
+              type="button"
+              class="reject-quick-templates__btn"
+              @click="rejectReason = tpl"
+            >{{ tpl }}</button>
+          </div>
           <Textarea v-model="rejectReason" rows="3" :placeholder="t('task.rejectReasonPlaceholder') || '例如：代码规范需改进、逻辑需更严密…'" />
           <Button :disabled="rejectLoading === rejectTaskId || !rejectReason.trim()" @click="doRejectWithReason">{{ t('task.reject') }}</Button>
         </div>
@@ -752,6 +814,11 @@ const confirmLoading = ref<number | null>(null)
 const rejectLoading = ref<number | null>(null)
 const rejectTaskId = ref<number | null>(null)
 const rejectReason = ref('')
+const rejectReasonTemplates = [
+  'Acceptance checklist not fully satisfied.',
+  'Evidence link is missing or inaccessible.',
+  'Result summary is incomplete and needs clarification.',
+]
 const confirmTaskId = ref<number | null>(null)
 const confirmForm = reactive({ verification_mode: 'manual_review', verification_note: '' })
 const categoryFilter = ref('')
@@ -868,6 +935,28 @@ function formatA2aTime(v: unknown): string {
     return '—'
   }
 }
+
+function verificationDeadlineCountdown(iso: string | undefined): string {
+  if (!iso) return '—'
+  const deadline = new Date(iso).getTime()
+  if (Number.isNaN(deadline)) return '—'
+  const now = Date.now()
+  if (deadline <= now) return t('task.justNow') || 'now'
+  const mins = Math.max(1, Math.floor((deadline - now) / 60000))
+  if (mins < 60) return `${mins}m`
+  const hours = Math.floor(mins / 60)
+  const remMins = mins % 60
+  return `${hours}h ${remMins}m`
+}
+
+function verificationReleaseText(task: TaskListItem): string {
+  const reward = Number(task.reward_points || 0)
+  const esc = task.escrow
+  if (!esc?.enabled) return `${reward} pts`
+  const idx = Number(esc.current_index || 0)
+  const points = Number(esc.milestones_preview?.[idx]?.points || 0)
+  return points > 0 ? `${points} pts (milestone ${idx + 1})` : `${reward} pts`
+}
 function getTaskSkills(t: { skills?: string[] | string }): string[] {
   if (!t.skills) return []
   if (Array.isArray(t.skills)) return t.skills
@@ -947,6 +1036,13 @@ const newCommentContent = ref('')
 const postCommentLoading = ref(false)
 const a2aSync = ref<Record<string, unknown> | null>(null)
 const a2aSyncLoading = ref(false)
+const verificationChainLoading = ref(false)
+const verificationChainJson = ref('')
+const verificationChainData = ref<any>(null)
+const workflowLoading = ref(false)
+const workflowJson = ref('')
+const workflowNodesText = ref('[]')
+const workflowEdgesText = ref('[]')
 const commentKind = ref<'message' | 'status_update'>('message')
 const commentAgentId = ref('')
 const skillProgress = ref<api.SkillNode[]>([])
@@ -957,17 +1053,26 @@ function openTaskDetail(task: TaskListItem) {
   taskComments.value = []
   skillProgress.value = []
   a2aSync.value = null
+  verificationChainJson.value = ''
+  verificationChainData.value = null
+  workflowJson.value = ''
+  workflowNodesText.value = `[${task.id}]`
+  workflowEdgesText.value = '[]'
   commentKind.value = 'message'
   commentAgentId.value = ''
   api.getTaskDetail(task.id).then((res) => {
     selectedTaskDetail.value = res.data as TaskListItem
     const detail = res.data as TaskListItem
     loadA2aSync(task.id)
-    const hasSkills = getTaskSkills(detail).length > 0
-    if (hasSkills && detail.agent_id && isExecutor(detail)) {
+    if (detail.agent_id) {
       api.fetchAgentSkills(Number(detail.agent_id)).then((r) => {
-        const map = new Map((r.data.items || []).map((x) => [x.name, x]))
-        skillProgress.value = getTaskSkills(detail).map((n) => map.get(n)).filter(Boolean) as api.SkillNode[]
+        const requested = getTaskSkills(detail)
+        if (requested.length) {
+          const map = new Map((r.data.items || []).map((x) => [x.name, x]))
+          skillProgress.value = requested.map((n) => map.get(n)).filter(Boolean) as api.SkillNode[]
+        } else {
+          skillProgress.value = (r.data.items || []).slice(0, 5)
+        }
       }).catch(() => { skillProgress.value = [] })
     }
   }).catch(() => {}).finally(() => { detailLoading.value = false })
@@ -985,6 +1090,68 @@ function loadA2aSync(taskId: number) {
     .then((res) => { a2aSync.value = res.data as Record<string, unknown> })
     .catch(() => { a2aSync.value = null })
     .finally(() => { a2aSyncLoading.value = false })
+}
+
+function loadVerificationChain() {
+  const t = selectedTaskDetail.value
+  if (!t) return
+  verificationChainLoading.value = true
+  verificationChainJson.value = ''
+  verificationChainData.value = null
+  api.getTaskVerificationChain(t.id)
+    .then((res) => {
+      verificationChainData.value = res.data
+      verificationChainJson.value = JSON.stringify(res.data, null, 2)
+    })
+    .catch((e: unknown) => { verificationChainJson.value = JSON.stringify({ error: String(e) }, null, 2) })
+    .finally(() => { verificationChainLoading.value = false })
+}
+
+function parseWorkflowInput() {
+  const nodes = JSON.parse(workflowNodesText.value) as number[]
+  const edges = JSON.parse(workflowEdgesText.value) as Array<{ from: number; to: number }>
+  return { nodes, edges }
+}
+
+function planWorkflowNow() {
+  workflowLoading.value = true
+  workflowJson.value = ''
+  try {
+    const body = parseWorkflowInput()
+    api.planWorkflow(body)
+      .then((res) => { workflowJson.value = JSON.stringify(res.data, null, 2) })
+      .catch((e: unknown) => { workflowJson.value = JSON.stringify({ error: String(e) }, null, 2) })
+      .finally(() => { workflowLoading.value = false })
+  } catch (e: unknown) {
+    workflowLoading.value = false
+    workflowJson.value = JSON.stringify({ error: `Invalid JSON: ${String(e)}` }, null, 2)
+  }
+}
+
+function attachWorkflowNow() {
+  if (!selectedTaskDetail.value) return
+  workflowLoading.value = true
+  workflowJson.value = ''
+  try {
+    const body = parseWorkflowInput()
+    api.attachTaskWorkflow(selectedTaskDetail.value.id, body)
+      .then((res) => { workflowJson.value = JSON.stringify(res.data, null, 2) })
+      .catch((e: unknown) => { workflowJson.value = JSON.stringify({ error: String(e) }, null, 2) })
+      .finally(() => { workflowLoading.value = false })
+  } catch (e: unknown) {
+    workflowLoading.value = false
+    workflowJson.value = JSON.stringify({ error: `Invalid JSON: ${String(e)}` }, null, 2)
+  }
+}
+
+function loadWorkflowNow() {
+  if (!selectedTaskDetail.value) return
+  workflowLoading.value = true
+  workflowJson.value = ''
+  api.getTaskWorkflow(selectedTaskDetail.value.id)
+    .then((res) => { workflowJson.value = JSON.stringify(res.data, null, 2) })
+    .catch((e: unknown) => { workflowJson.value = JSON.stringify({ error: String(e) }, null, 2) })
+    .finally(() => { workflowLoading.value = false })
 }
 
 async function loadTaskComments(taskId: number, taskHint?: TaskListItem | null) {
@@ -1065,6 +1232,11 @@ function closeTaskDetail() {
   taskComments.value = []
   skillProgress.value = []
   a2aSync.value = null
+  verificationChainJson.value = ''
+  verificationChainData.value = null
+  workflowJson.value = ''
+  workflowNodesText.value = '[]'
+  workflowEdgesText.value = '[]'
   commentKind.value = 'message'
   commentAgentId.value = ''
 }
@@ -1634,10 +1806,58 @@ watch(tab, (newTab) => {
 }
 .detail-a2a-sync__dl dt { color: var(--text-secondary); margin: 0; }
 .detail-a2a-sync__dl dd { margin: 0; color: var(--text-primary); }
+.detail-verification-chain {
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: var(--border-hairline);
+  display: grid;
+  gap: var(--space-3);
+}
+.verification-chain-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+.verification-chain-card {
+  border: var(--border-hairline);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  background: rgba(255, 255, 255, 0.03);
+}
+.detail-workflow-dag {
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: var(--border-hairline);
+  display: grid;
+  gap: var(--space-3);
+}
 .task-comment-a2a-opts { display: flex; flex-direction: column; gap: var(--space-3); margin-bottom: var(--space-2); }
 .task-comment-a2a-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
 .task-comment-a2a-label { font-size: var(--font-caption); color: var(--text-secondary); min-width: 4.5rem; }
 .task-comment-a2a-select { flex: 1; min-width: 160px; max-width: 100%; }
+.task-verification-ops-hint {
+  margin-top: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border: var(--border-hairline);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.03);
+}
+.task-verification-ops-hint .hint { margin: 0; }
+.task-verification-ops-hint .hint + .hint { margin-top: var(--space-2); }
+.reject-quick-templates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.reject-quick-templates__btn {
+  border: var(--border-hairline);
+  background: rgba(255,255,255,0.04);
+  color: var(--text-secondary);
+  padding: 0.3rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+}
+.reject-quick-templates__btn:hover { color: var(--text-primary); }
 
 .task-comments-title {
   font-size: var(--font-section-title);

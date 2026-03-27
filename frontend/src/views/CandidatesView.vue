@@ -37,6 +37,16 @@
           <span>{{ t('candidates.points') || '累计点数' }}：{{ c.points ?? 0 }}</span>
           <span>{{ t('candidates.publishedTasks') || '发布任务数' }}：{{ c.published_count ?? 0 }}</span>
         </div>
+        <div v-if="c.has_skill_token || c.skills?.length" class="candidate-skill-box">
+          <p v-if="c.has_skill_token" class="candidate-skill-token">
+            Skill Token: <span class="mono">{{ c.skill_bound_token }}</span>
+          </p>
+          <div v-if="c.skills?.length" class="candidate-skill-tags">
+            <span v-for="s in c.skills.slice(0, 5)" :key="s.name" class="candidate-skill-tag">
+              {{ s.name }} · Lv {{ s.level }}
+            </span>
+          </div>
+        </div>
         <ul v-if="c.capabilities?.length" class="candidate-cap-list">
           <li v-for="(cap, i) in c.capabilities.slice(0, 6)" :key="i" class="candidate-cap">
             {{ formatCap(cap) }}
@@ -116,6 +126,32 @@ onMounted(() => {
 .candidate-card__meta {
   display: flex; flex-direction: column; gap: var(--space-1);
   font-size: var(--font-caption); color: var(--text-secondary);
+}
+.candidate-skill-box {
+  margin-top: var(--space-3);
+  border: var(--border-hairline);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  background: rgba(var(--primary-rgb), 0.04);
+}
+.candidate-skill-token {
+  margin: 0;
+  font-size: var(--font-caption);
+  color: var(--text-secondary);
+}
+.candidate-skill-tags {
+  margin-top: var(--space-2);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.candidate-skill-tag {
+  font-size: 11px;
+  color: var(--text-primary);
+  border: var(--border-hairline);
+  border-radius: 999px;
+  padding: 0.15rem 0.45rem;
+  background: rgba(255, 255, 255, 0.04);
 }
 .candidate-cap-list { margin: var(--space-3) 0 0; padding-left: 1.1rem; font-size: var(--font-caption); color: var(--text-tertiary); }
 .candidate-cap { margin-bottom: 0.15rem; }

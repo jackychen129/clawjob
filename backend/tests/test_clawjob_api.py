@@ -1262,3 +1262,161 @@ def test_a2a_and_memory_endpoints_after_subscribe():
 
     ms = client.get("/memory/search", params={"query": "e2e"}, headers=headers)
     assert ms.status_code == 200, ms.text
+
+
+def test_skill_contract_validate_and_publish_with_contract_profile():
+    u = f"contract_{_unique()}"
+    email = f"{u}@example.com"
+    token = _register_user(u, email, "pass1234")["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    contract_schema = {
+        "type": "object",
+        "properties": {
+            "query": {"type": "string"},
+            "limit": {"type": "integer", "enum": [10, 20]},
+        },
+        "required": ["query"],
+    }
+    failure = {"codes": [{"code": "RETRYABLE_TIMEOUT", "retryable": True}]}
+    rv = client.post(
+        "/skills/contract/validate",
+        json={
+            "contract_schema": contract_schema,
+            "failure_semantics": failure,
+            "sample_payload": {"query": "hello", "limit": 20},
+        },
+        headers=headers,
+    )
+    assert rv.status_code == 200, rv.text
+    assert rv.json().get("ok") is True
+
+    r_agent = client.post(
+        "/agents/register",
+        json={"name": "contract_agent", "skill_bound_token": "tok_contract_001"},
+        headers=headers,
+    )
+    assert r_agent.status_code == 200, r_agent.text
+    rp = client.post(
+        "/skills/publish",
+        json={
+            "skill_token": "tok_contract_001",
+            "name": "Contract Skill",
+            "contract_schema": contract_schema,
+            "failure_semantics": failure,
+            "idempotency_hint": "hash(payload)",
+        },
+        headers=headers,
+    )
+    assert rp.status_code == 200, rp.text
+    assert rp.json().get("contract_profile") is not None
+
+
+def test_workflow_plan_attach_and_readiness():
+    u = f"wf_{_unique()}"
+    email = f"{u}@example.com"
+    token = _register_user(u, email, "pass1234")["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    t1 = client.post("/tasks", json={"title": "wf-1", "description": "a"}, headers=headers)
+    t2 = client.post("/tasks", json={"title": "wf-2", "description": "b"}, headers=headers)
+    assert t1.status_code == 200 and t2.status_code == 200
+    id1 = t1.json()["id"]
+    id2 = t2.json()["id"]
+
+    rp = client.post("/workflows/plan", json={"nodes": [id1, id2], "edges": [{"from": id1, "to": id2}]}, headers=headers)
+    assert rp.status_code == 200, rp.text
+    assert len(rp.json().get("topo_order") or []) == 2
+
+    ra = client.post(f"/tasks/{id2}/workflow", json={"nodes": [id1, id2], "edges": [{"from": id1, "to": id2}]}, headers=headers)
+    assert ra.status_code == 200, ra.text
+
+    rg = client.get(f"/tasks/{id2}/workflow", headers=headers)
+    assert rg.status_code == 200, rg.text
+    assert rg.json().get("ready") is False
+    assert id1 in (rg.json().get("blocked_by") or [])
+
+
+def test_verification_chain_and_runtime_breakers_api():
+    u = f"chain_{_unique()}"
+    email = f"{u}@example.com"
+    token = _register_user(u, email, "pass1234")["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    t = client.post("/tasks", json={"title": "chain task", "description": "x"}, headers=headers)
+    assert t.status_code == 200, t.text
+    task_id = t.json()["id"]
+
+    rvc = client.get(f"/tasks/{task_id}/verification-chain", headers=headers)
+    assert rvc.status_code == 200, rvc.text
+    data = rvc.json()
+    assert "declaration" in data and "sandbox" in data and "cross" in data
+
+    rcb = client.get("/runtime/circuit-breakers", headers=headers)
+    assert rcb.status_code == 200, rcb.text
+    assert "items" in rcb.json()
+
+
+def test_submit_confirm_reject_write_status_update_messages():
+    u = f"statusmsg_{_unique()}"
+    email = f"{u}@example.com"
+    token = _register_user(u, email, "pass1234")["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    rt = client.post("/tasks", json={"title": "status-msg task", "description": "x"}, headers=headers)
+    assert rt.status_code == 200, rt.text
+    task_id = rt.json()["id"]
+    ra = client.post("/agents/register", json={"name": "status_agent"}, headers=headers)
+    assert ra.status_code == 200, ra.text
+    agent_id = ra.json()["id"]
+    rs = client.post(f"/tasks/{task_id}/subscribe", json={"agent_id": agent_id}, headers=headers)
+    assert rs.status_code == 200, rs.text
+
+    rsub = client.post(
+        f"/tasks/{task_id}/submit-completion",
+        json={"result_summary": "done", "evidence": {"proof_links": []}},
+        headers=headers,
+    )
+    assert rsub.status_code == 200, rsub.text
+    rrej = client.post(f"/tasks/{task_id}/reject", json={"rejection_reason": "need update"}, headers=headers)
+    assert rrej.status_code == 200, rrej.text
+    rsub2 = client.post(
+        f"/tasks/{task_id}/submit-completion",
+        json={"result_summary": "done2", "evidence": {"proof_links": []}},
+        headers=headers,
+    )
+    assert rsub2.status_code == 200, rsub2.text
+    rcf = client.post(f"/tasks/{task_id}/confirm", json={"verification_mode": "manual_review"}, headers=headers)
+    assert rcf.status_code == 200, rcf.text
+
+    rc = client.get(f"/tasks/{task_id}/comments", headers=headers)
+    assert rc.status_code == 200, rc.text
+    kinds = [str(x.get("kind") or "") for x in (rc.json().get("comments") or [])]
+    assert "status_update" in kinds
+
+
+def test_runtime_circuit_breaker_control_for_admin():
+    uid = _unique()
+    admin = f"cb_admin_{uid}"
+    _register_user(admin, f"{admin}@example.com", "adminpw")
+    admin_token = client.post('/auth/login', json={'username': admin, 'password': 'adminpw'}).json()['access_token']
+
+    from app.database.relational_db import SessionLocal
+    from app.database.relational_db import User as UserModel
+    db = SessionLocal()
+    try:
+        u = db.query(UserModel).filter(UserModel.username == admin).first()
+        assert u is not None
+        u.is_superuser = True
+        db.commit()
+    finally:
+        db.close()
+
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    host = "example.com"
+    ro = client.post("/runtime/circuit-breakers/control", json={"host": host, "action": "open"}, headers=headers)
+    assert ro.status_code == 200, ro.text
+    rc = client.post("/runtime/circuit-breakers/control", json={"host": host, "action": "close"}, headers=headers)
+    assert rc.status_code == 200, rc.text
+    rr = client.post("/runtime/circuit-breakers/control", json={"host": host, "action": "reset"}, headers=headers)
+    assert rr.status_code == 200, rr.text

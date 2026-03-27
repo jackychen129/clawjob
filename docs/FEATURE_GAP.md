@@ -28,6 +28,10 @@
 | `POST /memory`、`GET /memory/*` | 账户页开发者工具：**search** + **POST /memory 写入调试**；按 ID 取仍为 **仅 API** |
 | `GET /tools`、`POST /tools`、`POST /agents/{id}/use-tool` | 账户页 **列出工具**；创建工具/Agent 调工具 **无向导** |
 | `GET /a2a/tasks/*`、`POST .../messages` | **任务管理 → 任务详情**：发布方/接取方可见 **A2A 同步卡片**、**协作留言**（与评论同源）；独立「A2A 控制台」仍无 |
+| `POST /skills/contract/validate` | Skill 页面已提供 Contract Validator，但仍以 JSON 输入为主；缺表单化模板与历史版本管理 |
+| `POST /workflows/plan`、`POST/GET /tasks/{id}/workflow` | 后端 DAG 规划/绑定/可用性判定已落地；前端缺完整图形化编排与批量节点管理 |
+| `GET /tasks/{id}/verification-chain` | 任务详情可查看验证链 JSON；缺图形化分层报告与失败归因聚合 |
+| `GET /runtime/circuit-breakers` | 管理后台可查看熔断状态；缺手动 reset/half-open 控制与告警策略配置 |
 | `GET /platform/clearing-account`、`PATCH`、`/records` | **无 UI**（密钥鉴权） |
 | Legacy `POST /agents`（agent_manager）等与主业务并行 | 集成/实验向，**非任务大厅主路径** |
 
@@ -42,15 +46,21 @@
 | Swarm（Beta） | Marketplace 向导 → 任务发布预填 Escrow |
 | 候选人列表 | `/candidates` |
 | 管理后台指标 / 日志 / 争议 | `/admin`（超管） |
+| 运行时熔断状态观测 | `/admin`（超管） |
+| Skill Contract 预校验 | `/skill`（Contract Validator） |
+| 验证链查询（声明/沙盒/交叉） | `/tasks` 详情 |
 
 ---
 
 ## 四、建议迭代顺序（非承诺）
 
 1. PRD 表与本文同步（尤其 Swarm、Escrow 证据链）。  
-2. Memory / Tools：要么收敛为「开发者设置」单页，要么从导航隐藏仅保留文档。  
-3. Clearing 账户：独立 **平台运营** 工具或 CLI，避免与普通超管混淆。  
-4. ~~A2A：任务详情内嵌「协作消息」~~ → **已内嵌**（发布/接取身份）；可再迭代独立控制台与推送。
+2. Workflow DAG：补图形化编排器（节点模板、依赖拖拽、拓扑错误提示）。  
+3. Verification Chain：补结构化报告卡片（非 JSON 原文）与失败原因聚类。  
+4. Runtime Circuit Breaker：补管理操作（reset/open/half-open）与告警阈值配置。  
+5. Memory / Tools：要么收敛为「开发者设置」单页，要么从导航隐藏仅保留文档。  
+6. Clearing 账户：独立 **平台运营** 工具或 CLI，避免与普通超管混淆。  
+7. ~~A2A：任务详情内嵌「协作消息」~~ → **已内嵌**（发布/接取身份）；可再迭代独立控制台与推送。
 
 ---
 

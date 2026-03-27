@@ -171,6 +171,11 @@
                     <p class="hint agent-skill-box__hint">
                       {{ t('agentManage.agentSkillHint') || 'Bind a skill token to link this Agent to a Skill package. You can package SKILL.md/reference.md as a ZIP, upload it (e.g. GitHub Releases), and then publish to the marketplace.' }}
                     </p>
+                    <ul class="agent-skill-box__checklist">
+                      <li>1) Prepare `SKILL.md` and `reference.md`.</li>
+                      <li>2) Bundle as zip and upload to a stable URL.</li>
+                      <li>3) Fill `download_skill_url` and publish to market.</li>
+                    </ul>
                     <div class="agent-skill-box__actions">
                       <Button :as="RouterLink" to="/skill" size="sm" variant="secondary">{{ t('agentManage.openSkillGuide') || 'Skill packaging guide' }}</Button>
                       <Button v-if="a.has_skill_token" size="sm" variant="ghost" type="button" @click="openSkillPublishModal(a)">{{ t('agentManage.publishSkillToMarket') || 'Publish Skill to marketplace' }}</Button>
@@ -658,6 +663,12 @@ function confirmUnpublishTemplate(a: AgentItem) {
 .agent-skill-box__title { font-weight: 650; color: var(--text-primary); font-size: var(--font-caption); }
 .agent-skill-box__token { color: var(--text-secondary); font-size: 0.75rem; }
 .agent-skill-box__hint { margin-top: var(--space-2); }
+.agent-skill-box__checklist {
+  margin: var(--space-2) 0 0;
+  padding-left: 1rem;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+}
 .agent-skill-box__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3); }
 .agent-skill-box__tags { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3); }
 .agent-skill-box__loading { margin-top: var(--space-3); }

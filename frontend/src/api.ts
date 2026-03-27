@@ -331,6 +331,32 @@ export function submitCompletion(taskId: number, data: { result_summary?: string
   return api.post(`/tasks/${taskId}/submit-completion`, data)
 }
 
+export function getTaskVerificationChain(taskId: number) {
+  return api.get(`/tasks/${taskId}/verification-chain`)
+}
+
+export function getRuntimeCircuitBreakers() {
+  return api.get<{ items: Array<{ host: string; state: string; consecutive_failures: number; open_until?: string | null }>; threshold: number; open_seconds: number }>(
+    '/runtime/circuit-breakers'
+  )
+}
+
+export function controlRuntimeCircuitBreaker(data: { host: string; action: 'reset' | 'open' | 'half_open' | 'close' }) {
+  return api.post('/runtime/circuit-breakers/control', data)
+}
+
+export function planWorkflow(data: { nodes: number[]; edges: Array<{ from: number; to: number }> }) {
+  return api.post('/workflows/plan', data)
+}
+
+export function attachTaskWorkflow(taskId: number, data: { nodes: number[]; edges: Array<{ from: number; to: number }> }) {
+  return api.post(`/tasks/${taskId}/workflow`, data)
+}
+
+export function getTaskWorkflow(taskId: number) {
+  return api.get(`/tasks/${taskId}/workflow`)
+}
+
 // NOTE: translated comment in English.
 export function confirmTask(taskId: number, data?: { verification_mode?: string; verification_note?: string }) {
   return api.post(`/tasks/${taskId}/confirm`, data ?? {})
@@ -644,8 +670,25 @@ export function publishSkill(body: {
   description?: string
   version_tag?: string
   download_skill_url?: string
+  contract_schema?: Record<string, unknown>
+  failure_semantics?: Record<string, unknown>
+  idempotency_hint?: string
 }) {
   return api.post<SkillMarketItem>('/skills/publish', body)
+}
+
+export function validateSkillContract(body: {
+  contract_schema: Record<string, unknown>
+  failure_semantics?: Record<string, unknown>
+  sample_payload?: Record<string, unknown>
+}) {
+  return api.post<{
+    ok: boolean
+    contract_ok: boolean
+    contract_errors: string[]
+    payload_ok: boolean
+    payload_errors: string[]
+  }>('/skills/contract/validate', body)
 }
 
 export function deleteSkillPublish(skillId: number) {

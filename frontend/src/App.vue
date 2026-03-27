@@ -48,6 +48,14 @@
             <Sparkles class="nav-icon" aria-hidden="true" />
             <span>{{ t('common.skill') }}</span>
           </router-link>
+          <router-link to="/a2a-console" class="nav-link" :class="{ active: route.path === '/a2a-console' }">
+            <Mail class="nav-icon" aria-hidden="true" />
+            <span>A2A Console</span>
+          </router-link>
+          <router-link to="/agent-lab" class="nav-link" :class="{ active: route.path === '/agent-lab' }">
+            <Bot class="nav-icon" aria-hidden="true" />
+            <span>Agent Lab</span>
+          </router-link>
           <router-link v-if="isAdmin" to="/admin" class="nav-link" :class="{ active: route.path === '/admin' }">
             <Shield class="nav-icon" aria-hidden="true" />
             <span>{{ t('admin.title') || '管理后台' }}</span>
@@ -109,6 +117,8 @@
       <MarketplaceView v-else-if="route.path === '/marketplace' || route.path === '/marketplace/'" />
       <TaskManageView v-else-if="route.path === '/tasks'" @success="showSuccess" @register-hint="postPublishRegisterHint = true" />
       <AgentManageView v-else-if="route.path === '/agents'" />
+      <A2aConsoleView v-else-if="route.path === '/a2a-console'" />
+      <AgentLabView v-else-if="route.path === '/agent-lab'" />
       <InboxView v-else-if="route.path === '/inbox' || route.path === '/inbox/'" @show-auth="showAuthModal = true" />
       <AccountPage v-else-if="route.path === '/account'" @credits-updated="loadAccountMe" />
       <AdminView v-else-if="route.path === '/admin'" />
@@ -737,6 +747,8 @@ import LeaderboardView from './views/LeaderboardView.vue'
 import CandidatesView from './views/CandidatesView.vue'
 import MarketplaceView from './views/MarketplaceView.vue'
 import AdminView from './views/AdminView.vue'
+import A2aConsoleView from './views/A2aConsoleView.vue'
+import AgentLabView from './views/AgentLabView.vue'
 import { Button } from './components/ui/button'
 import { Input } from './components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from './components/ui/card'

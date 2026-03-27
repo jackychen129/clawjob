@@ -61,6 +61,37 @@
         </div>
       </div>
 
+      <div class="card admin-card">
+        <div class="admin-logs-head">
+          <h3 class="admin-logs-title">Runtime Circuit Breakers</h3>
+          <Button size="sm" variant="secondary" type="button" :disabled="cbLoading" @click="reloadCircuitBreakers">
+            {{ cbLoading ? 'Loading...' : '刷新熔断状态' }}
+          </Button>
+        </div>
+        <div class="admin-log-table">
+          <div class="admin-log-row admin-log-row--head">
+            <div>Host</div>
+            <div>State</div>
+            <div>Failures</div>
+            <div>Open Until</div>
+          </div>
+          <div v-for="row in cbRows" :key="row.host" class="admin-log-row">
+            <div class="admin-log-cat">{{ row.host }}</div>
+            <div class="admin-log-level">{{ row.state }}</div>
+            <div class="admin-log-level">{{ row.consecutive_failures }}</div>
+            <div class="admin-log-time">
+              <div>{{ row.open_until || '-' }}</div>
+              <div class="admin-dispute-actions" style="margin-top:6px">
+                <Button size="sm" type="button" variant="secondary" :disabled="cbControlLoading === row.host" @click="controlBreaker(row.host, 'reset')">reset</Button>
+                <Button size="sm" type="button" variant="secondary" :disabled="cbControlLoading === row.host" @click="controlBreaker(row.host, 'half_open')">half-open</Button>
+                <Button size="sm" type="button" :disabled="cbControlLoading === row.host" @click="controlBreaker(row.host, 'close')">close</Button>
+              </div>
+            </div>
+          </div>
+          <p v-if="!cbRows.length && !cbLoading" class="empty">暂无熔断记录</p>
+        </div>
+      </div>
+
       <div class="card admin-card admin-logs">
         <div class="admin-logs-head">
           <h3 class="admin-logs-title">{{ t('admin.logs') || '系统日志' }}</h3>
@@ -188,6 +219,9 @@ const category = ref('')
 const disputesLoading = ref(false)
 const disputes = ref<api.AdminDisputedTaskItem[]>([])
 const resolveLoading = ref<number | null>(null)
+const cbLoading = ref(false)
+const cbRows = ref<Array<{ host: string; state: string; consecutive_failures: number; open_until?: string | null }>>([])
+const cbControlLoading = ref<string | null>(null)
 
 function reloadAll() {
   denied.value = false
@@ -201,6 +235,7 @@ function reloadAll() {
   })
   reloadLogs(true)
   reloadDisputes()
+  reloadCircuitBreakers()
 }
 
 function reloadLogs(reset = false) {
@@ -239,6 +274,21 @@ function quickResolve(taskId: number, resolutionType: 'resume' | 'force_confirm'
   api.adminResolveEscrowDispute(taskId, { resolution_type: resolutionType, note: '' })
     .then(() => { reloadDisputes(); reloadAll() })
     .finally(() => { resolveLoading.value = null })
+}
+
+function reloadCircuitBreakers() {
+  cbLoading.value = true
+  api.getRuntimeCircuitBreakers()
+    .then((res) => { cbRows.value = res.data.items || [] })
+    .catch(() => { cbRows.value = [] })
+    .finally(() => { cbLoading.value = false })
+}
+
+function controlBreaker(host: string, action: 'reset' | 'open' | 'half_open' | 'close') {
+  cbControlLoading.value = host
+  api.controlRuntimeCircuitBreaker({ host, action })
+    .then(() => { reloadCircuitBreakers() })
+    .finally(() => { cbControlLoading.value = null })
 }
 
 onMounted(() => {

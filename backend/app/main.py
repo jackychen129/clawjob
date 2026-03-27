@@ -52,6 +52,10 @@ from app.services.escrow_tasks import (
     save_escrow_to_task,
     apply_escrow_milestone_confirm,
 )
+from app.services.preflight import run_preflight, enforce_preflight
+from app.services.skill_contract import validate_contract, validate_payload
+from app.services.workflow_dag import validate_workflow_dag, predecessors
+from app.services.runtime_guard import RuntimeCircuitGuard
 
 # Agent system imports
 from app.agents.agent_manager import AgentManager
@@ -152,6 +156,10 @@ agent_manager = AgentManager(vector_db, relational_db, cache_db)
 task_system = TaskSystem(vector_db, relational_db, cache_db)
 memory_system = MemorySystem(vector_db, cache_db)
 tool_system = ToolSystem(relational_db, cache_db)
+runtime_guard = RuntimeCircuitGuard(
+    threshold=int(os.getenv("WEBHOOK_CB_THRESHOLD", "3") or "3"),
+    open_seconds=int(os.getenv("WEBHOOK_CB_OPEN_SECONDS", "60") or "60"),
+)
 
 # Security
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
@@ -596,6 +604,25 @@ class PublishSkillBody(BaseModel):
     description: Optional[str] = None
     version_tag: Optional[str] = "v1"
     download_skill_url: Optional[str] = None
+    contract_schema: Optional[dict] = None
+    failure_semantics: Optional[dict] = None
+    idempotency_hint: Optional[str] = None
+
+
+class SkillContractValidateBody(BaseModel):
+    contract_schema: dict
+    failure_semantics: Optional[dict] = None
+    sample_payload: Optional[dict] = None
+
+
+class WorkflowPlanBody(BaseModel):
+    nodes: List[int]
+    edges: List[dict] = []
+
+
+class CircuitBreakerControlBody(BaseModel):
+    host: str
+    action: str  # reset | open | half_open | close
 
 
 def _publisher_for_skill_token(db: Session, skill_token: str) -> tuple:
@@ -666,6 +693,26 @@ def get_skills_stats(db: Session = Depends(get_db)):
     }
 
 
+@app.post("/skills/contract/validate")
+def validate_skill_contract(
+    body: SkillContractValidateBody,
+    current_user: dict = Depends(get_current_user),
+):
+    _ = current_user
+    ok, errors = validate_contract(body.contract_schema, body.failure_semantics)
+    payload_ok = True
+    payload_errors: List[str] = []
+    if ok and body.sample_payload is not None:
+        payload_ok, payload_errors = validate_payload(body.contract_schema, body.sample_payload)
+    return {
+        "ok": bool(ok and payload_ok),
+        "contract_ok": ok,
+        "contract_errors": errors,
+        "payload_ok": payload_ok,
+        "payload_errors": payload_errors,
+    }
+
+
 @app.post("/skills/publish")
 def publish_skill(
     body: PublishSkillBody,
@@ -678,7 +725,18 @@ def publish_skill(
     - 必须能在当前用户名下找到至少一个 Agent，其 config.skill_bound_token 与 skill_token 对齐；
     - verified 默认为根据任务完成数推导：tasks_completed > 0 => True，否则 False。
     """
+    preflight = enforce_preflight("skill_publish")
     uid = int(current_user["user_id"])
+    contract_profile = None
+    if body.contract_schema is not None:
+        c_ok, c_errs = validate_contract(body.contract_schema, body.failure_semantics)
+        if not c_ok:
+            raise HTTPException(status_code=400, detail={"message": "Invalid skill contract", "errors": c_errs})
+        contract_profile = {
+            "schema_version": ((body.contract_schema or {}).get("$schema") or "custom"),
+            "idempotency_hint": ((body.idempotency_hint or "").strip() or "none")[:128],
+            "failure_codes": len(((body.failure_semantics or {}).get("codes") or []) if isinstance(body.failure_semantics, dict) else []),
+        }
     skill_token = (body.skill_token or "").strip() if body.skill_token else ""
 
     # NOTE: translated comment in English.
@@ -734,6 +792,18 @@ def publish_skill(
         db.commit()
         db.refresh(row)
         skill_id = row.id
+    if contract_profile is not None:
+        try:
+            db.add(SystemLog(
+                level="info",
+                category="skill_contract",
+                message="skill_contract_validated",
+                user_id=uid,
+                extra={"skill_token": skill_token, **contract_profile},
+            ))
+            db.commit()
+        except Exception:
+            db.rollback()
 
     return {
         "id": skill_id,
@@ -744,6 +814,8 @@ def publish_skill(
         "version_tag": version_tag,
         "tasks_completed": int(tasks_completed),
         "download_skill_url": download_skill_url,
+        "preflight": preflight,
+        "contract_profile": contract_profile,
     }
 
 
@@ -822,6 +894,7 @@ def register_agent(
     current_user: dict = Depends(get_current_user),
 ):
     """注册我的 Agent（需登录），用于接取/订阅他人任务。调用方须提供：当前使用的 token（请求头 Authorization: Bearer <token>）与 Agent 名称（Body 的 name）。参数对齐 OpenClaw/Clawl agent。"""
+    preflight = enforce_preflight("agent_register")
     _ensure_agents_category_column()
     uid = int(current_user["user_id"])
     primary_type = (body.agent_type or "general").strip() or "general"
@@ -908,6 +981,7 @@ def register_agent(
         "category": getattr(agent, "category", None) or "api",
         "capabilities": agent.capabilities or [],
         "status": "active" if agent.is_active else "inactive",
+        "preflight": preflight,
     }
 
 
@@ -1114,10 +1188,27 @@ def list_candidates(
     else:
         q = q.order_by(points_subq.c.points.desc().nullslast(), Agent.id.desc())
     rows = q.offset(skip).limit(limit).all()
+    skill_tokens = set()
+    for row in rows:
+        a = row[0]
+        cfg = a.config or {}
+        tok = (cfg.get("skill_bound_token") or "").strip()
+        if tok:
+            skill_tokens.add(tok)
+    published_skill_by_token = {}
+    if skill_tokens:
+        ps = db.query(PublishedSkill).filter(PublishedSkill.skill_token.in_(list(skill_tokens))).all()
+        published_skill_by_token = {x.skill_token: x.id for x in ps}
     out = []
     for row in rows:
         a, owner, points, published_count = row
         cfg = a.config or {}
+        skill_token = (cfg.get("skill_bound_token") or "").strip()
+        xp_map = _agent_skill_xp_map(db, a.id)
+        skills = []
+        for name, xp in sorted(xp_map.items(), key=lambda kv: (-kv[1], kv[0]))[:5]:
+            lv = _level_from_xp(int(xp))
+            skills.append({"name": name, "xp": int(xp), "level": int(lv.get("level", 1))})
         out.append({
             "id": a.id,
             "type": "agent",
@@ -1132,6 +1223,10 @@ def list_candidates(
             "owner_name": _owner_display_name(owner.username if owner else None),
             "points": int(points),
             "published_count": int(published_count),
+            "has_skill_token": bool(skill_token),
+            "skill_bound_token": skill_token if skill_token else None,
+            "published_skill_id": published_skill_by_token.get(skill_token),
+            "skills": skills,
         })
     return {"candidates": out, "total": len(out)}
 
@@ -1296,6 +1391,21 @@ def _validate_verification_submission(task: Task, body: SubmitCompletionBody) ->
         missing = [x for x in reqs if x not in completed]
         if missing:
             raise HTTPException(status_code=400, detail=f"清单验收未完成：{', '.join(missing[:5])}")
+
+
+def _append_task_status_update_comment(db: Session, task: Task, user_id: int, content: str, agent_id: Optional[int] = None) -> None:
+    try:
+        row = TaskComment(
+            task_id=int(task.id),
+            user_id=int(user_id),
+            agent_id=int(agent_id) if agent_id else None,
+            kind="status_update",
+            content=(content or "").strip()[:2000] or "status updated",
+        )
+        db.add(row)
+        db.commit()
+    except Exception:
+        db.rollback()
 
 
 def _get_or_create_clearing_account(db: Session) -> PlatformClearingAccount:
@@ -1818,6 +1928,65 @@ def publish_task(
     return {"id": task.id, "title": task.title, "status": task.status, "reward_points": reward_points}
 
 
+@app.post("/workflows/plan")
+def plan_workflow(
+    body: WorkflowPlanBody,
+    current_user: dict = Depends(get_current_user),
+):
+    _ = current_user
+    ok, message, topo = validate_workflow_dag(body.nodes, body.edges or [])
+    if not ok:
+        raise HTTPException(status_code=400, detail=message)
+    return {"ok": True, "topo_order": topo, "nodes": body.nodes, "edges": body.edges or []}
+
+
+@app.post("/tasks/{task_id}/workflow")
+def attach_task_workflow(
+    task_id: int,
+    body: WorkflowPlanBody,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    uid = int(current_user["user_id"])
+    ok, message, topo = validate_workflow_dag(body.nodes, body.edges or [])
+    if not ok:
+        raise HTTPException(status_code=400, detail=message)
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    if task.owner_id != uid:
+        raise HTTPException(status_code=403, detail="仅任务发布者可绑定工作流")
+    if task_id not in [int(n) for n in body.nodes]:
+        raise HTTPException(status_code=400, detail="当前 task_id 必须出现在 workflow nodes 中")
+    base = dict(task.input_data) if isinstance(task.input_data, dict) else {}
+    workflow_dag = {"nodes": [int(x) for x in body.nodes], "edges": body.edges or [], "topo_order": topo}
+    task.input_data = {**base, "workflow_dag": workflow_dag}
+    db.commit()
+    return {"ok": True, "task_id": task_id, "workflow_dag": workflow_dag}
+
+
+@app.get("/tasks/{task_id}/workflow")
+def get_task_workflow(
+    task_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    _ = current_user
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    extra = task.input_data if isinstance(task.input_data, dict) else {}
+    dag = extra.get("workflow_dag") if isinstance(extra.get("workflow_dag"), dict) else None
+    if not dag:
+        return {"task_id": task_id, "workflow_dag": None, "ready": True, "blocked_by": []}
+    blocked: List[int] = []
+    for pid in predecessors(task_id, dag.get("edges") or []):
+        p = db.query(Task).filter(Task.id == pid).first()
+        if not p or p.status != "completed":
+            blocked.append(pid)
+    return {"task_id": task_id, "workflow_dag": dag, "ready": len(blocked) == 0, "blocked_by": blocked}
+
+
 @app.post("/tasks/{task_id}/subscribe")
 def subscribe_task(
     task_id: int,
@@ -1872,6 +2041,7 @@ def submit_completion(
     current_user: dict = Depends(get_current_user),
 ):
     """接取者提交完成：仅接取该任务的 Agent 所属用户可调用。会 POST 到发布者填写的 completion_webhook_url，任务进入待验收，6 小时内发布者不确认则自动完成并发奖。"""
+    preflight = enforce_preflight("task_submit_completion")
     uid = int(current_user["user_id"])
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
@@ -1895,6 +2065,9 @@ def submit_completion(
     reward_points = getattr(task, "reward_points", 0) or 0
     payload = None
     if webhook_url:
+        allow, cb_state = runtime_guard.can_request(webhook_url)
+        if not allow:
+            raise HTTPException(status_code=503, detail=f"完成回调熔断中，请稍后重试（{cb_state}）")
         payload = {
             "task_id": task_id,
             "title": task.title,
@@ -1918,15 +2091,19 @@ def submit_completion(
                 with httpx.Client(timeout=10.0) as client:
                     r = client.post(webhook_url, json=payload)
                 if r.status_code < 400:
+                    runtime_guard.record_success(webhook_url)
                     last_err = None
                     break
                 if 400 <= r.status_code < 500:
+                    runtime_guard.record_failure(webhook_url)
                     raise HTTPException(
                         status_code=502,
                         detail=f"完成回调返回异常：{r.status_code}，发布方需验收通过后再在平台确认",
                     )
+                runtime_guard.record_failure(webhook_url)
                 last_err = f"完成回调返回异常：{r.status_code}"
             except httpx.RequestError as e:
+                runtime_guard.record_failure(webhook_url)
                 last_err = f"调用完成回调失败：{str(e)}"
             if attempt < max_attempts:
                 time.sleep(0.2 * attempt)
@@ -1937,17 +2114,117 @@ def submit_completion(
     task.verification_deadline_at = datetime.utcnow() + timedelta(hours=VERIFICATION_HOURS)
     if body.result_summary or body.evidence:
         base = task.output_data if isinstance(task.output_data, dict) else {}
-        task.output_data = {**(base or {}), "result_summary": body.result_summary or "", "evidence": body.evidence or {}}
+        task.output_data = {
+            **(base or {}),
+            "result_summary": body.result_summary or "",
+            "evidence": body.evidence or {},
+            "verification_chain": {
+                "declaration": {
+                    "verification_method": ((task.input_data or {}).get("verification_method") if isinstance(task.input_data, dict) else "manual_review"),
+                    "verification_requirements": ((task.input_data or {}).get("verification_requirements") if isinstance(task.input_data, dict) else []),
+                },
+                "sandbox": preflight,
+                "cross": {"status": "pending_verification", "submitted_at": datetime.utcnow().isoformat() + "Z"},
+            },
+        }
     if escrow:
         base = task.output_data if isinstance(task.output_data, dict) else {}
         idx = int(escrow.get("current_index", 0) or 0)
         task.output_data = {**(base or {}), "escrow_submit_milestone_index": idx}
     db.commit()
+    _append_task_status_update_comment(
+        db,
+        task,
+        user_id=uid,
+        agent_id=task.agent_id,
+        content=f"任务已提交验收，截止时间：{iso_utc(task.verification_deadline_at)}",
+    )
     return {
         "message": "已提交验收，发布者需在 6 小时内确认，否则将自动完成并发奖",
         "task_id": task_id,
         "verification_deadline_at": iso_utc(task.verification_deadline_at),
+        "preflight": preflight,
     }
+
+
+@app.get("/preflight/check")
+def preflight_check(
+    context: str = "default",
+    current_user: dict = Depends(get_current_user),
+):
+    """Run pre-execution checks for a context. Requires login."""
+    _ = current_user
+    return run_preflight(context)
+
+
+@app.get("/runtime/circuit-breakers")
+def runtime_circuit_breakers(
+    current_user: dict = Depends(get_current_user),
+):
+    _ = current_user
+    return runtime_guard.snapshot()
+
+
+@app.post("/runtime/circuit-breakers/control")
+def runtime_circuit_breakers_control(
+    body: CircuitBreakerControlBody,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    uid = int(current_user["user_id"])
+    me = db.query(User).filter(User.id == uid).first()
+    if not me or not bool(getattr(me, "is_superuser", False)):
+        raise HTTPException(status_code=403, detail="仅管理员可操作熔断器")
+    host = (body.host or "").strip().lower()
+    if not host:
+        raise HTTPException(status_code=400, detail="host 不能为空")
+    action = (body.action or "").strip().lower()
+    if action == "reset":
+        runtime_guard.reset(host)
+    elif action in ("open", "half_open", "close"):
+        runtime_guard.set_state(host, "closed" if action == "close" else action)
+    else:
+        raise HTTPException(status_code=400, detail="action 仅支持 reset/open/half_open/close")
+    try:
+        db.add(SystemLog(
+            level="warning",
+            category="runtime_guard",
+            message="circuit_breaker_control",
+            user_id=uid,
+            extra={"host": host, "action": action},
+        ))
+        db.commit()
+    except Exception:
+        db.rollback()
+    return {"ok": True, "host": host, "action": action, "snapshot": runtime_guard.snapshot()}
+
+
+@app.get("/tasks/{task_id}/verification-chain")
+def get_task_verification_chain(
+    task_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    _ = current_user
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    extra = task.input_data if isinstance(task.input_data, dict) else {}
+    output = task.output_data if isinstance(task.output_data, dict) else {}
+    declaration = {
+        "verification_method": extra.get("verification_method") or "manual_review",
+        "verification_requirements": extra.get("verification_requirements") or [],
+    }
+    sandbox = run_preflight("verification_chain_view")
+    cross = {
+        "status": task.status,
+        "submitted_at": iso_utc(task.submitted_at) if getattr(task, "submitted_at", None) else None,
+        "verification_deadline_at": iso_utc(task.verification_deadline_at) if getattr(task, "verification_deadline_at", None) else None,
+        "rejection_reason": output.get("rejection_reason"),
+        "verification_record": output.get("verification_record"),
+        "has_escrow": bool(get_escrow(task)),
+    }
+    return {"task_id": task_id, "declaration": declaration, "sandbox": sandbox, "cross": cross}
 
 
 @app.post("/tasks/{task_id}/confirm")
@@ -1973,6 +2250,13 @@ def confirm_task(
     if task.status == "pending_verification" and escrow:
         info = apply_escrow_milestone_confirm(task, db, auto=False)
         db.commit()
+        _append_task_status_update_comment(
+            db,
+            task,
+            user_id=uid,
+            agent_id=task.agent_id,
+            content="发布方已确认当前里程碑，奖励已发放",
+        )
         msg = (
             "托管里程碑验收通过，奖励已发放"
             if not info.get("escrow_finished")
@@ -1997,6 +2281,13 @@ def confirm_task(
     else:
         raise HTTPException(status_code=400, detail="任务尚未进入待验收状态，请等待接取者提交完成")
     db.commit()
+    _append_task_status_update_comment(
+        db,
+        task,
+        user_id=uid,
+        agent_id=task.agent_id,
+        content="发布方已确认验收通过，任务完成",
+    )
     commission = int(reward_points * PLATFORM_COMMISSION_RATE) if reward_points else 0
     amount_to_executor = reward_points - commission if reward_points else 0
     try:
@@ -2047,6 +2338,13 @@ def reject_completion(
     base = task.output_data if isinstance(task.output_data, dict) else {}
     task.output_data = {**(base or {}), "rejection_reason": reason}
     db.commit()
+    _append_task_status_update_comment(
+        db,
+        task,
+        user_id=uid,
+        agent_id=task.agent_id,
+        content=f"发布方拒绝验收：{reason[:160]}",
+    )
     return {"message": "已拒绝，接取者可重新提交完成", "task_id": task_id}
 
 
