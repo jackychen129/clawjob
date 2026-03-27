@@ -322,13 +322,42 @@
               </div>
               <div v-if="auth.isLoggedIn && selectedTaskDetail.owner_id === auth.userId" class="detail-workflow-dag">
                 <h4 class="task-comments-title">Workflow DAG</h4>
-                <p class="hint">Fill nodes/edges JSON to plan and attach workflow dependencies.</p>
-                <textarea v-model="workflowNodesText" class="input memory-store-textarea" rows="2" placeholder='[101, 102]' />
-                <textarea v-model="workflowEdgesText" class="input memory-store-textarea" rows="3" placeholder='[{"from":101,"to":102}]' />
+                <p class="hint">可视化编辑节点与依赖关系（from -> to）。</p>
+                <div class="workflow-editor">
+                  <div class="workflow-editor__col">
+                    <div class="workflow-editor__head">
+                      <strong>节点</strong>
+                      <Button size="sm" type="button" variant="secondary" @click="addWorkflowNode">+ 节点</Button>
+                    </div>
+                    <div v-for="(nid, idx) in workflowNodes" :key="'n-' + idx" class="workflow-row">
+                      <input v-model.number="workflowNodes[idx]" type="number" min="1" class="input" />
+                      <Button size="sm" type="button" variant="ghost" @click="removeWorkflowNode(idx)">移除</Button>
+                    </div>
+                  </div>
+                  <div class="workflow-editor__col">
+                    <div class="workflow-editor__head">
+                      <strong>依赖边</strong>
+                      <Button size="sm" type="button" variant="secondary" @click="addWorkflowEdge">+ 依赖</Button>
+                    </div>
+                    <div v-for="(e, idx) in workflowEdges" :key="'e-' + idx" class="workflow-row workflow-row--edge">
+                      <select v-model.number="e.from" class="input select-input">
+                        <option :value="null">from</option>
+                        <option v-for="n in workflowNodeOptions" :key="'f-' + n" :value="n">{{ n }}</option>
+                      </select>
+                      <span class="mono">→</span>
+                      <select v-model.number="e.to" class="input select-input">
+                        <option :value="null">to</option>
+                        <option v-for="n in workflowNodeOptions" :key="'t-' + n" :value="n">{{ n }}</option>
+                      </select>
+                      <Button size="sm" type="button" variant="ghost" @click="removeWorkflowEdge(idx)">移除</Button>
+                    </div>
+                  </div>
+                </div>
+                <p v-if="workflowValidationError" class="error-msg">{{ workflowValidationError }}</p>
                 <div class="memory-search-row">
-                  <Button size="sm" type="button" variant="secondary" :disabled="workflowLoading" @click="planWorkflowNow">Plan</Button>
-                  <Button size="sm" type="button" :disabled="workflowLoading || !selectedTaskDetail" @click="attachWorkflowNow">Attach To Task</Button>
-                  <Button size="sm" type="button" variant="ghost" :disabled="workflowLoading || !selectedTaskDetail" @click="loadWorkflowNow">Refresh</Button>
+                  <Button size="sm" type="button" variant="secondary" :disabled="workflowLoading || !!workflowValidationError" @click="planWorkflowNow">规划校验</Button>
+                  <Button size="sm" type="button" :disabled="workflowLoading || !selectedTaskDetail || !!workflowValidationError" @click="attachWorkflowNow">绑定到任务</Button>
+                  <Button size="sm" type="button" variant="ghost" :disabled="workflowLoading || !selectedTaskDetail" @click="loadWorkflowNow">刷新</Button>
                 </div>
                 <pre v-if="workflowJson" class="account-json-pre">{{ workflowJson }}</pre>
               </div>
@@ -385,7 +414,7 @@
           </Button>
         </div>
               <div
-                v-if="selectedTaskDetail.status === 'pending_verification' && selectedTaskDetail.owner_id === auth.userId"
+                v-if="selectedTaskDetail && selectedTaskDetail.status === 'pending_verification' && selectedTaskDetail.owner_id === auth.userId"
                 class="task-verification-ops-hint"
               >
                 <p class="hint">
@@ -1041,8 +1070,8 @@ const verificationChainJson = ref('')
 const verificationChainData = ref<any>(null)
 const workflowLoading = ref(false)
 const workflowJson = ref('')
-const workflowNodesText = ref('[]')
-const workflowEdgesText = ref('[]')
+const workflowNodes = ref<number[]>([])
+const workflowEdges = ref<Array<{ from: number | null; to: number | null }>>([])
 const commentKind = ref<'message' | 'status_update'>('message')
 const commentAgentId = ref('')
 const skillProgress = ref<api.SkillNode[]>([])
@@ -1056,8 +1085,8 @@ function openTaskDetail(task: TaskListItem) {
   verificationChainJson.value = ''
   verificationChainData.value = null
   workflowJson.value = ''
-  workflowNodesText.value = `[${task.id}]`
-  workflowEdgesText.value = '[]'
+  workflowNodes.value = [task.id]
+  workflowEdges.value = []
   commentKind.value = 'message'
   commentAgentId.value = ''
   api.getTaskDetail(task.id).then((res) => {
@@ -1107,41 +1136,77 @@ function loadVerificationChain() {
     .finally(() => { verificationChainLoading.value = false })
 }
 
+const workflowNodeOptions = computed(() => {
+  const s = new Set<number>()
+  for (const n of workflowNodes.value) {
+    const v = Number(n)
+    if (Number.isInteger(v) && v > 0) s.add(v)
+  }
+  return Array.from(s.values()).sort((a, b) => a - b)
+})
+
+const workflowValidationError = computed(() => {
+  if (!selectedTaskDetail.value) return ''
+  const options = workflowNodeOptions.value
+  if (!options.length) return '至少需要 1 个有效节点'
+  if (!options.includes(selectedTaskDetail.value.id)) return '节点列表必须包含当前任务 ID'
+  for (const e of workflowEdges.value) {
+    if (e.from == null || e.to == null) return '依赖边必须同时选择 from 和 to'
+    if (e.from === e.to) return '依赖边不允许自环'
+    if (!options.includes(e.from) || !options.includes(e.to)) return '依赖边引用了不存在的节点'
+  }
+  return ''
+})
+
 function parseWorkflowInput() {
-  const nodes = JSON.parse(workflowNodesText.value) as number[]
-  const edges = JSON.parse(workflowEdgesText.value) as Array<{ from: number; to: number }>
+  const nodes = workflowNodeOptions.value
+  const edges = workflowEdges.value
+    .filter((e): e is { from: number; to: number } => e.from != null && e.to != null)
+    .map((e) => ({ from: Number(e.from), to: Number(e.to) }))
   return { nodes, edges }
+}
+
+function addWorkflowNode() {
+  const base = selectedTaskDetail.value?.id || 1
+  let candidate = base
+  const exists = new Set(workflowNodeOptions.value)
+  while (exists.has(candidate)) candidate += 1
+  workflowNodes.value = [...workflowNodes.value, candidate]
+}
+
+function removeWorkflowNode(idx: number) {
+  const removed = workflowNodes.value[idx]
+  workflowNodes.value.splice(idx, 1)
+  workflowEdges.value = workflowEdges.value.filter((e) => e.from !== removed && e.to !== removed)
+}
+
+function addWorkflowEdge() {
+  workflowEdges.value = [...workflowEdges.value, { from: null, to: null }]
+}
+
+function removeWorkflowEdge(idx: number) {
+  workflowEdges.value.splice(idx, 1)
 }
 
 function planWorkflowNow() {
   workflowLoading.value = true
   workflowJson.value = ''
-  try {
-    const body = parseWorkflowInput()
-    api.planWorkflow(body)
-      .then((res) => { workflowJson.value = JSON.stringify(res.data, null, 2) })
-      .catch((e: unknown) => { workflowJson.value = JSON.stringify({ error: String(e) }, null, 2) })
-      .finally(() => { workflowLoading.value = false })
-  } catch (e: unknown) {
-    workflowLoading.value = false
-    workflowJson.value = JSON.stringify({ error: `Invalid JSON: ${String(e)}` }, null, 2)
-  }
+  const body = parseWorkflowInput()
+  api.planWorkflow(body)
+    .then((res) => { workflowJson.value = JSON.stringify(res.data, null, 2) })
+    .catch((e: unknown) => { workflowJson.value = JSON.stringify({ error: String(e) }, null, 2) })
+    .finally(() => { workflowLoading.value = false })
 }
 
 function attachWorkflowNow() {
   if (!selectedTaskDetail.value) return
   workflowLoading.value = true
   workflowJson.value = ''
-  try {
-    const body = parseWorkflowInput()
-    api.attachTaskWorkflow(selectedTaskDetail.value.id, body)
-      .then((res) => { workflowJson.value = JSON.stringify(res.data, null, 2) })
-      .catch((e: unknown) => { workflowJson.value = JSON.stringify({ error: String(e) }, null, 2) })
-      .finally(() => { workflowLoading.value = false })
-  } catch (e: unknown) {
-    workflowLoading.value = false
-    workflowJson.value = JSON.stringify({ error: `Invalid JSON: ${String(e)}` }, null, 2)
-  }
+  const body = parseWorkflowInput()
+  api.attachTaskWorkflow(selectedTaskDetail.value.id, body)
+    .then((res) => { workflowJson.value = JSON.stringify(res.data, null, 2) })
+    .catch((e: unknown) => { workflowJson.value = JSON.stringify({ error: String(e) }, null, 2) })
+    .finally(() => { workflowLoading.value = false })
 }
 
 function loadWorkflowNow() {
@@ -1149,7 +1214,19 @@ function loadWorkflowNow() {
   workflowLoading.value = true
   workflowJson.value = ''
   api.getTaskWorkflow(selectedTaskDetail.value.id)
-    .then((res) => { workflowJson.value = JSON.stringify(res.data, null, 2) })
+    .then((res) => {
+      workflowJson.value = JSON.stringify(res.data, null, 2)
+      const dag = (res.data as any)?.workflow_dag
+      if (dag && Array.isArray(dag.nodes)) {
+        workflowNodes.value = dag.nodes.map((n: unknown) => Number(n)).filter((n: number) => Number.isInteger(n) && n > 0)
+      }
+      if (dag && Array.isArray(dag.edges)) {
+        workflowEdges.value = dag.edges.map((e: any) => ({
+          from: Number.isInteger(Number(e?.from)) ? Number(e.from) : null,
+          to: Number.isInteger(Number(e?.to)) ? Number(e.to) : null,
+        }))
+      }
+    })
     .catch((e: unknown) => { workflowJson.value = JSON.stringify({ error: String(e) }, null, 2) })
     .finally(() => { workflowLoading.value = false })
 }
@@ -1235,8 +1312,8 @@ function closeTaskDetail() {
   verificationChainJson.value = ''
   verificationChainData.value = null
   workflowJson.value = ''
-  workflowNodesText.value = '[]'
-  workflowEdgesText.value = '[]'
+  workflowNodes.value = []
+  workflowEdges.value = []
   commentKind.value = 'message'
   commentAgentId.value = ''
 }
@@ -1830,6 +1907,31 @@ watch(tab, (newTab) => {
   border-top: var(--border-hairline);
   display: grid;
   gap: var(--space-3);
+}
+.workflow-editor {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+.workflow-editor__col {
+  border: var(--border-hairline);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  display: grid;
+  gap: var(--space-2);
+}
+.workflow-editor__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.workflow-row {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+.workflow-row--edge .input {
+  min-width: 6.5rem;
 }
 .task-comment-a2a-opts { display: flex; flex-direction: column; gap: var(--space-3); margin-bottom: var(--space-2); }
 .task-comment-a2a-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
