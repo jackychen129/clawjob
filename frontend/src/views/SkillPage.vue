@@ -112,6 +112,63 @@
 
     <section class="skill-section card">
       <div class="card-content">
+        <h2 class="section-title">{{ t('skillPage.marketShowcaseTitle') }}</h2>
+        <p class="skill-section-desc">{{ t('skillPage.marketShowcaseDesc') }}</p>
+
+        <div class="skill-upload-guide">
+          <h3 class="section-title skill-upload-guide__title">{{ t('skillPage.uploadGuideTitle') }}</h3>
+          <p class="skill-note">{{ t('skillPage.uploadGuideDesc') }}</p>
+          <ol class="skill-steps">
+            <li>{{ t('skillPage.uploadGuideStep1') }}</li>
+            <li>{{ t('skillPage.uploadGuideStep2') }}</li>
+            <li>{{ t('skillPage.uploadGuideStep3') }}</li>
+          </ol>
+          <div class="skill-download-actions">
+            <Button as="a" :href="skillRepoUrl" target="_blank" rel="noopener noreferrer" variant="secondary">
+              {{ t('skillPage.openClawjobSkillRepo') }}
+            </Button>
+            <Button :as="RouterLink" to="/agents" variant="ghost">
+              {{ t('skillPage.goPublishFromAgent') }}
+            </Button>
+            <Button :as="RouterLink" to="/marketplace#section-skill-market" variant="ghost">
+              {{ t('skillPage.goSkillMarket') }}
+            </Button>
+          </div>
+        </div>
+
+        <div v-if="marketSkillsLoading" class="skill-note">{{ t('common.loading') || 'Loading...' }}</div>
+        <div v-else-if="marketSkills.length === 0" class="skill-note">{{ t('skillPage.marketShowcaseEmpty') }}</div>
+        <div v-else class="skill-market-grid">
+          <article v-for="item in marketSkills" :key="item.id" class="skill-market-card">
+            <div class="skill-market-card__head">
+              <h4 class="skill-market-card__title">{{ item.name }}</h4>
+              <span v-if="item.verified" class="skill-market-card__verified">✓</span>
+            </div>
+            <p v-if="item.description" class="skill-market-card__desc">{{ item.description }}</p>
+            <p class="skill-market-card__meta">
+              <span>Token: {{ item.skill_token }}</span>
+              <span>{{ t('playbook.tasksDone') || 'Tasks done' }}: {{ item.tasks_completed ?? 0 }}</span>
+            </p>
+            <div class="skill-market-card__actions">
+              <Button
+                v-if="item.download_skill_url"
+                as="a"
+                :href="item.download_skill_url"
+                target="_blank"
+                rel="noopener noreferrer"
+                size="sm"
+                variant="secondary"
+              >
+                {{ t('marketplace.downloadSkill') || 'Download Skill' }}
+              </Button>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="skill-section card">
+      <div class="card-content">
         <h2 class="section-title">{{ t('skillPage.installOtherTitle') }}</h2>
         <p class="skill-section-desc">{{ t('skillPage.installOtherDesc') }}</p>
         <p class="skill-note">{{ t('skillPage.installOtherNote') }}</p>
@@ -158,11 +215,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Button } from '../components/ui/button'
 import * as api from '../api'
+import type { SkillMarketItem } from '../api'
 import { safeT } from '../i18n'
 
 const _i18n = useI18n()
@@ -203,6 +261,8 @@ const copyOneClickDone = ref(false)
 const copyPublishSkillCmdDone = ref(false)
 const contractValidateLoading = ref(false)
 const contractValidateResult = ref('')
+const marketSkillsLoading = ref(false)
+const marketSkills = ref<SkillMarketItem[]>([])
 const contractSchemaText = ref('{\n  "type": "object",\n  "properties": {\n    "query": { "type": "string" },\n    "limit": { "type": "integer", "enum": [10, 20, 50] }\n  },\n  "required": ["query"]\n}')
 const failureSemanticsText = ref('{\n  "codes": [\n    { "code": "RETRYABLE_TIMEOUT", "retryable": true },\n    { "code": "INVALID_ARGUMENT", "retryable": false }\n  ]\n}')
 const samplePayloadText = ref('{\n  "query": "hello",\n  "limit": 20\n}')
@@ -273,6 +333,22 @@ async function runContractValidate() {
     contractValidateLoading.value = false
   }
 }
+
+async function loadMarketSkills() {
+  marketSkillsLoading.value = true
+  try {
+    const res = await api.fetchSkills({ sort: 'tasks_desc', limit: 6 })
+    marketSkills.value = Array.isArray(res.data?.items) ? res.data.items : []
+  } catch {
+    marketSkills.value = []
+  } finally {
+    marketSkillsLoading.value = false
+  }
+}
+
+onMounted(() => {
+  loadMarketSkills()
+})
 </script>
 
 <style scoped>
@@ -447,5 +523,61 @@ async function runContractValidate() {
 .skill-back-btn {
   text-decoration: none;
   display: inline-block;
+}
+.skill-upload-guide {
+  margin-bottom: var(--space-5);
+  padding: var(--space-4);
+  border: var(--border-hairline);
+  border-radius: var(--radius-lg);
+  background: rgba(var(--primary-rgb), 0.06);
+}
+.skill-upload-guide__title { margin: 0 0 var(--space-2); }
+.skill-market-grid {
+  margin-top: var(--space-4);
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+.skill-market-card {
+  border: var(--border-hairline);
+  border-radius: var(--radius-lg);
+  background: rgba(0,0,0,0.16);
+  padding: var(--space-3);
+}
+.skill-market-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.skill-market-card__title {
+  margin: 0;
+  font-size: var(--font-body);
+}
+.skill-market-card__verified {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.2rem;
+  height: 1.2rem;
+  border-radius: var(--radius-full);
+  background: linear-gradient(135deg, #eab308, #ca8a04);
+  color: #0a0a0b;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+.skill-market-card__desc {
+  margin: var(--space-2) 0;
+  color: var(--text-secondary);
+  font-size: var(--font-caption);
+  line-height: 1.45;
+}
+.skill-market-card__meta {
+  margin: 0 0 var(--space-2);
+  display: grid;
+  gap: var(--space-1);
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  word-break: break-all;
 }
 </style>

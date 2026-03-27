@@ -357,6 +357,45 @@ def _task_skills_for_xp(t: Task) -> List[str]:
     return list(dict.fromkeys(out))
 
 
+def _agent_skill_token(db: Session, agent_id: Optional[int]) -> str:
+    """Return skill_bound_token from agent config if available."""
+    if not agent_id:
+        return ""
+    a = db.query(Agent).filter(Agent.id == int(agent_id)).first()
+    if not a:
+        return ""
+    cfg = a.config or {}
+    return (cfg.get("skill_bound_token") or "").strip() if isinstance(cfg, dict) else ""
+
+
+def _task_related_skill(db: Session, t: Task, task_input: Optional[dict] = None) -> Optional[dict]:
+    """Resolve published skill linked to task by token."""
+    d = task_input if isinstance(task_input, dict) else (getattr(t, "input_data", None) or {})
+    if not isinstance(d, dict):
+        d = {}
+    token = (d.get("related_skill_token") or "").strip()
+    source = "manual"
+    if not token:
+        token = _agent_skill_token(db, getattr(t, "creator_agent_id", None))
+        source = "creator_agent"
+    if not token:
+        token = _agent_skill_token(db, getattr(t, "agent_id", None))
+        source = "assigned_agent"
+    if not token:
+        return None
+    ps = db.query(PublishedSkill).filter(PublishedSkill.skill_token == token).first()
+    if not ps:
+        return {"skill_token": token, "source": source}
+    return {
+        "skill_id": ps.id,
+        "skill_token": token,
+        "skill_name": ps.name,
+        "download_skill_url": ps.download_skill_url,
+        "verified": bool(ps.verified),
+        "source": source,
+    }
+
+
 def _level_from_xp(xp: int) -> dict:
     # NOTE: translated comment in English.
     level = 1
@@ -691,6 +730,40 @@ def get_skills_stats(db: Session = Depends(get_db)):
         "verified_count": verified_count,
         "tasks_completed": tasks_completed_total,
     }
+
+
+@app.get("/skills/{skill_id}/tasks")
+def get_skill_related_tasks(
+    skill_id: int,
+    db: Session = Depends(get_db),
+    skip: int = 0,
+    limit: int = 30,
+):
+    row = db.query(PublishedSkill).filter(PublishedSkill.id == skill_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Skill not found")
+    token = (row.skill_token or "").strip()
+    if not token:
+        return {"items": [], "total": 0, "skill_id": skill_id, "skill_token": ""}
+    tasks = db.query(Task).order_by(Task.created_at.desc()).all()
+    matched = []
+    for t in tasks:
+        rel = _task_related_skill(db, t)
+        if rel and (rel.get("skill_token") or "") == token:
+            owner = db.query(User).filter(User.id == t.owner_id).first()
+            matched.append({
+                "id": t.id,
+                "title": t.title,
+                "status": t.status,
+                "owner_id": t.owner_id,
+                "publisher_name": owner.username if owner else "",
+                "agent_id": t.agent_id,
+                "created_at": iso_utc(t.created_at),
+                **_task_extra(t, db),
+            })
+    total = len(matched)
+    items = matched[skip : skip + limit]
+    return {"items": items, "total": total, "skill_id": skill_id, "skill_token": token}
 
 
 @app.post("/skills/contract/validate")
@@ -1289,6 +1362,7 @@ class PublishTaskBody(BaseModel):
     discord_webhook_url: str = ""  # 可选：将任务推送到指定 Discord 频道，便于具备 Skill 的 Agent 发现并接取
     verification_method: str = "manual_review"  # manual_review | proof_link | checklist | hybrid
     verification_requirements: list = []  # 验收清单要求（用于 checklist / hybrid）
+    related_skill_token: str = ""  # 可选：将任务显式关联到某个已发布 Skill token
 
 
 def _push_task_to_discord(task: Task, webhook_url: str, frontend_url: str) -> None:
@@ -1520,7 +1594,7 @@ def _maybe_auto_confirm(task: Task, db: Session) -> None:
     db.commit()
 
 
-def _task_extra(t: Task) -> dict:
+def _task_extra(t: Task, db: Session) -> dict:
     """任务扩展字段：分类、要求、地点、时长、技能等"""
     d = getattr(t, "input_data", None) or {}
     if not isinstance(d, dict):
@@ -1534,6 +1608,7 @@ def _task_extra(t: Task) -> dict:
         "skills": d.get("skills") if isinstance(d.get("skills"), list) else None,
         "verification_method": _normalize_verification_method(d.get("verification_method") or "manual_review"),
         "verification_requirements": d.get("verification_requirements") if isinstance(d.get("verification_requirements"), list) else [],
+        "related_skill": _task_related_skill(db, t, d),
     }
     if esc:
         ms = esc.get("milestones") or []
@@ -1600,7 +1675,7 @@ def list_my_accepted_tasks(
             "submitted_at": iso_utc(getattr(t, "submitted_at", None)),
             "verification_deadline_at": iso_utc(getattr(t, "verification_deadline_at", None)),
             "created_at": iso_utc(t.created_at),
-            **_task_extra(t),
+            **_task_extra(t, db),
         })
     return {"tasks": out, "total": len(out)}
 
@@ -1641,7 +1716,7 @@ def list_agent_tasks(
             "submitted_at": iso_utc(getattr(t, "submitted_at", None)),
             "verification_deadline_at": iso_utc(getattr(t, "verification_deadline_at", None)),
             "created_at": iso_utc(t.created_at),
-            **_task_extra(t),
+            **_task_extra(t, db),
         })
     return {"tasks": out, "total": len(out), "agent_name": agent.name}
 
@@ -1736,7 +1811,7 @@ def list_tasks_public(
             "submitted_at": iso_utc(getattr(t, "submitted_at", None)),
             "verification_deadline_at": iso_utc(getattr(t, "verification_deadline_at", None)),
             "created_at": iso_utc(t.created_at),
-            **_task_extra(t),
+            **_task_extra(t, db),
         })
     return JSONResponse(
         content={"tasks": out, "total": total},
@@ -1783,7 +1858,7 @@ def list_my_created_tasks(
             "submitted_at": iso_utc(getattr(t, "submitted_at", None)),
             "verification_deadline_at": iso_utc(getattr(t, "verification_deadline_at", None)),
             "created_at": iso_utc(t.created_at),
-            **_task_extra(t),
+            **_task_extra(t, db),
         })
     total = db.query(Task).filter(Task.owner_id == uid).count()
     return {"tasks": out, "total": total}
@@ -1828,6 +1903,11 @@ def publish_task(
         extra["duration_estimate"] = (body.duration_estimate or "").strip()[:50]
     if getattr(body, "skills", None) and isinstance(body.skills, list):
         extra["skills"] = [str(s).strip()[:50] for s in body.skills if s][:20]
+    related_skill_token = (getattr(body, "related_skill_token", None) or "").strip()
+    if related_skill_token:
+        if not db.query(PublishedSkill).filter(PublishedSkill.skill_token == related_skill_token).first():
+            raise HTTPException(status_code=400, detail="related_skill_token 对应的 Skill 尚未发布")
+        extra["related_skill_token"] = related_skill_token
     verification_method = _normalize_verification_method(getattr(body, "verification_method", "manual_review"))
     verification_requirements = [
         str(x).strip()[:200]
@@ -1839,6 +1919,10 @@ def publish_task(
     extra["verification_method"] = verification_method
     if verification_requirements:
         extra["verification_requirements"] = verification_requirements
+    if not related_skill_token and creator_agent_id is not None:
+        creator_tok = _agent_skill_token(db, int(creator_agent_id))
+        if creator_tok:
+            extra["related_skill_token"] = creator_tok
     category = (getattr(body, "category", None) or "").strip()[:64] or None
     requirements = (getattr(body, "requirements", None) or "").strip() or None
     # NOTE: translated comment in English.
@@ -2485,7 +2569,7 @@ async def get_task_by_id(task_id: int, db: Session = Depends(get_db)):
         "verification_deadline_at": iso_utc(getattr(task, "verification_deadline_at", None)),
         "created_at": iso_utc(task.created_at),
         "output_data": task.output_data if isinstance(getattr(task, "output_data", None), dict) else None,
-        **_task_extra(task),
+        **_task_extra(task, db),
     }
 
 

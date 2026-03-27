@@ -44,6 +44,9 @@
                     <h3 class="task-row__title">{{ item.data!.title }}</h3>
                     <p class="task-row__desc">{{ (item.data!.description || t('common.noDescription')).slice(0, 120) }}{{ (item.data!.description || '').length > 120 ? '…' : '' }}</p>
                     <p class="task-row__meta">{{ t('task.publisher') }}：{{ item.data!.publisher_name }}<span v-if="item.data!.creator_agent_name"> · {{ t('task.publishedByAgent') }}：{{ item.data!.creator_agent_name }}</span><span v-if="item.data!.subscription_count != null"> · {{ item.data!.subscription_count }}{{ t('task.subscribers') }}</span></p>
+                    <p v-if="item.data!.related_skill?.skill_token" class="task-row__meta task-row__meta--skill">
+                      Skill: {{ item.data!.related_skill?.skill_name || item.data!.related_skill?.skill_token }}
+                    </p>
                     <div class="task-row__actions" @click.stop>
                       <Button size="sm" variant="ghost" type="button" class="task-row__btn" @click="openTaskDetail(item.data!)">{{ t('task.viewDetail') }}</Button>
                       <Button v-if="item.data!.status === 'open' && auth.isLoggedIn && myAgents.length" size="sm" :disabled="subscribeLoading === item.data!.id" class="task-row__btn task-row__btn--primary" @click="openSubscribeModal(item.data!)">{{ t('task.subscribe') }}</Button>
@@ -105,10 +108,13 @@
                   </div>
                   <h3 class="task-row__title">{{ item.data!.title }}</h3>
                   <p class="task-row__desc">{{ (item.data!.description || t('common.noDescription')).slice(0, 120) }}{{ (item.data!.description || '').length > 120 ? '…' : '' }}</p>
-                  <div v-if="item.data!.location || item.data!.duration_estimate || (getTaskSkills(item.data!).length)" class="task-row__tags">
+                  <div v-if="item.data!.location || item.data!.duration_estimate || (getTaskSkills(item.data!).length) || item.data!.related_skill?.skill_token" class="task-row__tags">
                     <span v-if="item.data!.location" class="task-tag task-tag--location">{{ item.data!.location }}</span>
                     <span v-if="item.data!.duration_estimate" class="task-tag task-tag--duration">{{ item.data!.duration_estimate }}</span>
                     <span v-for="s in getTaskSkills(item.data!)" :key="s" class="task-tag task-tag--skill">{{ s }}</span>
+                    <span v-if="item.data!.related_skill?.skill_token" class="task-tag task-tag--skill-related">
+                      Skill: {{ item.data!.related_skill?.skill_name || item.data!.related_skill?.skill_token }}
+                    </span>
                   </div>
                   <p class="task-row__meta">{{ t('task.publisher') }}：{{ item.data!.publisher_name }}<span v-if="item.data!.creator_agent_name"> · {{ t('task.publishedByAgent') }}：{{ item.data!.creator_agent_name }}</span> · {{ t('task.acceptor') || '接取者' }}：{{ item.data!.agent_name }}</p>
                   <div class="task-row__actions" @click.stop>
@@ -155,11 +161,26 @@
               <div class="detail-section">
                 <p class="detail-desc">{{ selectedTaskDetail.description || t('common.noDescription') }}</p>
               </div>
-              <dl class="detail-meta" v-if="selectedTaskDetail.category || selectedTaskDetail.requirements || selectedTaskDetail.duration_estimate || (getTaskSkills(selectedTaskDetail).length) || selectedTaskDetail.location || selectedTaskDetail.verification_method">
+              <dl class="detail-meta" v-if="selectedTaskDetail.category || selectedTaskDetail.requirements || selectedTaskDetail.duration_estimate || (getTaskSkills(selectedTaskDetail).length) || selectedTaskDetail.location || selectedTaskDetail.verification_method || selectedTaskDetail.related_skill?.skill_token">
                 <template v-if="selectedTaskDetail.category"><dt>{{ t('task.detailCategory') }}</dt><dd>{{ taskCategoryLabel(selectedTaskDetail.category) }}</dd></template>
                 <template v-if="selectedTaskDetail.requirements"><dt>{{ t('task.detailRequirements') }}</dt><dd class="detail-requirements">{{ selectedTaskDetail.requirements }}</dd></template>
                 <template v-if="selectedTaskDetail.duration_estimate"><dt>{{ t('task.detailDuration') }}</dt><dd>{{ selectedTaskDetail.duration_estimate }}</dd></template>
                 <template v-if="getTaskSkills(selectedTaskDetail).length"><dt>{{ t('task.detailSkills') }}</dt><dd><span v-for="s in getTaskSkills(selectedTaskDetail)" :key="s" class="task-tag task-tag--skill">{{ s }}</span></dd></template>
+                <template v-if="selectedTaskDetail.related_skill?.skill_token">
+                  <dt>关联 Skill</dt>
+                  <dd>
+                    <a
+                      v-if="selectedTaskDetail.related_skill?.download_skill_url"
+                      :href="selectedTaskDetail.related_skill.download_skill_url"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="detail-related-skill-link"
+                    >
+                      {{ selectedTaskDetail.related_skill?.skill_name || selectedTaskDetail.related_skill?.skill_token }}
+                    </a>
+                    <span v-else class="mono">{{ selectedTaskDetail.related_skill?.skill_name || selectedTaskDetail.related_skill?.skill_token }}</span>
+                  </dd>
+                </template>
                 <template v-if="selectedTaskDetail.location"><dt>{{ t('task.detailLocation') }}</dt><dd>{{ selectedTaskDetail.location }}</dd></template>
                 <template v-if="selectedTaskDetail.verification_method"><dt>{{ t('task.verificationMethod') || '验收方式' }}</dt><dd class="mono">{{ selectedTaskDetail.verification_method }}</dd></template>
                 <template v-if="selectedTaskDetail.verification_requirements?.length"><dt>{{ t('task.verificationRequirements') || '验收清单' }}</dt><dd><span v-for="(r, idx) in selectedTaskDetail.verification_requirements" :key="idx" class="task-tag">{{ r }}</span></dd></template>
@@ -508,6 +529,16 @@
             <label class="form-label">{{ t('task.skills') || '技能标签' }}</label>
             <Input v-model="publishForm.skills_text" type="text" :placeholder="t('task.skillsPlaceholder') || '逗号分隔'" />
           </div>
+          <div class="form-group" v-if="auth.isLoggedIn && myPublishedSkills.length">
+            <label class="form-label" for="publish-related-skill">关联已上传 Skill（可选）</label>
+            <select id="publish-related-skill" v-model="publishForm.related_skill_token" class="input select-input">
+              <option value="">自动（按发布 Agent 绑定 skill token）</option>
+              <option v-for="s in myPublishedSkills" :key="s.id" :value="s.skill_token">
+                {{ s.name }} · {{ s.skill_token }}
+              </option>
+            </select>
+            <p class="form-hint">关联后，该任务会在 Skill 市场详情中可见。</p>
+          </div>
           <div class="create-task-step">
             <span class="create-task-step-label">{{ t('taskManage.stepReward') || '3. 奖励与回调' }}</span>
           </div>
@@ -777,6 +808,7 @@ const publishForm = reactive<{
   location: string
   duration_estimate: string
   skills_text: string
+  related_skill_token: string
   verification_method: 'manual_review' | 'proof_link' | 'checklist' | 'hybrid'
   verification_requirements_text: string
   escrow_enabled: boolean
@@ -794,6 +826,7 @@ const publishForm = reactive<{
   location: '',
   duration_estimate: '',
   skills_text: '',
+  related_skill_token: '',
   verification_method: 'manual_review',
   verification_requirements_text: '',
   escrow_enabled: false,
@@ -818,6 +851,7 @@ const publishLoading = ref(false)
 const publishError = ref('')
 const candidates = ref<Array<{ id: number; name: string; owner_name: string; points?: number }>>([])
 const myAgents = ref<Array<{ id: number; name: string; agent_type: string }>>([])
+const myPublishedSkills = ref<Array<{ id: number; name: string; skill_token: string }>>([])
 const accountCredits = ref(0)
 const subscribeTaskItem = ref<{ id: number; title: string } | null>(null)
 const subscribeLoading = ref<number | null>(null)
@@ -878,6 +912,7 @@ function doLogin() {
     showAuthModal.value = false
     loadAccountMe()
     loadMyAgents()
+    loadMyPublishedSkills()
     loadTasks()
     if (tab.value === 'mine') loadMyTasks()
   }).catch((e) => { authError.value = e.response?.data?.detail || t('common.loginFailed') }).finally(() => { authLoading.value = false })
@@ -890,6 +925,7 @@ function doRegister() {
     showAuthModal.value = false
     loadAccountMe()
     loadMyAgents()
+    loadMyPublishedSkills()
     loadTasks()
   }).catch((e) => { authError.value = e.response?.data?.detail || t('common.registerFailed') }).finally(() => { authLoading.value = false })
 }
@@ -920,6 +956,16 @@ function loadMyAgents() {
   api.fetchMyAgents().then((res) => {
     myAgents.value = res.data.agents || []
   }).catch(() => { myAgents.value = [] })
+}
+
+function loadMyPublishedSkills() {
+  if (!auth.isLoggedIn || auth.userId == null) return
+  api.fetchSkills({ sort: 'created_desc', limit: 200 })
+    .then((res) => {
+      const items = (res.data?.items || []) as Array<{ id: number; name: string; skill_token: string; publisher_user_id?: number | null }>
+      myPublishedSkills.value = items.filter((x) => Number(x.publisher_user_id) === Number(auth.userId))
+    })
+    .catch(() => { myPublishedSkills.value = [] })
 }
 
 function loadAccountMe() {
@@ -1342,6 +1388,7 @@ function getTaskDraft(): typeof publishForm | null {
       location: String(o.location ?? ''),
       duration_estimate: String(o.duration_estimate ?? ''),
       skills_text: String(o.skills_text ?? ''),
+      related_skill_token: String(o.related_skill_token ?? ''),
       verification_method: (String(o.verification_method ?? 'manual_review') as any),
       verification_requirements_text: String(o.verification_requirements_text ?? ''),
       escrow_enabled: Boolean(o.escrow_enabled),
@@ -1380,6 +1427,7 @@ function saveDraft() {
       location: publishForm.location,
       duration_estimate: publishForm.duration_estimate,
       skills_text: publishForm.skills_text,
+      related_skill_token: publishForm.related_skill_token,
       verification_method: publishForm.verification_method,
       verification_requirements_text: publishForm.verification_requirements_text,
       escrow_enabled: publishForm.escrow_enabled,
@@ -1409,6 +1457,7 @@ function restoreDraft() {
   publishForm.location = d.location
   publishForm.duration_estimate = d.duration_estimate
   publishForm.skills_text = d.skills_text
+  publishForm.related_skill_token = d.related_skill_token || ''
   publishForm.verification_method = (d.verification_method as any) || 'manual_review'
   publishForm.verification_requirements_text = d.verification_requirements_text || ''
   publishForm.escrow_enabled = d.escrow_enabled
@@ -1493,6 +1542,7 @@ function doPublish() {
     location: publishForm.location.trim() || undefined,
     duration_estimate: publishForm.duration_estimate.trim() || undefined,
     skills,
+    related_skill_token: publishForm.related_skill_token.trim() || undefined,
     verification_method: publishForm.verification_method,
     verification_requirements: publishForm.verification_requirements_text
       .split('\n')
@@ -1515,6 +1565,7 @@ function doPublish() {
     publishForm.location = ''
     publishForm.duration_estimate = ''
     publishForm.skills_text = ''
+    publishForm.related_skill_token = ''
     publishForm.verification_method = 'manual_review'
     publishForm.verification_requirements_text = ''
     publishForm.escrow_enabled = false
@@ -1757,6 +1808,7 @@ onMounted(() => {
   loadCandidates()
   if (auth.isLoggedIn) {
     loadMyAgents()
+    loadMyPublishedSkills()
     loadAccountMe()
     refreshAdminFlag()
   }
@@ -1777,11 +1829,13 @@ watch(
 watch(() => auth.isLoggedIn, (loggedIn) => {
   if (loggedIn) {
     loadMyAgents()
+    loadMyPublishedSkills()
     loadAccountMe()
     refreshAdminFlag()
     if (tab.value === 'mine') loadMyTasks()
   } else {
     isAdmin.value = false
+    myPublishedSkills.value = []
   }
 })
 
@@ -2082,12 +2136,14 @@ watch(tab, (newTab) => {
 .task-tag--location { border-color: rgba(var(--primary-rgb), 0.3); color: var(--secondary-color); }
 .task-tag--duration { border-color: rgba(59, 130, 246, 0.35); color: rgba(191, 219, 254, 0.9); }
 .task-tag--skill { border-color: rgba(168, 85, 247, 0.35); color: rgba(233, 213, 255, 0.95); }
+.task-tag--skill-related { border-color: rgba(34, 197, 94, 0.38); color: rgba(187, 247, 208, 0.95); }
 .task-row__meta {
   font-size: var(--font-caption);
   color: var(--text-tertiary);
   line-height: 1.5;
   margin: 0 0 var(--space-4);
 }
+.task-row__meta--skill { color: rgba(187, 247, 208, 0.86); }
 .task-row__actions {
   display: flex;
   flex-wrap: wrap;
@@ -2247,6 +2303,8 @@ watch(tab, (newTab) => {
 }
 .detail-meta dt:first-child { margin-top: 0; }
 .detail-meta dd { margin: 0; color: rgba(255,255,255,0.82); }
+.detail-related-skill-link { color: var(--primary-color); text-decoration: none; }
+.detail-related-skill-link:hover { text-decoration: underline; }
 .detail-requirements { white-space: pre-wrap; word-break: break-word; }
 .detail-skill-progress { margin: var(--space-4) 0; display: flex; flex-direction: column; gap: var(--space-2); }
 .detail-skill-progress__row { border: var(--border-hairline); border-radius: var(--radius-md); padding: var(--space-2) var(--space-3); background: rgba(255,255,255,0.02); }

@@ -228,6 +228,14 @@ export interface TaskListItem {
   skills?: string[]
   verification_method?: 'manual_review' | 'proof_link' | 'checklist' | 'hybrid' | string
   verification_requirements?: string[]
+  related_skill?: {
+    skill_id?: number
+    skill_token: string
+    skill_name?: string
+    download_skill_url?: string
+    verified?: boolean
+    source?: 'manual' | 'creator_agent' | 'assigned_agent' | string
+  } | null
   output_data?: { result_summary?: string; evidence?: Record<string, unknown>; rejection_reason?: string }
   verification_record?: {
     mode?: string
@@ -284,11 +292,19 @@ export function publishTask(data: {
   skills?: string[]
   verification_method?: 'manual_review' | 'proof_link' | 'checklist' | 'hybrid'
   verification_requirements?: string[]
+  related_skill_token?: string
   discord_webhook_url?: string
   /* NOTE: translated comment in English. */
   escrow_milestones?: Array<{ title: string; weight: number; acceptance_criteria?: string }>
 }) {
   return api.post('/tasks', data)
+}
+
+export function fetchSkillRelatedTasks(skillId: number, params?: { skip?: number; limit?: number }) {
+  return api.get<{ items: TaskListItem[]; total: number; skill_id: number; skill_token: string }>(
+    `/skills/${skillId}/tasks`,
+    { params }
+  )
 }
 
 // NOTE: translated comment in English.

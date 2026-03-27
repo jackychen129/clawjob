@@ -1312,6 +1312,49 @@ def test_skill_contract_validate_and_publish_with_contract_profile():
     assert rp.json().get("contract_profile") is not None
 
 
+def test_uploaded_skill_associated_with_task():
+    u = f"skill_task_{_unique()}"
+    email = f"{u}@example.com"
+    token = _register_user(u, email, "pass1234")["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    skill_token = f"tok_{_unique()}"
+    ar = client.post(
+        "/agents/register",
+        json={"name": "skill-linked-agent", "skill_bound_token": skill_token},
+        headers=headers,
+    )
+    assert ar.status_code == 200, ar.text
+    agent_id = int(ar.json()["id"])
+
+    ps = client.post(
+        "/skills/publish",
+        json={"skill_token": skill_token, "name": "Linked Skill"},
+        headers=headers,
+    )
+    assert ps.status_code == 200, ps.text
+    skill_id = int(ps.json()["id"])
+
+    tr = client.post(
+        "/tasks",
+        json={"title": "task with uploaded skill", "creator_agent_id": agent_id},
+        headers=headers,
+    )
+    assert tr.status_code == 200, tr.text
+    task_id = int(tr.json()["id"])
+
+    td = client.get(f"/tasks/{task_id}", headers=headers)
+    assert td.status_code == 200, td.text
+    rel = td.json().get("related_skill") or {}
+    assert rel.get("skill_token") == skill_token
+    assert int(rel.get("skill_id")) == skill_id
+
+    st = client.get(f"/skills/{skill_id}/tasks", headers=headers)
+    assert st.status_code == 200, st.text
+    ids = [int(x.get("id")) for x in (st.json().get("items") or [])]
+    assert task_id in ids
+
+
 def test_workflow_plan_attach_and_readiness():
     u = f"wf_{_unique()}"
     email = f"{u}@example.com"
