@@ -162,6 +162,26 @@
                     </li>
                   </ul>
                   <p v-if="!(agentTasksMap[a.id] || []).length" class="agent-card__detail-empty">{{ t('agentManage.noTasks') || '暂无接取任务' }}</p>
+
+                  <div v-if="a.has_skill_token" class="agent-skill-box">
+                    <div class="agent-skill-box__head">
+                      <span class="agent-skill-box__title">{{ t('agentManage.agentSkillTitle') || 'Agent Skill' }}</span>
+                      <span class="agent-skill-box__token mono">{{ skillBoundTokenFromAgent(a) || '-' }}</span>
+                    </div>
+                    <p class="hint agent-skill-box__hint">
+                      {{ t('agentManage.agentSkillHint') || 'Bind a skill token to link this Agent to a Skill package. You can package SKILL.md/reference.md as a ZIP, upload it (e.g. GitHub Releases), and then publish to the marketplace.' }}
+                    </p>
+                    <div class="agent-skill-box__actions">
+                      <Button :as="RouterLink" to="/skill" size="sm" variant="secondary">{{ t('agentManage.openSkillGuide') || 'Skill packaging guide' }}</Button>
+                      <Button v-if="a.has_skill_token" size="sm" variant="ghost" type="button" @click="openSkillPublishModal(a)">{{ t('agentManage.publishSkillToMarket') || 'Publish Skill to marketplace' }}</Button>
+                    </div>
+                    <div v-if="agentSkillsLoading === a.id" class="agent-skill-box__loading"><div class="spinner" /></div>
+                    <div v-else-if="(agentSkillsMap[a.id] || []).length" class="agent-skill-box__tags">
+                      <span v-for="s in (agentSkillsMap[a.id] || [])" :key="s.name" class="task-tag task-tag--skill mono">
+                        {{ s.name }} · Lv {{ s.level }}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </Transition>
             </article>
@@ -311,6 +331,8 @@ const agentError = ref('')
 const expandedAgent = ref<number | null>(null)
 const agentTasksMap = ref<Record<number, Array<{ id: number; title: string; status: string; publisher_name: string }>>>({})
 const agentTasksLoading = ref<number | null>(null)
+const agentSkillsMap = ref<Record<number, api.SkillNode[]>>({})
+const agentSkillsLoading = ref<number | null>(null)
 const justRegisteredAgent = ref<number | null>(null)
 const showPublishModal = ref(false)
 const publishAgent = ref<{ id: number; name: string; description: string } | null>(null)
@@ -369,6 +391,7 @@ function toggleAgent(agentId: number) {
   }
   expandedAgent.value = agentId
   loadAgentTasks(agentId)
+  loadAgentSkills(agentId)
 }
 
 function loadAgentTasks(agentId: number) {
@@ -388,6 +411,20 @@ function loadMyAgents() {
   api.fetchMyAgents().then((res) => {
     myAgents.value = res.data.agents || []
   }).catch(() => { myAgents.value = [] }).finally(() => { agentsLoading.value = false })
+}
+
+function loadAgentSkills(agentId: number) {
+  agentSkillsLoading.value = agentId
+  api.fetchAgentSkills(agentId)
+    .then((res) => {
+      agentSkillsMap.value = { ...agentSkillsMap.value, [agentId]: res.data.items || [] }
+    })
+    .catch(() => {
+      agentSkillsMap.value = { ...agentSkillsMap.value, [agentId]: [] }
+    })
+    .finally(() => {
+      agentSkillsLoading.value = null
+    })
 }
 
 function doRegisterAgent() {
@@ -609,6 +646,21 @@ function confirmUnpublishTemplate(a: AgentItem) {
 .form-inline .ui-button { flex-shrink: 0; }
 .form-hint { font-size: var(--font-caption); color: var(--text-secondary); margin: var(--space-2) 0 0; line-height: 1.4; }
 .register-requirement-hint { margin-top: var(--space-2); }
+
+.agent-skill-box {
+  margin-top: var(--space-5);
+  padding: var(--space-4);
+  border: var(--border-hairline);
+  border-radius: var(--radius-lg);
+  background: rgba(var(--primary-rgb), 0.05);
+}
+.agent-skill-box__head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); justify-content: space-between; }
+.agent-skill-box__title { font-weight: 650; color: var(--text-primary); font-size: var(--font-caption); }
+.agent-skill-box__token { color: var(--text-secondary); font-size: 0.75rem; }
+.agent-skill-box__hint { margin-top: var(--space-2); }
+.agent-skill-box__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3); }
+.agent-skill-box__tags { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3); }
+.agent-skill-box__loading { margin-top: var(--space-3); }
 
 .onboarding-card--glass { border: var(--border-hairline); border-radius: var(--radius-xl); border-color: rgba(var(--primary-rgb), 0.25); margin-bottom: var(--space-6); }
 .onboarding-card--glass .card-content { padding: var(--space-6); }

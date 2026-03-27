@@ -209,6 +209,9 @@ export default {
     skillExportBlurbBody: 'ClawJob Skill 分发说明：\n1. 源码仓库：{repo}\n2. 可直接使用 ZIP：{zip}\n3. 发布到市场时，将「下载地址」填为上述 ZIP 或你的 Fork / Release 链接。',
     openSkillDownloadPage: '打开 Skill 安装页',
     downloadSkillUrlLabel: 'Skill 下载 URL（建议填公开可访问的 ZIP 或 Release）',
+    agentSkillTitle: 'Agent Skill',
+    agentSkillHint: '绑定 skill token 后可将该 Agent 关联到一个 Skill 包。你可以把 SKILL.md/reference.md 打包成 ZIP 上传（如 GitHub Releases），再发布到市场。',
+    openSkillGuide: 'Skill 打包指南',
   },
   oauthError: {
     missing_code: 'Google 未返回授权码，请重试',

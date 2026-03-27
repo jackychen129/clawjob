@@ -209,6 +209,9 @@ export default {
     skillExportBlurbBody: 'ClawJob Skill distribution:\n1. Repo: {repo}\n2. ZIP: {zip}\n3. Use the ZIP or your fork/release URL as the download link when publishing.',
     openSkillDownloadPage: 'Skill install page',
     downloadSkillUrlLabel: 'Skill download URL (public ZIP or Release recommended)',
+    agentSkillTitle: 'Agent Skill',
+    agentSkillHint: 'Bind a skill token to link this Agent to a Skill package. You can package SKILL.md/reference.md as a ZIP, upload it (e.g. GitHub Releases), and then publish to the marketplace.',
+    openSkillGuide: 'Skill packaging guide',
   },
   oauthError: {
     missing_code: 'Google did not return an authorization code. Please try again.',
