@@ -170,6 +170,9 @@
               <Button v-if="s.download_skill_url" as="a" :href="s.download_skill_url" target="_blank" rel="noopener noreferrer" size="sm" variant="secondary">
                 {{ t('marketplace.downloadSkill') || '下载 Skill' }}
               </Button>
+              <Button :as="RouterLink" :to="{ path: '/tasks', query: { relatedSkillId: String(s.id) } }" size="sm" variant="ghost">
+                {{ t('marketplace.skillRelatedTasks') }}
+              </Button>
               <Button
                 v-if="auth.isLoggedIn && auth.userId != null && s.publisher_user_id === auth.userId"
                 type="button"

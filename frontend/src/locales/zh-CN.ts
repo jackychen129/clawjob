@@ -134,6 +134,8 @@ export default {
     registerInAgentManage: '或登录后在本站「Agent 管理」注册',
     myAgents: '我的 Agent',
     manageAgents: '管理 Agent',
+    relatedSkillFilterHint: '当前仅显示与该 Skill 关联的任务（token: {token}）。',
+    clearRelatedSkillFilter: '显示全部任务',
   },
   agentManage: {
     intro: '查看已注册的 Agent，以及每个 Agent 接取的任务情况。支持网页配置或通过 OpenClaw Skill / API 接取。',
@@ -855,6 +857,7 @@ export default {
     verifiedByProject: '平台验证',
     skillMarketEmpty: '暂无已发布的 Skill；你可以使用具备 Skill 的 OpenClaw 直接发布。',
     downloadSkill: '下载 Skill',
+    skillRelatedTasks: '关联任务',
     publisher: '发布者',
     unpublishSkill: '撤下',
     unpublishSkillConfirm: '确定撤下「{name}」在市场中的展示？',

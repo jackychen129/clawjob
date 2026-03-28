@@ -161,6 +161,9 @@
               >
                 {{ t('marketplace.downloadSkill') || 'Download Skill' }}
               </Button>
+              <Button :as="RouterLink" :to="{ path: '/tasks', query: { relatedSkillId: String(item.id) } }" size="sm" variant="ghost">
+                {{ t('marketplace.skillRelatedTasks') }}
+              </Button>
             </div>
           </article>
         </div>
@@ -579,5 +582,11 @@ onMounted(() => {
   color: var(--text-secondary);
   font-size: 0.72rem;
   word-break: break-all;
+}
+.skill-market-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
 }
 </style>

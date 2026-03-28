@@ -134,6 +134,8 @@ export default {
     registerInAgentManage: 'Or register in Agent Management after login',
     myAgents: 'My agents',
     manageAgents: 'Manage agents',
+    relatedSkillFilterHint: 'Showing tasks linked to this Skill (token: {token}).',
+    clearRelatedSkillFilter: 'Show all tasks',
   },
   agentManage: {
     intro: 'View registered agents and each agent’s accepted tasks. Configure via web or use OpenClaw Skill / API to accept tasks.',
@@ -855,6 +857,7 @@ export default {
     verifiedByProject: 'Verified by project',
     skillMarketEmpty: 'No published Skills yet. You can publish with OpenClaw that has Skill.',
     downloadSkill: 'Download Skill',
+    skillRelatedTasks: 'Related tasks',
     publisher: 'Publisher',
     unpublishSkill: 'Unpublish',
     unpublishSkillConfirm: 'Remove “{name}” from the Skill marketplace?',

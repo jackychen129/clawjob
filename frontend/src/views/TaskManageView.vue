@@ -9,6 +9,14 @@
             <button type="button" class="task-tab" :class="{ active: tab === 'available' }" @click="tab = 'available'">{{ t('taskManage.available') || '可接取任务' }}</button>
             <button type="button" class="task-tab" :class="{ active: tab === 'mine' }" @click="tab = 'mine'">{{ t('taskManage.myAccepted') || '我接取的任务' }}</button>
           </div>
+          <div v-if="tab === 'available' && relatedSkillFilter" class="related-skill-banner">
+            <p class="related-skill-banner__text">
+              {{ t('taskManage.relatedSkillFilterHint', { token: relatedSkillFilter.token || '—' }) }}
+            </p>
+            <Button size="sm" type="button" variant="secondary" @click="clearRelatedSkillFilter">
+              {{ t('taskManage.clearRelatedSkillFilter') || '显示全部任务' }}
+            </Button>
+          </div>
           <!-- NOTE: translated comment in English. -->
           <template v-if="tab === 'available'">
               <div class="task-filter-row">
@@ -885,6 +893,7 @@ const rejectReasonTemplates = [
 const confirmTaskId = ref<number | null>(null)
 const confirmForm = reactive({ verification_mode: 'manual_review', verification_note: '' })
 const categoryFilter = ref('')
+const relatedSkillFilter = ref<{ id: number; token: string } | null>(null)
 const categoryFilterOptions = [
   { value: 'development', labelKey: 'task.categoryDevelopment' },
   { value: 'design', labelKey: 'task.categoryDesign' },
@@ -931,10 +940,46 @@ function doRegister() {
 }
 
 function loadTasks() {
+  if (route.query.relatedSkillId) {
+    applyRelatedSkillFromQuery()
+    return
+  }
   tasksLoading.value = true
   api.fetchTasks().then((res) => {
     tasks.value = (res.data as { tasks: TaskListItem[] }).tasks || []
   }).catch(() => { tasks.value = [] }).finally(() => { tasksLoading.value = false })
+}
+
+function applyRelatedSkillFromQuery() {
+  const raw = route.query.relatedSkillId
+  const id = raw != null && raw !== '' ? Number(Array.isArray(raw) ? raw[0] : raw) : NaN
+  if (!Number.isInteger(id) || id <= 0) {
+    relatedSkillFilter.value = null
+    const q = { ...route.query } as Record<string, string | string[] | undefined>
+    if (q.relatedSkillId != null && q.relatedSkillId !== '') {
+      delete q.relatedSkillId
+      router.replace({ path: '/tasks', query: q })
+    }
+    return
+  }
+  tab.value = 'available'
+  tasksLoading.value = true
+  api.fetchSkillRelatedTasks(id, { limit: 200 })
+    .then((res) => {
+      relatedSkillFilter.value = { id, token: res.data.skill_token || '' }
+      tasks.value = res.data.items || []
+    })
+    .catch(() => {
+      relatedSkillFilter.value = null
+      tasks.value = []
+    })
+    .finally(() => { tasksLoading.value = false })
+}
+
+function clearRelatedSkillFilter() {
+  const q = { ...route.query } as Record<string, string | string[] | undefined>
+  delete q.relatedSkillId
+  router.replace({ path: '/tasks', query: q })
 }
 
 function loadMyTasks() {
@@ -1804,7 +1849,6 @@ function applySwarmFromQuery() {
 }
 
 onMounted(() => {
-  loadTasks()
   loadCandidates()
   if (auth.isLoggedIn) {
     loadMyAgents()
@@ -1813,6 +1857,18 @@ onMounted(() => {
     refreshAdminFlag()
   }
 })
+
+watch(
+  () => String(route.query.relatedSkillId ?? ''),
+  (v) => {
+    if (v) applyRelatedSkillFromQuery()
+    else {
+      relatedSkillFilter.value = null
+      loadTasks()
+    }
+  },
+  { immediate: true }
+)
 
 watch(
   () => [route.query.publishAs, myAgents.value.length] as const,
@@ -2240,6 +2296,24 @@ watch(tab, (newTab) => {
   border-color: rgba(var(--primary-rgb), 0.2);
   color: var(--text-primary);
   box-shadow: 0 1px 0 rgba(0,0,0,0.06), 0 0 0 1px rgba(var(--primary-rgb), 0.12) inset;
+}
+.related-skill-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(34, 197, 94, 0.28);
+  background: rgba(34, 197, 94, 0.08);
+}
+.related-skill-banner__text {
+  margin: 0;
+  font-size: var(--font-caption);
+  color: var(--text-secondary);
+  line-height: 1.5;
 }
 .task-filter-row { margin-bottom: var(--space-4); }
 .task-filter-select { max-width: 200px; border-radius: var(--radius-md); border: var(--border-hairline); padding: var(--space-2) var(--space-3); font-size: var(--font-body); }
