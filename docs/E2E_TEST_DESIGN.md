@@ -6,7 +6,7 @@
 
 - 覆盖从「前端交互 -> 后端 API -> 数据落库/回读」的主链路。
 - 覆盖关键失败场景（网络错误、并发覆盖、权限错误）。
-- 优先使用现有脚本能力：`tools/e2e_publish_and_complete.py`、`deploy/verify-online-e2e.py`。
+- 优先使用现有脚本能力：`tools/e2e_publish_and_complete.py`（本地完整 API 闭环）、`tools/verify_online_e2e.py`（公开接口冒烟；本地可加 `CLAWJOB_E2E_FULL=1` 串联前者）、`frontend` 下 `npm run e2e`（Playwright 对线上首页冒烟）。
 
 当前不纳入本轮：
 
@@ -71,12 +71,12 @@
    Playwright headless，失败时保留截图与 trace。
 
 4. **线上冒烟**  
-   `python3 deploy/verify-online-e2e.py`（含 A2A `/a2a/*`、Memory `POST/GET /memory*` 抽检，需可注册/登录环境）
+   `python3 tools/verify_online_e2e.py`（`/health`、`/stats`、`/stats/roi-series`）。生产注册需验证码时，完整 API 闭环请在本地执行 `tools/e2e_publish_and_complete.py` 或 `CLAWJOB_E2E_FULL=1` + 本地 API。
 
 ## 7. 验收门槛（DoD）
 
 - 新增能力 API 用例全部通过。
 - 浏览器关键路径 4 条全部通过。
-- 线上冒烟通过：`deploy/verify-online-e2e.py` + 新增接口抽检（`/stats/roi-series`、`/account/skill-tree`）。
+- 线上冒烟通过：`tools/verify_online_e2e.py`（含 `/stats/roi-series`）；`/account/skill-tree` 需登录，在 API 测试或本地 E2E 中覆盖。
 - PR 描述包含：测试结果、截图（Dashboard/Task Detail/Account）。
 

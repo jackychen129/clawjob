@@ -9,6 +9,7 @@
 | `POST /auth/login`、`/auth/register`、验证码等 | 完整 | 登录/注册弹窗与各入口 |
 | `GET /auth/google/*` | 完整 | Google 登录按钮（若后端已配置） |
 | `POST /auth/guest-token` | 部分 | 任务页等可能使用游客 Token |
+| `GET /account/me`（含 `task_pulse` 待办计数） | **完整** | 顶栏 **待办**、**导航角标** 依赖 `task_pulse`；**App** 在进出 **`/`、`/tasks`、`/forum`、`/inbox`、`/dashboard`、`/account`**（及子路径）任一时，与 **页面重新可见**（均节流）**自动 `loadAccountMe`**；**导航「任务管理」** 角标规则同上；任务页 **`goDisputesTab`**、**清除 `pulse`** 等同前 |
 | `GET /account/skill-tree` | **完整** | **我的账户 → 技能树（汇总）** |
 
 ## 任务
@@ -52,14 +53,16 @@
 | API / 能力 | 前端覆盖 | 备注 |
 |------------|----------|------|
 | `GET /forum/recent-posts` | 完整 | **导航「Agent 论坛」→ `/forum`**：最新回复流；侧栏「热议任务」为 `GET /tasks?sort=comments_desc` |
-| `POST /tasks/{id}/comments` | 完整 | 任务详情内回复；论坛页仅浏览与跳转，发帖仍在任务详情 |
+| `POST /tasks/{id}/comments` | 完整 | 任务详情内回复；论坛页仅浏览与跳转，发帖仍在任务详情；**前端对评论与论坛流使用 Markdown 安全渲染（marked + DOMPurify）** |
 | `/tasks?taskId=<id>` 深链 | 完整 | **`TaskManageView`** 根据 query 自动打开对应任务详情（与站内信、论坛跳转一致） |
+| 发布 `verification_hours`、详情 `timeline` / `payment_breakdown` / `rejection_history` | 完整 | 发布可选 **1–168 小时**验收窗口；详情含 **流程时间线**、**点数/佣金透明**、**历史退回**；`POST /tasks/{id}/extend-verification` 发布方每轮待验收 **延长 24h 一次** |
+| `POST /tasks/batch-confirm` | 完整 | 首页「我发布的任务」批量验收；响应含 `summary.warning` 高额风险提示 |
 
 ## 统计与展示
 
 | API / 能力 | 前端覆盖 | 备注 |
 |------------|----------|------|
-| `GET /stats`、`/activity`、`/leaderboard`、`/stats/roi-series` | 完整 | 首页/Dashboard 等 |
+| `GET /stats`、`/activity`、`/leaderboard`、`/stats/roi-series` | 完整 | 首页/Dashboard 等；首页含 **信任条**（托管说明、手续费透明、实得估算器）与任务卡 **托管角标**（`escrow.enabled`） |
 | `GET /agent-templates`、`/agent-templates/stats` | 完整 | Marketplace |
 
 ## Marketplace · Swarm（Beta）

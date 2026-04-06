@@ -391,6 +391,12 @@ def test_account_me_and_balance():
     assert data["username"] == u
     assert "user_id" in data
     assert "credits" in data
+    tp = data.get("task_pulse") or {}
+    assert tp.get("total_actionable") is not None
+    assert "awaiting_verify_as_owner" in tp
+    assert "need_submit" in tp
+    assert "awaiting_confirm_as_assignee" in tp
+    assert "disputes" in tp
     r = client.get("/account/balance", headers=headers)
     assert r.status_code == 200
     assert "credits" in r.json()
@@ -1483,3 +1489,56 @@ def test_forum_recent_posts_public_feed():
         for it in (data.get("items") or [])
     )
     assert any(int((it.get("task") or {}).get("id", 0)) == task_id for it in (data.get("items") or []))
+
+
+def test_verification_hours_extend_and_task_detail_extras():
+    """任务级验收窗口、延长验收、详情含 timeline / payment_breakdown"""
+    u = f"vh_{_unique()}"
+    pub = _register_user(u, f"{u}@example.com", "vh_pw")
+    token = pub["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    r = client.post("/account/recharge", json={"amount": 5000}, headers=headers)
+    assert r.status_code == 200, r.text
+    pr = client.post(
+        "/tasks",
+        json={
+            "title": "vh task",
+            "description": "d",
+            "reward_points": 100,
+            "completion_webhook_url": "https://example.com/hook",
+            "verification_hours": 24,
+        },
+        headers=headers,
+    )
+    assert pr.status_code == 200, pr.text
+    task_id = pr.json()["id"]
+    gd = client.get(f"/tasks/{task_id}")
+    assert gd.status_code == 200
+    assert gd.json().get("verification_hours") == 24
+    assert isinstance(gd.json().get("timeline"), list)
+    assert gd.json().get("payment_breakdown", {}).get("reward_points") == 100
+
+    exe = _register_user(f"exe_{_unique()}", f"exe_{_unique()}@example.com", "pw")
+    ex_headers = {"Authorization": f"Bearer {exe['access_token']}"}
+    ar = client.post("/agents/register", json={"name": "ag", "agent_type": "general"}, headers=ex_headers)
+    assert ar.status_code == 200, ar.text
+    aid = ar.json()["id"]
+    sub = client.post(f"/tasks/{task_id}/subscribe", json={"agent_id": aid}, headers=ex_headers)
+    assert sub.status_code == 200, sub.text
+    with patch("app.main.httpx") as m:
+        m.Client.return_value.__enter__.return_value.post.return_value.status_code = 200
+        sc = client.post(
+            f"/tasks/{task_id}/submit-completion",
+            json={"result_summary": "done"},
+            headers=ex_headers,
+        )
+    assert sc.status_code == 200, sc.text
+    assert sc.json().get("verification_hours") == 24
+    ext = client.post(f"/tasks/{task_id}/extend-verification", headers=headers)
+    assert ext.status_code == 200, ext.text
+    ext2 = client.post(f"/tasks/{task_id}/extend-verification", headers=headers)
+    assert ext2.status_code == 400
+
+    bc = client.post("/tasks/batch-confirm", json={"task_ids": [task_id]}, headers=headers)
+    assert bc.status_code == 200, bc.text
+    assert "summary" in bc.json()

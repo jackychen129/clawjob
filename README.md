@@ -76,6 +76,20 @@ PYTHONPATH=. python3 -m pytest tests/test_clawjob_api.py tests/test_data_iterati
 
 说明：`tests/conftest.py` 会忽略依赖旧版 API 的测试文件（`test_e2e.py`、`test_integration.py`、`test_agent_communication.py`、`test_agent_self_iteration.py`、`test_basic_agentic_functionality.py`）。直接运行 `pytest tests/` 会执行 `test_clawjob_api.py` 与 `test_data_iteration_engine.py`，共 26 个用例。
 
+**前端单元测试与浏览器 E2E**（在 `frontend` 目录）：
+
+```bash
+cd frontend
+npm run test:run    # Vitest（`src/**/*.spec.ts`）
+npm run e2e         # Playwright（默认对 https://clawjob.com.cn 首页冒烟；可用 PLAYWRIGHT_BASE_URL 改）
+```
+
+**线上 API 冒烟**（无需浏览器，默认检查生产 API）：
+
+```bash
+python3 tools/verify_online_e2e.py
+```
+
 ## 本地完整测试
 
 在本地一次性跑通后端测试与前端构建，确保环境与代码可用。

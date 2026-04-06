@@ -28,9 +28,26 @@
             <Users class="nav-icon" aria-hidden="true" />
             <span>{{ t('nav.candidates') || '候选人' }}</span>
           </router-link>
-          <router-link to="/tasks" class="nav-link" :class="{ active: route.path === '/tasks' }">
+          <router-link
+            to="/tasks"
+            class="nav-link nav-link--tasks"
+            :class="{ active: route.path === '/tasks' }"
+            :aria-label="navTasksLinkAriaLabel"
+          >
             <ListTodo class="nav-icon" aria-hidden="true" />
             <span>{{ t('nav.taskManage') || '任务管理' }}</span>
+            <span
+              v-if="auth.isLoggedIn && taskPulse.disputes > 0"
+              class="nav-task-dispute-dot"
+              :title="String(t('marketing.navDisputeBadgeTitle', { n: taskPulse.disputes }))"
+              aria-hidden="true"
+            />
+            <span
+              v-else-if="auth.isLoggedIn && taskPulseTotal > 0"
+              class="nav-task-pulse-dot"
+              :title="String(t('marketing.navTaskPulseBadgeTitle', { n: taskPulseTotal }))"
+              aria-hidden="true"
+            />
           </router-link>
           <router-link to="/forum" class="nav-link" :class="{ active: route.path === '/forum' }">
             <MessagesSquare class="nav-icon" aria-hidden="true" />
@@ -110,6 +127,32 @@
       <Button size="sm" type="button" @click="openCreateTaskModalWithDraft">{{ t('task.draftRestore') || '从草稿恢复' }}</Button>
       <Button size="sm" variant="ghost" type="button" @click="clearDraft">{{ t('task.draftDiscard') || '丢弃草稿' }}</Button>
     </div>
+    <div v-if="auth.isLoggedIn && taskPulseTotal > 0" class="task-pulse-banner" role="status">
+      <div class="task-pulse-banner__inner">
+        <span class="task-pulse-banner__title">{{ t('marketing.pulseTitle') }}</span>
+        <RouterLink
+          v-if="taskPulse.awaiting_verify_as_owner > 0"
+          :to="{ path: '/tasks', query: { pulse: 'verify' } }"
+          class="pulse-chip pulse-chip--accent pulse-chip--link"
+        >{{ t('marketing.pulseVerify', { n: taskPulse.awaiting_verify_as_owner }) }}</RouterLink>
+        <RouterLink
+          v-if="taskPulse.need_submit > 0"
+          :to="{ path: '/tasks', query: { pulse: 'submit' } }"
+          class="pulse-chip pulse-chip--link"
+        >{{ t('marketing.pulseSubmit', { n: taskPulse.need_submit }) }}</RouterLink>
+        <RouterLink
+          v-if="taskPulse.awaiting_confirm_as_assignee > 0"
+          :to="{ path: '/tasks', query: { pulse: 'wait' } }"
+          class="pulse-chip pulse-chip--link"
+        >{{ t('marketing.pulseWaitPublisher', { n: taskPulse.awaiting_confirm_as_assignee }) }}</RouterLink>
+        <RouterLink
+          v-if="taskPulse.disputes > 0"
+          :to="{ path: '/tasks', query: { pulse: 'dispute' } }"
+          class="pulse-chip pulse-chip--warn pulse-chip--link"
+        >{{ t('marketing.pulseDisputes', { n: taskPulse.disputes }) }}</RouterLink>
+        <RouterLink to="/tasks" class="task-pulse-banner__cta">{{ t('marketing.pulseCta') }} →</RouterLink>
+      </div>
+    </div>
     <main class="main-content relative z-0" :key="route.path">
       <SkillPage v-if="route.path === '/skill'" />
       <DocsPage v-else-if="route.path === '/docs'" />
@@ -153,6 +196,25 @@
                 <span class="home-kpi-label">{{ t('dashboard.tasksCompleted') || '已完成' }}</span>
               </div>
             </template>
+          </div>
+        </section>
+        <section class="home-trust-strip" aria-label="Trust">
+          <div class="home-trust-grid">
+            <div class="home-trust-item">
+              <strong>{{ t('marketing.trustEscrowTitle') }}</strong>
+              <p>{{ t('marketing.trustEscrowBody') }}</p>
+            </div>
+            <div class="home-trust-item">
+              <strong>{{ t('marketing.trustFeeTitle') }}</strong>
+              <p>{{ t('marketing.trustFeeBody') }}</p>
+            </div>
+            <div class="home-trust-item home-trust-calc">
+              <label class="home-trust-calc-label">{{ t('marketing.feeCalcLabel') }}</label>
+              <div class="home-trust-calc-row">
+                <input v-model.number="feeCalcPoints" type="number" min="0" class="input input-num home-trust-calc-input" />
+                <p class="home-trust-calc-result mono">{{ t('marketing.feeCalcResult', { net: feeCalcNet, comm: feeCalcComm }) }}</p>
+              </div>
+            </div>
           </div>
         </section>
         <h2 id="task-list" class="section-title">{{ t('common.openTasks') }}</h2>
@@ -224,6 +286,7 @@
               <span v-if="task.category" class="task-card__category" data-attr="category">{{ taskCategoryLabel(task.category) }}</span>
               <span v-if="task.task_type" class="task-card__type" data-attr="task_type">{{ task.task_type }}</span>
               <span v-if="task.priority && task.priority !== 'medium'" class="task-card__priority" :class="'priority--' + task.priority">{{ task.priority }}</span>
+              <span v-if="task.escrow?.enabled" class="task-badge-escrow" :title="t('marketing.escrowBadgeTitle')">{{ t('marketing.escrowBadge') }}</span>
               <span class="badge" :class="task.status">{{ t('status.' + task.status) || task.status }}</span>
               <span v-if="task.reward_points" class="task-card__reward mono" data-attr="reward">{{ t('task.reward', { n: task.reward_points }) }}</span>
             </div>
@@ -467,6 +530,18 @@
                 <label class="form-label">{{ t('agentGuide.fieldWebhook') }}</label>
                 <Input v-model="publishForm.completion_webhook_url" class="w-full" type="url" :placeholder="t('task.webhookPlaceholder')" />
               </div>
+              <div class="form-group">
+                <label class="form-label" for="home-publish-vhours">{{ t('task.verificationHoursLabel') }}</label>
+                <select id="home-publish-vhours" v-model.number="publishForm.verification_hours" class="input select-input">
+                  <option :value="6">6</option>
+                  <option :value="12">12</option>
+                  <option :value="24">24</option>
+                  <option :value="48">48</option>
+                  <option :value="72">72</option>
+                  <option :value="168">168</option>
+                </select>
+                <p class="form-hint">{{ t('task.verificationHoursHint') }}</p>
+              </div>
               <div class="form-group escrow-block">
                 <label class="form-label flex items-center gap-2">
                   <input v-model="publishForm.escrow_enabled" type="checkbox" class="rounded border-input" />
@@ -652,6 +727,14 @@
           <span v-if="homeTaskDetail.reward_points" class="detail-reward"> · {{ t('task.reward', { n: homeTaskDetail.reward_points }) }}</span>
         </div>
         <p class="task-detail-modal-desc">{{ homeTaskDetail.description || t('common.noDescription') }}</p>
+        <div v-if="homeTaskDetail.reward_points && homeTaskDetail.payment_breakdown" class="home-task-payment-hint mono text-sm">
+          {{ t('task.paymentNet') }} ≈ {{ homeTaskDetail.payment_breakdown.executor_net_points }}
+          · {{ t('task.paymentCommission') }} {{ homeTaskDetail.payment_breakdown.commission_points }}
+        </div>
+        <p v-if="homeTaskDetail.status === 'pending_verification' && homeTaskDetail.verification_deadline_at" class="hint text-sm">
+          {{ t('task.verificationWindowHint', { h: homeTaskDetail.verification_hours ?? 6 }) }}
+        </p>
+        <router-link v-if="homeTaskDetail.timeline?.length" :to="'/tasks?taskId=' + homeTaskDetail.id" class="app-link text-sm">{{ t('task.openFullFlow') }}</router-link>
         <dl v-if="homeTaskDetail.requirements || homeTaskDetail.category || (getTaskSkills(homeTaskDetail).length) || homeTaskDetail.location || homeTaskDetail.duration_estimate" class="task-detail-modal-attrs">
           <template v-if="homeTaskDetail.category"><dt>{{ t('task.detailCategory') }}</dt><dd>{{ taskCategoryLabel(homeTaskDetail.category) }}</dd></template>
           <template v-if="homeTaskDetail.requirements"><dt>{{ t('task.detailRequirements') }}</dt><dd class="task-detail-requirements">{{ homeTaskDetail.requirements }}</dd></template>
@@ -679,7 +762,7 @@
                   <span v-if="c.kind === 'status_update'" class="task-comment-kind-badge">{{ t('task.statusUpdate') }}</span>
                   <span class="task-comment-time">{{ formatCommentTimeHome(c.created_at) }}</span>
                 </div>
-                <p class="task-comment-content">{{ c.content }}</p>
+                <MarkdownHtml class="task-comment-content" :content="c.content" />
               </div>
             </li>
           </ul>
@@ -734,11 +817,12 @@
 <script setup lang="ts">
 declare const __BUILD_ID__: string | undefined
 import { ref, reactive, onMounted, onUnmounted, computed, watch } from 'vue'
-import { useRoute, RouterLink } from 'vue-router'
+import { useRoute, useRouter, RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { i18n, setLocale, safeT, type LocaleKey } from './i18n'
 import { useAuthStore } from './stores/auth'
 import * as api from './api'
+import { taskPulseRelevantNav } from './utils/taskPulseHub'
 import SkillPage from './views/SkillPage.vue'
 import DocsPage from './views/DocsPage.vue'
 import ManualPage from './views/ManualPage.vue'
@@ -760,10 +844,12 @@ import { Input } from './components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from './components/ui/card'
 import { Textarea } from './components/ui/textarea'
 import EmptyState from './components/EmptyState.vue'
+import MarkdownHtml from './components/MarkdownHtml.vue'
 import { getTemplateById } from './constants/taskTemplates'
 import { BookOpen, Bot, Home, LayoutGrid, ListTodo, LogIn, LogOut, Mail, MessagesSquare, Shield, Sparkles, Trophy, Users, Wallet } from 'lucide-vue-next'
 
 const route = useRoute()
+const router = useRouter()
 const _i18n = useI18n()
 const t = typeof _i18n.t === 'function' ? _i18n.t : safeT
 const auth = useAuthStore()
@@ -877,6 +963,7 @@ const publishForm = reactive({
   location: '',
   duration_estimate: '',
   skills_text: '',
+  verification_hours: 6,
   escrow_enabled: false,
   escrow_rows: defaultEscrowRowsHome(),
 })
@@ -958,6 +1045,7 @@ function saveDraft() {
     invited_agent_ids: publishForm.invited_agent_ids,
     escrow_enabled: publishForm.escrow_enabled,
     escrow_rows: publishForm.escrow_rows.map((r) => ({ ...r })),
+    verification_hours: publishForm.verification_hours,
     updated_at: Date.now(),
   }
   try {
@@ -984,6 +1072,7 @@ function loadDraft() {
   if (typeof d.skills_text === 'string') publishForm.skills_text = d.skills_text
   if (Array.isArray(d.invited_agent_ids)) publishForm.invited_agent_ids = d.invited_agent_ids.map(Number).filter(Boolean)
   if (typeof d.escrow_enabled === 'boolean') publishForm.escrow_enabled = d.escrow_enabled
+  if (typeof (d as any).verification_hours === 'number') publishForm.verification_hours = Math.min(168, Math.max(1, (d as any).verification_hours))
   if (Array.isArray(d.escrow_rows) && d.escrow_rows.length) {
     publishForm.escrow_rows = (d.escrow_rows as EscrowRowHome[]).map((r) => ({
       title: String(r.title ?? ''),
@@ -1014,6 +1103,7 @@ function clearDraft() {
   publishForm.invited_agent_ids = []
   publishForm.escrow_enabled = false
   publishForm.escrow_rows = defaultEscrowRowsHome()
+  publishForm.verification_hours = 6
   draftLoadedAt.value = 0
 }
 
@@ -1056,6 +1146,42 @@ function onEscapeKey(e: KeyboardEvent) {
 }
 const accountCredits = ref(0)
 
+const PLATFORM_FEE_RATE = 0.01
+const feeCalcPoints = ref(100)
+const feeCalcComm = computed(() => {
+  const p = Math.max(0, Math.floor(Number(feeCalcPoints.value) || 0))
+  return Math.floor(p * PLATFORM_FEE_RATE)
+})
+const feeCalcNet = computed(() => {
+  const p = Math.max(0, Math.floor(Number(feeCalcPoints.value) || 0))
+  return p - feeCalcComm.value
+})
+
+const taskPulse = ref({
+  awaiting_verify_as_owner: 0,
+  awaiting_confirm_as_assignee: 0,
+  need_submit: 0,
+  disputes: 0,
+})
+const taskPulseTotal = computed(
+  () =>
+    taskPulse.value.awaiting_verify_as_owner +
+    taskPulse.value.awaiting_confirm_as_assignee +
+    taskPulse.value.need_submit +
+    taskPulse.value.disputes,
+)
+
+const navTasksLinkAriaLabel = computed(() => {
+  if (!auth.isLoggedIn) return undefined
+  if (taskPulse.value.disputes > 0) {
+    return String(t('marketing.navDisputeAria', { n: taskPulse.value.disputes }))
+  }
+  if (taskPulseTotal.value > 0) {
+    return String(t('marketing.navTaskPulseAria', { n: taskPulseTotal.value }))
+  }
+  return undefined
+})
+
 function loadTasks(reset = true) {
   if (reset) {
     tasksLoading.value = true
@@ -1083,7 +1209,10 @@ function loadTasks(reset = true) {
         homeHasMore.value = tasks.value.length < (res.data.total ?? 0)
       }).catch(() => {})
   if (reset) {
-    doRequest.finally(() => { tasksLoading.value = false })
+    doRequest.finally(() => {
+      tasksLoading.value = false
+      if (auth.isLoggedIn) loadAccountMe()
+    })
   } else {
     tasksLoadingMore.value = true
     doRequest.finally(() => { tasksLoadingMore.value = false })
@@ -1161,6 +1290,9 @@ function openHomeTaskDetail(task: api.TaskListItem) {
   homeTaskComments.value = []
   homeNewCommentContent.value = ''
   homeTaskCommentsLoading.value = true
+  api.getTaskDetail(task.id).then((res) => {
+    homeTaskDetail.value = res.data as api.TaskListItem
+  }).catch(() => {})
   api.getTaskComments(task.id).then((res) => {
     homeTaskComments.value = res.data.comments || []
   }).catch(() => { homeTaskComments.value = [] }).finally(() => { homeTaskCommentsLoading.value = false })
@@ -1235,9 +1367,11 @@ function doBatchConfirm() {
   const ids = batchConfirmSelected.value.slice()
   if (!ids.length) return
   batchConfirmLoading.value = true
-  api.batchConfirmTasks(ids).then(() => {
+  api.batchConfirmTasks(ids).then((res) => {
     batchConfirmSelected.value = []
     loadMyCreatedTasks()
+    const w = res.data.summary?.warning
+    if (w) showSuccess(`${t('task.batchConfirmWarningToast') || ''} ${w}`)
   }).finally(() => {
     batchConfirmLoading.value = false
   })
@@ -1383,6 +1517,7 @@ function doPublish() {
     escrow_milestones = rows
   }
   const skills = publishForm.skills_text ? publishForm.skills_text.split(/[,，\s]+/).map((s) => s.trim()).filter(Boolean) : undefined
+  const vh = reward > 0 ? Math.min(168, Math.max(1, Number(publishForm.verification_hours) || 6)) : undefined
   api.publishTask({
     title: publishForm.title.trim(),
     description: (publishForm.description || '').trim(),
@@ -1396,6 +1531,7 @@ function doPublish() {
     duration_estimate: (publishForm.duration_estimate || '').trim() || undefined,
     skills,
     escrow_milestones: escrow_milestones,
+    verification_hours: vh,
   }).then(() => {
     clearDraft()
     publishForm.title = ''
@@ -1411,6 +1547,7 @@ function doPublish() {
     publishForm.skills_text = ''
     publishForm.escrow_enabled = false
     publishForm.escrow_rows = defaultEscrowRowsHome()
+    publishForm.verification_hours = 6
     showSuccess(t('task.publishSuccess'))
     if (showCreateTaskModal.value) closeCreateTaskModal()
     loadAccountMe()
@@ -1528,6 +1665,7 @@ function doRejectWithReason() {
     rejectTaskId.value = null
     rejectReason.value = ''
     loadTasks()
+    loadAccountMe()
   }).catch(() => {}).finally(() => { rejectLoading.value = null })
 }
 
@@ -1537,9 +1675,36 @@ function loadAccountMe() {
     if (res.data.user_id != null) auth.setUserId(res.data.user_id)
     accountCredits.value = res.data.credits ?? 0
     if (res.data.is_guest === true) auth.setIsGuest(true)
+    const tp = res.data.task_pulse
+    if (tp && typeof tp === 'object') {
+      taskPulse.value = {
+        awaiting_verify_as_owner: Number(tp.awaiting_verify_as_owner) || 0,
+        awaiting_confirm_as_assignee: Number(tp.awaiting_confirm_as_assignee) || 0,
+        need_submit: Number(tp.need_submit) || 0,
+        disputes: Number(tp.disputes) || 0,
+      }
+    }
   }).catch(() => {})
 }
 
+/** 节流刷新 task_pulse，避免路由切换 / 切回标签页时顶栏角标与横幅滞后 */
+let lastTaskPulseRefresh = 0
+const TASK_PULSE_THROTTLE_MS = 5000
+
+function refreshTaskPulseThrottled() {
+  if (!auth.isLoggedIn) return
+  const now = Date.now()
+  if (now - lastTaskPulseRefresh < TASK_PULSE_THROTTLE_MS) return
+  lastTaskPulseRefresh = now
+  loadAccountMe()
+}
+
+function onDocumentVisibilityForPulse() {
+  if (document.visibilityState !== 'visible') return
+  refreshTaskPulseThrottled()
+}
+
+let removeRouterAfterEach: (() => void) | null = null
 
 onMounted(() => {
   // NOTE: translated comment in English.
@@ -1613,10 +1778,18 @@ onMounted(() => {
     loadMyCreatedTasks()
     refreshAdminFlag()
   }
+
+  removeRouterAfterEach = router.afterEach((to, from) => {
+    if (taskPulseRelevantNav(to.path, from.path)) refreshTaskPulseThrottled()
+  })
+  document.addEventListener('visibilitychange', onDocumentVisibilityForPulse)
 })
 
 onUnmounted(() => {
   document.removeEventListener('keydown', onEscapeKey)
+  document.removeEventListener('visibilitychange', onDocumentVisibilityForPulse)
+  removeRouterAfterEach?.()
+  removeRouterAfterEach = null
 })
 </script>
 
@@ -1878,4 +2051,151 @@ onUnmounted(() => {
   font-size: 0.9375rem;
 }
 .guest-hint-banner span { flex: 1; min-width: 0; }
+
+.task-pulse-banner {
+  padding: 0.65rem 1rem;
+  background: linear-gradient(90deg, rgba(var(--primary-rgb), 0.14), rgba(99, 102, 241, 0.08));
+  border-bottom: 1px solid rgba(var(--primary-rgb), 0.22);
+  font-size: 0.875rem;
+}
+.task-pulse-banner__inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+.task-pulse-banner__title {
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-right: 0.25rem;
+}
+.pulse-chip {
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+.pulse-chip--accent {
+  border-color: rgba(var(--primary-rgb), 0.35);
+  color: var(--text-primary);
+}
+.pulse-chip--warn {
+  border-color: rgba(251, 146, 60, 0.45);
+  color: #fdba74;
+}
+.task-pulse-banner__cta {
+  margin-left: auto;
+  font-weight: 600;
+  color: var(--primary-color, #a78bfa);
+  text-decoration: none;
+}
+.task-pulse-banner__cta:hover {
+  text-decoration: underline;
+}
+.pulse-chip--link {
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+}
+.pulse-chip--link:hover {
+  filter: brightness(1.08);
+}
+
+.home-trust-strip {
+  margin: 0 0 1.25rem 0;
+  padding: 1rem 1.25rem;
+  border-radius: var(--radius-xl);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.02);
+}
+.home-trust-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 900px) {
+  .home-trust-grid {
+    grid-template-columns: 1fr 1fr 1fr;
+    align-items: start;
+  }
+}
+.home-trust-item strong {
+  display: block;
+  font-size: 0.9rem;
+  margin-bottom: 0.35rem;
+  color: var(--text-primary);
+}
+.home-trust-item p {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+.home-trust-calc-label {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+  color: var(--text-primary);
+}
+.home-trust-calc-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+.home-trust-calc-input {
+  max-width: 8rem;
+}
+.home-trust-calc-result {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.task-badge-escrow {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.2rem 0.45rem;
+  border-radius: 6px;
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.35);
+  color: #86efac;
+}
+
+/* 顶栏「任务管理」：争议优先强提示，其余待办弱提示 */
+.nav-link--tasks {
+  position: relative;
+  padding-inline-end: 0.45rem;
+}
+.nav-task-dispute-dot {
+  position: absolute;
+  top: 0.12rem;
+  right: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #fb923c, #ef4444);
+  box-shadow: 0 0 0 2px #0a0a0b;
+  pointer-events: none;
+}
+.nav-task-pulse-dot {
+  position: absolute;
+  top: 0.18rem;
+  right: 0.05rem;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(var(--primary-rgb), 0.92);
+  box-shadow: 0 0 0 2px #0a0a0b;
+  pointer-events: none;
+}
 </style>

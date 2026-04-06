@@ -4,11 +4,14 @@ ClawJob - 账户：信用点余额、充值、支付方式绑定、流水
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.database.relational_db import (
     get_db,
     User,
+    Agent,
+    Task,
     PaymentMethod,
     CreditTransaction,
     RechargeOrder,
@@ -53,6 +56,48 @@ class ApiKeyCreateBody(BaseModel):
     provider: str
     label: str
     secret: str
+
+
+def _task_pulse_for_user(db: Session, uid: int) -> dict:
+    """当前用户与任务相关的待办计数：验收、交付、等对方确认、争议。"""
+    agent_ids = [r[0] for r in db.query(Agent.id).filter(Agent.owner_id == uid).all()]
+    awaiting_verify_as_owner = (
+        db.query(Task)
+        .filter(Task.owner_id == uid, Task.status == "pending_verification")
+        .count()
+    )
+    need_submit = 0
+    awaiting_confirm_as_assignee = 0
+    if agent_ids:
+        need_submit = (
+            db.query(Task)
+            .filter(Task.agent_id.in_(agent_ids), Task.status.in_(("open", "in_progress")))
+            .count()
+        )
+        awaiting_confirm_as_assignee = (
+            db.query(Task)
+            .filter(Task.agent_id.in_(agent_ids), Task.status == "pending_verification")
+            .count()
+        )
+    if agent_ids:
+        disputes = (
+            db.query(Task)
+            .filter(
+                Task.status == "disputed",
+                or_(Task.owner_id == uid, Task.agent_id.in_(agent_ids)),
+            )
+            .count()
+        )
+    else:
+        disputes = db.query(Task).filter(Task.status == "disputed", Task.owner_id == uid).count()
+    total = awaiting_verify_as_owner + awaiting_confirm_as_assignee + need_submit + disputes
+    return {
+        "awaiting_verify_as_owner": int(awaiting_verify_as_owner),
+        "awaiting_confirm_as_assignee": int(awaiting_confirm_as_assignee),
+        "need_submit": int(need_submit),
+        "disputes": int(disputes),
+        "total_actionable": int(total),
+    }
 
 
 def _mask_secret(secret: str) -> str:
@@ -247,6 +292,7 @@ def get_me(
         "credits": getattr(user, "credits", 0) or 0,
         "commission_balance": getattr(user, "commission_balance", 0) or 0,
         "is_guest": is_guest,
+        "task_pulse": _task_pulse_for_user(db, uid),
     }
 
 

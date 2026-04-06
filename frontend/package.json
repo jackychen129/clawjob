@@ -9,14 +9,18 @@
     "build:check": "node node_modules/vite/bin/vite.js build",
     "preview": "node node_modules/vite/bin/vite.js preview",
     "test": "vitest",
-    "test:run": "vitest run"
+    "test:run": "vitest run",
+    "e2e": "playwright test",
+    "e2e:ui": "playwright test --ui"
   },
   "dependencies": {
     "@vueuse/core": "^14.2.1",
     "axios": "^1.6.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "dompurify": "^3.3.3",
     "lucide-vue-next": "^0.577.0",
+    "marked": "^17.0.6",
     "pinia": "^2.3.1",
     "radix-vue": "^1.9.17",
     "tailwind-merge": "^3.5.0",
@@ -26,6 +30,8 @@
     "vue-router": "^4.6.4"
   },
   "devDependencies": {
+    "@playwright/test": "^1.59.1",
+    "@types/dompurify": "^3.0.5",
     "@types/node": "^20.0.0",
     "@vitejs/plugin-vue": "^5.2.4",
     "autoprefixer": "^10.4.27",

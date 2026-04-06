@@ -34,7 +34,7 @@
                 <span class="forum-agent"> · {{ row.comment.agent_name }}</span>
               </template>
             </p>
-            <p class="forum-content">{{ row.comment.content }}</p>
+            <MarkdownHtml class="forum-content" :content="row.comment.content" scroll-max />
             <div class="forum-actions">
               <Button :as="RouterLink" :to="'/tasks?taskId=' + row.task.id" size="sm" variant="secondary">
                 {{ t('forum.openDiscussion') }}
@@ -72,6 +72,7 @@ import { ref, onMounted } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Button } from '../components/ui/button'
+import MarkdownHtml from '../components/MarkdownHtml.vue'
 import * as api from '../api'
 import { safeT } from '../i18n'
 
@@ -167,8 +168,8 @@ onMounted(() => {
 .forum-author-line { font-size: var(--font-small); color: var(--text-secondary); margin: 0 0 0.5rem; }
 .forum-agent { color: var(--text-tertiary); }
 .forum-content {
-  white-space: pre-wrap; word-break: break-word;
-  font-size: var(--font-body); line-height: 1.5; margin: 0 0 var(--space-3);
+  font-size: var(--font-body);
+  margin: 0 0 var(--space-3);
 }
 .forum-actions { display: flex; gap: 0.5rem; }
 .forum-aside {

@@ -8,6 +8,18 @@
           <div class="task-tabs">
             <button type="button" class="task-tab" :class="{ active: tab === 'available' }" @click="tab = 'available'">{{ t('taskManage.available') || '可接取任务' }}</button>
             <button type="button" class="task-tab" :class="{ active: tab === 'mine' }" @click="tab = 'mine'">{{ t('taskManage.myAccepted') || '我接取的任务' }}</button>
+            <button type="button" class="task-tab" :class="{ active: tab === 'published' }" @click="tab = 'published'">{{ t('taskManage.tabPublished') || '我发布的' }}</button>
+            <button
+              v-if="showDisputesTab"
+              type="button"
+              class="task-tab task-tab--disputes"
+              :class="{ active: tab === 'disputes' }"
+              @click="goDisputesTab"
+            >{{ t('taskManage.tabDisputes') }}<span v-if="disputesTabBadgeCount" class="task-tab__count mono">({{ disputesTabBadgeCount }})</span></button>
+          </div>
+          <div v-if="pulseFilterBannerText" class="pulse-filter-banner">
+            <span>{{ pulseFilterBannerText }}</span>
+            <Button size="sm" type="button" variant="secondary" @click="clearPulseQuery">{{ t('taskManage.pulseFilterClear') || '清除筛选' }}</Button>
           </div>
           <div v-if="tab === 'available' && relatedSkillFilter" class="related-skill-banner">
             <p class="related-skill-banner__text">
@@ -76,7 +88,7 @@
           </template>
 
           <!-- NOTE: translated comment in English. -->
-          <template v-else>
+          <template v-else-if="tab === 'mine'">
             <EmptyState
               v-if="!auth.isLoggedIn"
               :title="t('taskManage.loginToSeeMine') || '请先登录查看我接取的任务'"
@@ -147,15 +159,144 @@
               </div>
             </div>
             <EmptyState
-              v-if="!myTasks.length && !myTasksLoading"
-              :title="t('taskManage.noMyTasks') || '暂无接取的任务'"
-              :description="t('taskManage.goAcceptHint') || '前往首页或可接取任务列表接取第一个任务'"
+              v-if="!myTasksLoading && !mineFilteredTasks.length"
+              :title="mineEmptyTitle"
+              :description="mineEmptyDescription"
               illustration-src="/assets/illustrations/market-empty.svg"
             >
               <template #actions>
                 <Button :as="RouterLink" to="/">{{ t('taskManage.goAccept') || '去接取' }}</Button>
               </template>
             </EmptyState>
+            </template>
+          </template>
+
+          <template v-else-if="tab === 'published'">
+            <EmptyState
+              v-if="!auth.isLoggedIn"
+              :title="t('taskManage.loginToSeePublished') || '请先登录查看我发布的任务'"
+              :description="t('taskManage.emptyTaskHint') || '登录后可管理发布与验收'"
+              illustration-src="/assets/illustrations/market-empty.svg"
+              size="lg"
+            >
+              <template #actions>
+                <Button type="button" @click="showAuthModal = true">{{ t('common.loginOrRegister') }}</Button>
+              </template>
+            </EmptyState>
+            <template v-else>
+              <div v-if="publishedTasksLoading" class="task-list task-list--skeleton">
+                <div v-for="i in 4" :key="'p' + i" class="task-row task-row--skeleton">
+                  <div class="tw-skeleton task-manage-skeleton-line task-manage-skeleton-line--short"></div>
+                  <div class="tw-skeleton task-manage-skeleton-line task-manage-skeleton-line--full"></div>
+                  <div class="tw-skeleton task-manage-skeleton-line task-manage-skeleton-line--mid"></div>
+                </div>
+              </div>
+              <div v-else class="task-list task-list--virtual" v-bind="virtualPublished.containerProps">
+                <div v-bind="virtualPublished.wrapperProps">
+                  <article
+                    v-for="item in virtualPublishedItems"
+                    :key="item.index"
+                    :class="cn('task-row', 'task-row--published', `task-row--${item.data!.status}`, { 'task-row--selected': selectedTaskDetail?.id === item.data!.id })"
+                    role="button"
+                    tabindex="0"
+                    @click="openTaskDetail(item.data!)"
+                    @keydown.enter.prevent="openTaskDetail(item.data!)"
+                    @keydown.space.prevent="openTaskDetail(item.data!)"
+                  >
+                    <div class="task-row__head">
+                      <span v-if="item.data!.category" class="task-row__category">{{ taskCategoryLabel(item.data!.category) }}</span>
+                      <span :class="taskStatusPillClass(item.data!.status)">{{ t('status.' + item.data!.status) || item.data!.status }}</span>
+                      <span v-if="item.data!.reward_points" class="task-row__reward mono">{{ t('task.reward', { n: item.data!.reward_points }) }}</span>
+                    </div>
+                    <h3 class="task-row__title">{{ item.data!.title }}</h3>
+                    <p class="task-row__desc">{{ (item.data!.description || t('common.noDescription')).slice(0, 120) }}{{ (item.data!.description || '').length > 120 ? '…' : '' }}</p>
+                    <p class="task-row__meta">
+                      <span v-if="item.data!.agent_name">{{ t('task.acceptor') || '接取者' }}：{{ item.data!.agent_name }}</span>
+                      <span v-else class="hint-inline">{{ t('taskManage.publishedNoAgent') || '尚未接取' }}</span>
+                      <span v-if="item.data!.subscription_count != null"> · {{ item.data!.subscription_count }}{{ t('task.subscribers') }}</span>
+                    </p>
+                    <div class="task-row__actions" @click.stop>
+                      <Button size="sm" variant="ghost" type="button" class="task-row__btn" @click="openTaskDetail(item.data!)">{{ t('task.viewDetail') }}</Button>
+                      <div class="task-actions" @click.stop>
+                        <template v-if="item.data!.owner_id === auth.userId && item.data!.status === 'pending_verification'">
+                          <Button size="sm" :disabled="confirmLoading === item.data!.id" class="task-row__btn task-row__btn--primary" @click="openConfirmModal(item.data!.id)">{{ t('task.confirmPass') }}</Button>
+                          <Button size="sm" variant="secondary" :disabled="rejectLoading === item.data!.id" class="task-row__btn" @click="openRejectModal(item.data!.id)">{{ t('task.reject') }}</Button>
+                        </template>
+                      </div>
+                    </div>
+                  </article>
+                </div>
+              </div>
+              <EmptyState
+                v-if="!publishedTasksLoading && !publishedFilteredTasks.length"
+                :title="publishedEmptyTitle"
+                :description="publishedEmptyDescription"
+                illustration-src="/assets/illustrations/market-empty.svg"
+              >
+                <template #actions>
+                  <Button :as="RouterLink" to="/" variant="secondary">{{ t('common.home') }}</Button>
+                </template>
+              </EmptyState>
+            </template>
+          </template>
+
+          <template v-else-if="tab === 'disputes'">
+            <EmptyState
+              v-if="!auth.isLoggedIn"
+              :title="t('taskManage.loginToSeeDisputes') || '请先登录查看争议任务'"
+              :description="t('taskManage.emptyTaskHint') || ''"
+              illustration-src="/assets/illustrations/market-empty.svg"
+              size="lg"
+            >
+              <template #actions>
+                <Button type="button" @click="showAuthModal = true">{{ t('common.loginOrRegister') }}</Button>
+              </template>
+            </EmptyState>
+            <template v-else>
+              <p v-if="disputedMergedCount" class="disputes-merge-hint">{{ t('taskManage.disputesMergeHint') }}</p>
+              <div v-if="disputesTabLoading" class="task-list task-list--skeleton">
+                <div v-for="i in 4" :key="'d' + i" class="task-row task-row--skeleton">
+                  <div class="tw-skeleton task-manage-skeleton-line task-manage-skeleton-line--short"></div>
+                  <div class="tw-skeleton task-manage-skeleton-line task-manage-skeleton-line--full"></div>
+                  <div class="tw-skeleton task-manage-skeleton-line task-manage-skeleton-line--mid"></div>
+                </div>
+              </div>
+              <div v-else class="task-list task-list--virtual" v-bind="virtualDisputes.containerProps">
+                <div v-bind="virtualDisputes.wrapperProps">
+                  <article
+                    v-for="item in virtualDisputesItems"
+                    :key="item.index"
+                    :class="cn('task-row', 'task-row--dispute', `task-row--${item.data!.status}`, { 'task-row--selected': selectedTaskDetail?.id === item.data!.id })"
+                    role="button"
+                    tabindex="0"
+                    @click="openTaskDetail(item.data!)"
+                    @keydown.enter.prevent="openTaskDetail(item.data!)"
+                    @keydown.space.prevent="openTaskDetail(item.data!)"
+                  >
+                    <div class="task-row__head">
+                      <span class="task-row__dispute-role">{{ disputeRoleLabel(item.data!.id) }}</span>
+                      <span v-if="item.data!.category" class="task-row__category">{{ taskCategoryLabel(item.data!.category) }}</span>
+                      <span :class="taskStatusPillClass(item.data!.status)">{{ t('status.' + item.data!.status) || item.data!.status }}</span>
+                      <span v-if="item.data!.reward_points" class="task-row__reward mono">{{ t('task.reward', { n: item.data!.reward_points }) }}</span>
+                    </div>
+                    <h3 class="task-row__title">{{ item.data!.title }}</h3>
+                    <p class="task-row__desc">{{ (item.data!.description || t('common.noDescription')).slice(0, 120) }}{{ (item.data!.description || '').length > 120 ? '…' : '' }}</p>
+                    <p class="task-row__meta">
+                      {{ t('task.publisher') }}：{{ item.data!.publisher_name }}
+                      <span v-if="item.data!.agent_name"> · {{ t('task.acceptor') || '接取者' }}：{{ item.data!.agent_name }}</span>
+                    </p>
+                    <div class="task-row__actions" @click.stop>
+                      <Button size="sm" variant="ghost" type="button" class="task-row__btn" @click="openTaskDetail(item.data!)">{{ t('task.viewDetail') }}</Button>
+                    </div>
+                  </article>
+                </div>
+              </div>
+              <EmptyState
+                v-if="!disputesTabLoading && !disputedMergedTasks.length"
+                :title="t('taskManage.disputesEmptyTitle') || '暂无争议任务'"
+                :description="t('taskManage.disputesEmptyDesc') || '当前没有处于争议状态的任务'"
+                illustration-src="/assets/illustrations/market-empty.svg"
+              />
             </template>
           </template>
           </div>
@@ -222,6 +363,7 @@
                   <span v-if="selectedTaskDetail.escrow.dispute_reason">（{{ selectedTaskDetail.escrow.dispute_reason }}）</span>
                   <span v-if="selectedTaskDetail.escrow.dispute_evidence?.summary"> · 证据摘要：{{ selectedTaskDetail.escrow.dispute_evidence?.summary }}</span>
                 </p>
+                <p v-if="selectedTaskDetail.escrow.disputed" class="detail-escrow__sla hint">{{ t('task.escrowDisputeSla') }}</p>
                 <div class="detail-escrow__milestones">
                   <div
                     v-for="(m, idx) in selectedTaskDetail.escrow.milestones_preview || []"
@@ -242,6 +384,37 @@
                   >…</p>
                 </div>
               </div>
+              <div v-if="selectedTaskDetail.reward_points && selectedTaskDetail.payment_breakdown" class="task-payment-panel">
+                <h4 class="task-comments-title">{{ t('task.paymentBreakdownTitle') }}</h4>
+                <ul class="task-payment-list">
+                  <li>{{ t('task.paymentReward') }}：<span class="mono">{{ selectedTaskDetail.payment_breakdown.reward_points }}</span></li>
+                  <li>{{ t('task.paymentCommission') }}（{{ (selectedTaskDetail.payment_breakdown.commission_rate * 100).toFixed(0) }}%）：<span class="mono">{{ selectedTaskDetail.payment_breakdown.commission_points }}</span></li>
+                  <li>{{ t('task.paymentNet') }}：<span class="mono">{{ selectedTaskDetail.payment_breakdown.executor_net_points }}</span></li>
+                </ul>
+                <ul v-if="selectedTaskDetail.payment_breakdown.transactions?.length" class="task-payment-tx">
+                  <li v-for="(tx, ti) in selectedTaskDetail.payment_breakdown.transactions" :key="ti" class="mono text-xs">{{ tx.amount }} · {{ tx.remark }}</li>
+                </ul>
+              </div>
+              <div v-if="selectedTaskDetail.timeline?.length" class="task-timeline-panel">
+                <h4 class="task-comments-title">{{ t('task.flowTimelineTitle') }}</h4>
+                <ul class="task-timeline-list">
+                  <li v-for="(ev, ei) in selectedTaskDetail.timeline" :key="ei" class="task-timeline-item">
+                    <span class="task-timeline-time mono">{{ formatCommentTime(ev.at) }}</span>
+                    <span class="task-timeline-summary">{{ ev.summary }}</span>
+                  </li>
+                </ul>
+              </div>
+              <div v-if="selectedTaskDetail.rejection_history?.length" class="task-rejection-history">
+                <h4 class="task-comments-title">{{ t('task.rejectionHistoryTitle') }}</h4>
+                <details v-for="(rh, ri) in selectedTaskDetail.rejection_history" :key="ri" class="task-rejection-details">
+                  <summary>{{ t('task.rejectionRound') }} {{ ri + 1 }} · {{ formatCommentTime(rh.at) }}</summary>
+                  <p class="task-rejection-reason">{{ rh.reason }}</p>
+                </details>
+              </div>
+              <p v-if="selectedTaskDetail.status === 'pending_verification' && selectedTaskDetail.verification_deadline_at" class="hint task-verify-hint">
+                {{ t('task.verificationWindowHint', { h: selectedTaskDetail.verification_hours ?? 6 }) }}
+                · {{ t('task.verificationDeadlineLabel') }}：{{ formatCommentTime(selectedTaskDetail.verification_deadline_at) }}
+              </p>
               <div class="task-detail-panel__actions">
                 <Button
                   v-if="auth.isLoggedIn && isExecutor(selectedTaskDetail) && (selectedTaskDetail.status === 'open' || selectedTaskDetail.status === 'in_progress')"
@@ -252,6 +425,13 @@
                 <template v-if="auth.isLoggedIn && selectedTaskDetail.owner_id === auth.userId && selectedTaskDetail.status === 'pending_verification'">
                   <Button size="sm" :disabled="confirmLoading === selectedTaskDetail.id" @click="openConfirmModal(selectedTaskDetail.id)">{{ t('task.confirmPass') }}</Button>
                   <Button size="sm" variant="secondary" :disabled="rejectLoading === selectedTaskDetail.id" @click="openRejectModal(selectedTaskDetail.id)">{{ t('task.reject') }}</Button>
+                  <Button
+                    v-if="!selectedTaskDetail.verification_extend_used"
+                    size="sm"
+                    variant="ghost"
+                    :disabled="extendVerificationLoading === selectedTaskDetail.id"
+                    @click="runExtendVerification(selectedTaskDetail)"
+                  >{{ t('task.extendVerification') }}</Button>
                 </template>
                 <Button
                   v-if="
@@ -403,7 +583,7 @@
                         <span v-if="c.kind === 'status_update'" class="task-comment-kind-badge">{{ t('task.statusUpdate') }}</span>
                         <span class="task-comment-time">{{ formatCommentTime(c.created_at) }}</span>
                       </div>
-                      <p class="task-comment-content">{{ c.content }}</p>
+                      <MarkdownHtml class="task-comment-content" :content="c.content" />
                     </div>
                   </li>
                 </ul>
@@ -574,6 +754,18 @@
             <div class="form-group">
               <label class="form-label" for="publish-webhook">{{ t('agentGuide.fieldWebhook') }}</label>
               <Input id="publish-webhook" v-model="publishForm.completion_webhook_url" class="w-full" type="url" :placeholder="t('task.webhookPlaceholder')" />
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="publish-vhours">{{ t('task.verificationHoursLabel') }}</label>
+              <select id="publish-vhours" v-model.number="publishForm.verification_hours" class="input select-input">
+                <option :value="6">6</option>
+                <option :value="12">12</option>
+                <option :value="24">24</option>
+                <option :value="48">48</option>
+                <option :value="72">72</option>
+                <option :value="168">168</option>
+              </select>
+              <p class="form-hint">{{ t('task.verificationHoursHint') }}</p>
             </div>
             <div class="form-group escrow-block">
               <label class="form-label flex items-center gap-2">
@@ -764,6 +956,7 @@ import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Textarea } from '../components/ui/textarea'
 import EmptyState from '../components/EmptyState.vue'
+import MarkdownHtml from '../components/MarkdownHtml.vue'
 import { cn } from '../lib/utils'
 import { safeT } from '../i18n'
 import { useAuthStore } from '../stores/auth'
@@ -793,11 +986,18 @@ function showSuccessLocal(msg: string) {
   emit('success', msg)
 }
 
-const tab = ref<'available' | 'mine'>('available')
+const tab = ref<'available' | 'mine' | 'published' | 'disputes'>('available')
 const tasks = ref<TaskListItem[]>([])
 const tasksLoading = ref(false)
 const myTasks = ref<TaskListItem[]>([])
 const myTasksLoading = ref(false)
+const publishedTasks = ref<TaskListItem[]>([])
+const publishedTasksLoading = ref(false)
+
+function normalizePulse(q: unknown): string {
+  const raw = Array.isArray(q) ? q[0] : q
+  return typeof raw === 'string' ? raw : ''
+}
 type EscrowRow = { title: string; weight: number | string; acceptance_criteria: string }
 const defaultEscrowRows = (): EscrowRow[] => [
   { title: '', weight: 0.5, acceptance_criteria: '' },
@@ -821,6 +1021,7 @@ const publishForm = reactive<{
   verification_requirements_text: string
   escrow_enabled: boolean
   escrow_rows: EscrowRow[]
+  verification_hours: number
 }>({
   title: '',
   description: '',
@@ -839,6 +1040,7 @@ const publishForm = reactive<{
   verification_requirements_text: '',
   escrow_enabled: false,
   escrow_rows: defaultEscrowRows(),
+  verification_hours: 6,
 })
 const escrowWeightSum = computed(() =>
   publishForm.escrow_rows.reduce((s, r) => s + (Number(r.weight) || 0), 0)
@@ -861,6 +1063,8 @@ const candidates = ref<Array<{ id: number; name: string; owner_name: string; poi
 const myAgents = ref<Array<{ id: number; name: string; agent_type: string }>>([])
 const myPublishedSkills = ref<Array<{ id: number; name: string; skill_token: string }>>([])
 const accountCredits = ref(0)
+/** 与 /account/me task_pulse.disputes 同步，用于在无 pulse 参数时仍显示「争议」入口 */
+const taskPulseDisputes = ref(0)
 const subscribeTaskItem = ref<{ id: number; title: string } | null>(null)
 const subscribeLoading = ref<number | null>(null)
 const submitCompletionTask = ref<{ id: number; title: string } | null>(null)
@@ -882,6 +1086,7 @@ const escrowResolveForm = reactive<{ resolution_type: 'resume' | 'force_confirm'
 const escrowResolveLoading = ref<number | null>(null)
 const isAdmin = ref(false)
 const confirmLoading = ref<number | null>(null)
+const extendVerificationLoading = ref<number | null>(null)
 const rejectLoading = ref<number | null>(null)
 const rejectTaskId = ref<number | null>(null)
 const rejectReason = ref('')
@@ -907,11 +1112,153 @@ const filteredTasks = computed(() => {
   return tasks.value.filter((t) => t.category === categoryFilter.value)
 })
 
+const mineFilteredTasks = computed(() => {
+  const list = myTasks.value
+  const p = normalizePulse(route.query.pulse)
+  if (tab.value !== 'mine') return list
+  if (p === 'submit') return list.filter((x) => x.status === 'open' || x.status === 'in_progress')
+  if (p === 'wait') return list.filter((x) => x.status === 'pending_verification')
+  if (p === 'dispute') return list.filter((x) => x.status === 'disputed')
+  return list
+})
+
+const publishedFilteredTasks = computed(() => {
+  const list = publishedTasks.value
+  const p = normalizePulse(route.query.pulse)
+  if (tab.value !== 'published') return list
+  if (p === 'verify') return list.filter((x) => x.status === 'pending_verification')
+  if (p === 'dispute') return list.filter((x) => x.status === 'disputed')
+  return list
+})
+
+const pulseFilterBannerText = computed(() => {
+  const p = normalizePulse(route.query.pulse)
+  if (!p || route.query.relatedSkillId) return ''
+  const keys: Record<string, string> = {
+    verify: 'taskManage.pulseFilterBannerVerify',
+    submit: 'taskManage.pulseFilterBannerSubmit',
+    wait: 'taskManage.pulseFilterBannerWait',
+    dispute: 'taskManage.pulseFilterBannerDispute',
+  }
+  const k = keys[p]
+  return k ? String(t(k)) : ''
+})
+
+const mineEmptyTitle = computed(() => {
+  if (myTasks.value.length && !mineFilteredTasks.value.length) {
+    return String(t('taskManage.mineEmptyFilteredTitle') || '当前筛选下暂无任务')
+  }
+  return String(t('taskManage.noMyTasks') || '暂无接取的任务')
+})
+const mineEmptyDescription = computed(() => {
+  if (myTasks.value.length && !mineFilteredTasks.value.length) {
+    return String(t('taskManage.mineEmptyFilteredDesc') || '可点击「清除筛选」或切换标签')
+  }
+  return String(t('taskManage.goAcceptHint') || '前往首页或可接取任务列表接取第一个任务')
+})
+
+const publishedEmptyTitle = computed(() => {
+  if (publishedTasks.value.length && !publishedFilteredTasks.value.length) {
+    return String(t('taskManage.publishedEmptyFilteredTitle') || '当前筛选下暂无任务')
+  }
+  return String(t('taskManage.noPublishedTasks') || '暂无发布的任务')
+})
+const publishedEmptyDescription = computed(() => {
+  if (publishedTasks.value.length && !publishedFilteredTasks.value.length) {
+    return String(t('taskManage.publishedEmptyFilteredDesc') || '可清除筛选或前往首页发布')
+  }
+  return String(t('taskManage.publishedEmptyHint') || '在首页或本页发布任务后，将在此管理验收与结算')
+})
+
+const showDisputesTab = computed(
+  () => normalizePulse(route.query.pulse) === 'dispute' || taskPulseDisputes.value > 0,
+)
+
+const disputedMergedEntries = computed(() => {
+  const seen = new Set<number>()
+  const out: Array<{ task: TaskListItem; role: 'assignee' | 'publisher' }> = []
+  for (const task of myTasks.value) {
+    if (task.status !== 'disputed') continue
+    if (seen.has(task.id)) continue
+    seen.add(task.id)
+    out.push({ task, role: 'assignee' })
+  }
+  for (const task of publishedTasks.value) {
+    if (task.status !== 'disputed') continue
+    if (seen.has(task.id)) continue
+    seen.add(task.id)
+    out.push({ task, role: 'publisher' })
+  }
+  return out
+})
+
+const disputedMergedTasks = computed(() => disputedMergedEntries.value.map((e) => e.task))
+const disputedMergedCount = computed(() => disputedMergedEntries.value.length)
+
+/** 标签角标：列表已加载时优先用合并条数，否则用服务端 task_pulse.disputes */
+const disputesTabBadgeCount = computed(() => {
+  const merged = disputedMergedEntries.value.length
+  if (merged > 0) return merged
+  return taskPulseDisputes.value
+})
+
+const disputesTabLoading = computed(() => {
+  if (tab.value !== 'disputes') return false
+  return myTasksLoading.value || publishedTasksLoading.value
+})
+
+function disputeRoleLabel(taskId: number): string {
+  const e = disputedMergedEntries.value.find((x) => x.task.id === taskId)
+  if (!e) return ''
+  return e.role === 'assignee'
+    ? String(t('taskManage.disputeRoleAssignee') || '接取方')
+    : String(t('taskManage.disputeRolePublisher') || '发布方')
+}
+
 const TASK_ROW_ITEM_HEIGHT = 168
 const virtualAvailable = useVirtualList(filteredTasks, { itemHeight: TASK_ROW_ITEM_HEIGHT, overscan: 6 })
-const virtualMine = useVirtualList(myTasks, { itemHeight: TASK_ROW_ITEM_HEIGHT, overscan: 6 })
+const virtualMine = useVirtualList(mineFilteredTasks, { itemHeight: TASK_ROW_ITEM_HEIGHT, overscan: 6 })
+const virtualPublished = useVirtualList(publishedFilteredTasks, { itemHeight: TASK_ROW_ITEM_HEIGHT, overscan: 6 })
+const virtualDisputes = useVirtualList(disputedMergedTasks, { itemHeight: TASK_ROW_ITEM_HEIGHT, overscan: 6 })
 const virtualAvailableItems = computed(() => (virtualAvailable.list.value || []).filter((x) => !!x.data))
 const virtualMineItems = computed(() => (virtualMine.list.value || []).filter((x) => !!x.data))
+const virtualPublishedItems = computed(() => (virtualPublished.list.value || []).filter((x) => !!x.data))
+const virtualDisputesItems = computed(() => (virtualDisputes.list.value || []).filter((x) => !!x.data))
+
+function clearPulseQuery() {
+  const q = { ...route.query } as Record<string, string | string[] | undefined>
+  delete q.pulse
+  if (tab.value === 'disputes') tab.value = 'mine'
+  router.replace({ path: '/tasks', query: q })
+}
+
+/** 进入争议合并视图并写入 URL，便于刷新与分享 */
+function goDisputesTab() {
+  const q = { ...route.query } as Record<string, string | string[] | undefined>
+  q.pulse = 'dispute'
+  router.replace({ path: '/tasks', query: q })
+}
+
+function applyPulseFromQuery() {
+  if (route.query.relatedSkillId) return
+  const p = normalizePulse(route.query.pulse)
+  if (!p && tab.value === 'disputes') tab.value = 'mine'
+  if (!p || !auth.isLoggedIn) return
+  if (p === 'verify') {
+    tab.value = 'published'
+    loadPublishedTasks()
+    return
+  }
+  if (p === 'submit' || p === 'wait') {
+    tab.value = 'mine'
+    loadMyTasks()
+    return
+  }
+  if (p === 'dispute') {
+    tab.value = 'disputes'
+    /* 列表由 watch(tab) 在切换到 disputes 时拉取，避免与 applyPulse 重复请求 */
+  }
+}
 
 function doLogin() {
   authError.value = ''
@@ -924,6 +1271,8 @@ function doLogin() {
     loadMyPublishedSkills()
     loadTasks()
     if (tab.value === 'mine') loadMyTasks()
+    if (tab.value === 'published') loadPublishedTasks()
+    applyPulseFromQuery()
   }).catch((e) => { authError.value = e.response?.data?.detail || t('common.loginFailed') }).finally(() => { authLoading.value = false })
 }
 function doRegister() {
@@ -936,6 +1285,9 @@ function doRegister() {
     loadMyAgents()
     loadMyPublishedSkills()
     loadTasks()
+    if (tab.value === 'mine') loadMyTasks()
+    if (tab.value === 'published') loadPublishedTasks()
+    applyPulseFromQuery()
   }).catch((e) => { authError.value = e.response?.data?.detail || t('common.registerFailed') }).finally(() => { authLoading.value = false })
 }
 
@@ -983,11 +1335,35 @@ function clearRelatedSkillFilter() {
 }
 
 function loadMyTasks() {
-  if (!auth.isLoggedIn) return
+  if (!auth.isLoggedIn) return Promise.resolve()
   myTasksLoading.value = true
-  api.fetchMyAcceptedTasks().then((res) => {
-    myTasks.value = res.data.tasks || []
-  }).catch(() => { myTasks.value = [] }).finally(() => { myTasksLoading.value = false })
+  return api
+    .fetchMyAcceptedTasks({ limit: 500 })
+    .then((res) => {
+      myTasks.value = res.data.tasks || []
+    })
+    .catch(() => {
+      myTasks.value = []
+    })
+    .finally(() => {
+      myTasksLoading.value = false
+    })
+}
+
+function loadPublishedTasks() {
+  if (!auth.isLoggedIn) return Promise.resolve()
+  publishedTasksLoading.value = true
+  return api
+    .fetchMyCreatedTasks({ limit: 500 })
+    .then((res) => {
+      publishedTasks.value = res.data.tasks || []
+    })
+    .catch(() => {
+      publishedTasks.value = []
+    })
+    .finally(() => {
+      publishedTasksLoading.value = false
+    })
 }
 
 function loadCandidates() {
@@ -1017,6 +1393,7 @@ function loadAccountMe() {
   if (!auth.isLoggedIn) return
   api.getAccountMe().then((res) => {
     accountCredits.value = res.data.credits ?? 0
+    taskPulseDisputes.value = res.data.task_pulse?.disputes ?? 0
   }).catch(() => {})
 }
 
@@ -1442,6 +1819,7 @@ function getTaskDraft(): typeof publishForm | null {
         weight: Number(r.weight) || 0,
         acceptance_criteria: String((r as any).acceptance_criteria ?? ''),
       })),
+      verification_hours: Math.min(168, Math.max(1, Number(o.verification_hours) || 6)),
     }
   } catch {
     return null
@@ -1477,6 +1855,7 @@ function saveDraft() {
       verification_requirements_text: publishForm.verification_requirements_text,
       escrow_enabled: publishForm.escrow_enabled,
       escrow_rows: publishForm.escrow_rows.map((r) => ({ ...r })),
+      verification_hours: publishForm.verification_hours,
       updated_at: Date.now(),
     }
     localStorage.setItem(TASK_DRAFT_KEY, JSON.stringify(payload))
@@ -1513,6 +1892,7 @@ function restoreDraft() {
       acceptance_criteria: String((r as any).acceptance_criteria ?? ''),
     }))
     : defaultEscrowRows()
+  publishForm.verification_hours = typeof (d as any).verification_hours === 'number' ? (d as any).verification_hours : 6
   showSuccessLocal(t('task.draftRestored') || '已恢复草稿')
 }
 
@@ -1595,6 +1975,7 @@ function doPublish() {
       .filter(Boolean),
     discord_webhook_url: publishForm.discord_webhook_url.trim() || undefined,
     escrow_milestones: escrow_milestones,
+    verification_hours: reward > 0 ? Math.min(168, Math.max(1, Number(publishForm.verification_hours) || 6)) : undefined,
   }).then(() => {
     try { localStorage.removeItem(TASK_DRAFT_KEY) } catch {}
     hasTaskDraft.value = false
@@ -1615,6 +1996,7 @@ function doPublish() {
     publishForm.verification_requirements_text = ''
     publishForm.escrow_enabled = false
     publishForm.escrow_rows = defaultEscrowRows()
+    publishForm.verification_hours = 6
     showSuccessLocal(t('task.publishSuccess'))
     showCreateModal.value = false
     if (auth.isGuestUser || !myAgents.value.length) emit('register-hint')
@@ -1636,6 +2018,8 @@ function doSubscribe(taskId: number, agentId: number) {
     showSuccessLocal(t('task.subscribeSuccess'))
     loadTasks()
     loadMyTasks()
+    loadPublishedTasks()
+    loadAccountMe()
     tab.value = 'mine'
   }).finally(() => { subscribeLoading.value = null })
 }
@@ -1668,6 +2052,8 @@ function doSubmitCompletion() {
     showSuccessLocal(t('task.submitCompletionSuccess'))
     loadTasks()
     loadMyTasks()
+    loadPublishedTasks()
+    loadAccountMe()
   }).finally(() => { submitCompletionLoading.value = false })
 }
 
@@ -1700,6 +2086,8 @@ function doEscrowDispute() {
     closeEscrowDisputeModal()
     loadTasks()
     loadMyTasks()
+    loadPublishedTasks()
+    loadAccountMe()
     if (selectedTaskDetail.value?.id === taskId) openTaskDetail(selectedTaskDetail.value)
   }).finally(() => { escrowDisputeLoading.value = null })
 }
@@ -1737,6 +2125,8 @@ function doEscrowResolve() {
     closeEscrowResolveModal()
     loadTasks()
     loadMyTasks()
+    loadPublishedTasks()
+    loadAccountMe()
     if (selectedTaskDetail.value?.id === taskId) openTaskDetail(selectedTaskDetail.value)
   }).finally(() => { escrowResolveLoading.value = null })
 }
@@ -1763,8 +2153,21 @@ function doConfirm() {
     closeConfirmModal()
     loadTasks()
     loadMyTasks()
+    loadPublishedTasks()
     loadAccountMe()
   }).finally(() => { confirmLoading.value = null })
+}
+
+function runExtendVerification(task: TaskListItem) {
+  extendVerificationLoading.value = task.id
+  api.extendTaskVerification(task.id).then(() => {
+    showSuccessLocal(t('task.extendVerificationOk'))
+    loadTasks()
+    loadMyTasks()
+    loadPublishedTasks()
+    loadAccountMe()
+    if (selectedTaskDetail.value?.id === task.id) openTaskDetail(selectedTaskDetail.value)
+  }).catch(() => {}).finally(() => { extendVerificationLoading.value = null })
 }
 
 function openRejectModal(taskId: number) {
@@ -1781,6 +2184,8 @@ function doRejectWithReason() {
     rejectReason.value = ''
     loadTasks()
     loadMyTasks()
+    loadPublishedTasks()
+    loadAccountMe()
     if (selectedTaskDetail.value?.id === taskId) openTaskDetail(selectedTaskDetail.value)
   }).catch(() => {}).finally(() => { rejectLoading.value = null })
 }
@@ -1871,6 +2276,14 @@ watch(
 )
 
 watch(
+  () => [normalizePulse(route.query.pulse), auth.isLoggedIn, String(route.query.relatedSkillId ?? '')] as const,
+  () => {
+    applyPulseFromQuery()
+  },
+  { immediate: true }
+)
+
+watch(
   () => String(route.query.taskId ?? ''),
   (v) => {
     if (!v) return
@@ -1904,14 +2317,23 @@ watch(() => auth.isLoggedIn, (loggedIn) => {
     loadAccountMe()
     refreshAdminFlag()
     if (tab.value === 'mine') loadMyTasks()
+    if (tab.value === 'published') loadPublishedTasks()
+    applyPulseFromQuery()
   } else {
     isAdmin.value = false
     myPublishedSkills.value = []
+    publishedTasks.value = []
+    taskPulseDisputes.value = 0
   }
 })
 
 watch(tab, (newTab) => {
-  if (newTab === 'mine' && auth.isLoggedIn) loadMyTasks()
+  if (!auth.isLoggedIn) return
+  if (newTab === 'mine') loadMyTasks()
+  if (newTab === 'published') loadPublishedTasks()
+  if (newTab === 'disputes') {
+    void Promise.all([loadMyTasks(), loadPublishedTasks()]).then(() => loadAccountMe())
+  }
 })
 </script>
 
@@ -2126,9 +2548,27 @@ watch(tab, (newTab) => {
 .task-comment-by-user { font-size: var(--font-caption); color: var(--text-secondary); }
 .task-comment-time { margin-left: auto; font-size: var(--font-caption); color: var(--text-secondary); }
 .task-comment-kind-badge { font-size: 0.6875rem; padding: 0.12rem 0.45rem; border-radius: var(--radius-full); border: var(--border-hairline); background: rgba(255,255,255,0.04); color: var(--text-secondary); }
-.task-comment-content { margin: 0; white-space: pre-wrap; word-break: break-word; font-size: var(--font-body); color: var(--text-secondary); line-height: var(--line-normal); }
+.task-comment-content { margin: 0; font-size: var(--font-body); color: var(--text-secondary); line-height: var(--line-normal); }
+.task-comment-content :deep(.claw-md) { color: inherit; }
 .task-comments-empty { margin: 0; color: var(--text-secondary); font-size: var(--font-caption); }
 .task-comment-form { margin-top: var(--space-5); display: flex; flex-direction: column; gap: var(--space-3); }
+.task-payment-panel, .task-timeline-panel, .task-rejection-history {
+  margin-top: var(--space-4);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  border: var(--border-hairline);
+  background: rgba(255,255,255,0.02);
+}
+.task-payment-list { margin: 0; padding-left: 1.1rem; font-size: var(--font-small); color: var(--text-secondary); }
+.task-payment-tx { margin: 0.5rem 0 0; padding-left: 1rem; list-style: disc; color: var(--text-tertiary); }
+.task-timeline-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 0.5rem; }
+.task-timeline-item { display: flex; flex-direction: column; gap: 0.15rem; font-size: var(--font-small); }
+.task-timeline-time { color: var(--text-tertiary); font-size: 0.75rem; }
+.task-timeline-summary { color: var(--text-secondary); }
+.task-rejection-details { margin-bottom: 0.5rem; }
+.task-rejection-reason { margin: 0.35rem 0 0; white-space: pre-wrap; font-size: var(--font-small); color: var(--text-secondary); }
+.task-verify-hint { margin-top: var(--space-3); }
+.detail-escrow__sla { margin-top: 0.35rem; font-size: var(--font-caption); }
 
 /* NOTE: translated comment in English. */
 .task-list { display: flex; flex-direction: column; gap: 0; }
@@ -2281,6 +2721,27 @@ watch(tab, (newTab) => {
 .completion-links-title { margin: 0 0 0.35rem; font-size: 0.85rem; color: var(--text-secondary); }
 .completion-links ul { margin: 0; padding-left: 1rem; }
 .task-detail-verification-record { margin-top: var(--space-4); padding: var(--space-4); border: var(--border-hairline); border-radius: var(--radius-sm); background: rgba(255,255,255,0.02); }
+.pulse-filter-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(var(--primary-rgb), 0.22);
+  background: rgba(var(--primary-rgb), 0.06);
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+.pulse-filter-banner span:first-child {
+  flex: 1;
+  min-width: 0;
+}
+.hint-inline {
+  color: var(--text-tertiary, var(--text-secondary));
+  font-style: italic;
+}
 .task-tabs {
   display: inline-flex;
   gap: 0;
@@ -2311,6 +2772,33 @@ watch(tab, (newTab) => {
   border-color: rgba(var(--primary-rgb), 0.2);
   color: var(--text-primary);
   box-shadow: 0 1px 0 rgba(0,0,0,0.06), 0 0 0 1px rgba(var(--primary-rgb), 0.12) inset;
+}
+.task-tab--disputes.task-tab.active {
+  border-color: rgba(251, 146, 60, 0.45);
+  background: rgba(251, 146, 60, 0.12);
+  box-shadow: 0 1px 0 rgba(0,0,0,0.06), 0 0 0 1px rgba(251, 146, 60, 0.15) inset;
+}
+.task-tab__count {
+  margin-left: 0.2rem;
+  font-weight: 600;
+  opacity: 0.9;
+}
+.disputes-merge-hint {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  margin: 0 0 var(--space-3);
+  line-height: 1.45;
+}
+.task-row__dispute-role {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.15rem 0.45rem;
+  border-radius: 6px;
+  background: rgba(251, 146, 60, 0.12);
+  border: 1px solid rgba(251, 146, 60, 0.35);
+  color: #fdba74;
 }
 .related-skill-banner {
   display: flex;

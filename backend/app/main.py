@@ -8,11 +8,13 @@ from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordBearer
 from starlette.middleware.base import BaseHTTPMiddleware
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy import func, text, desc
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from typing import Optional, List, Any
+import copy
 import os
 import time
 import uuid
@@ -1326,8 +1328,65 @@ async def delete_agent(agent_id: str, current_user: str = Depends(get_current_us
     return await agent_manager.delete_agent(agent_id, current_user)
 
 # NOTE: translated comment in English.
-VERIFICATION_HOURS = 6  # 发布者验收截止时间（小时），超时自动完成
+VERIFICATION_HOURS_DEFAULT = 6  # 默认验收窗口（小时）；可被任务级 verification_hours 覆盖
+VERIFICATION_HOURS_MIN = 1
+VERIFICATION_HOURS_MAX = 168  # 最长 7 天
+VERIFICATION_HOURS = 6  # 兼容旧代码与测试引用
+VERIFICATION_EXTEND_HOURS = 24  # 发布方一键延长的小时数（每轮待验收限 1 次）
 PLATFORM_COMMISSION_RATE = 0.01  # 任务成功发放奖励时，若发布方已配置佣金则按此比例计入发布者（可选功能）
+
+
+def _task_verification_hours(task: Task) -> int:
+    d = task.input_data if isinstance(task.input_data, dict) else {}
+    try:
+        n = int(d.get("verification_hours", VERIFICATION_HOURS_DEFAULT))
+        if VERIFICATION_HOURS_MIN <= n <= VERIFICATION_HOURS_MAX:
+            return n
+    except (TypeError, ValueError):
+        pass
+    return VERIFICATION_HOURS_DEFAULT
+
+
+def _append_timeline_event(task: Task, event_type: str, summary: str) -> None:
+    base = copy.deepcopy(task.input_data) if isinstance(task.input_data, dict) else {}
+    tl = base.get("timeline")
+    if not isinstance(tl, list):
+        tl = []
+    tl.append(
+        {
+            "at": datetime.utcnow().isoformat() + "Z",
+            "type": event_type,
+            "summary": (summary or "")[:500],
+        }
+    )
+    base["timeline"] = tl[-100:]
+    task.input_data = base
+    try:
+        flag_modified(task, "input_data")
+    except Exception:
+        pass
+
+
+def _task_payment_breakdown(task: Task, db: Session) -> dict:
+    rp = int(getattr(task, "reward_points", 0) or 0)
+    comm = int(rp * PLATFORM_COMMISSION_RATE) if rp else 0
+    net = max(0, rp - comm)
+    txs = (
+        db.query(CreditTransaction)
+        .filter(CreditTransaction.ref_id == task.id, CreditTransaction.type == "task_reward")
+        .order_by(CreditTransaction.created_at.asc())
+        .all()
+    )
+    return {
+        "reward_points": rp,
+        "commission_rate": PLATFORM_COMMISSION_RATE,
+        "commission_points": comm,
+        "executor_net_points": net,
+        "transactions": [
+            {"amount": t.amount, "remark": (t.remark or "")[:300], "created_at": iso_utc(t.created_at)}
+            for t in txs[:20]
+        ],
+    }
 
 # NOTE: translated comment in English.
 _FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/")
@@ -1363,6 +1422,7 @@ class PublishTaskBody(BaseModel):
     verification_method: str = "manual_review"  # manual_review | proof_link | checklist | hybrid
     verification_requirements: list = []  # 验收清单要求（用于 checklist / hybrid）
     related_skill_token: str = ""  # 可选：将任务显式关联到某个已发布 Skill token
+    verification_hours: Optional[int] = None  # 发布者验收窗口（小时），默认 6，范围 1–168
 
 
 def _push_task_to_discord(task: Task, webhook_url: str, frontend_url: str) -> None:
@@ -1610,6 +1670,8 @@ def _task_extra(t: Task, db: Session) -> dict:
         "verification_requirements": d.get("verification_requirements") if isinstance(d.get("verification_requirements"), list) else [],
         "related_skill": _task_related_skill(db, t, d),
     }
+    out["verification_hours"] = _task_verification_hours(t)
+    out["verification_extend_used"] = int(d.get("verification_extend_used", 0) or 0)
     if esc:
         ms = esc.get("milestones") or []
         idx = int(esc.get("current_index", 0) or 0)
@@ -1923,6 +1985,15 @@ def publish_task(
         creator_tok = _agent_skill_token(db, int(creator_agent_id))
         if creator_tok:
             extra["related_skill_token"] = creator_tok
+    vh_raw = getattr(body, "verification_hours", None)
+    if vh_raw is None:
+        extra["verification_hours"] = VERIFICATION_HOURS_DEFAULT
+    else:
+        try:
+            vh = int(vh_raw)
+            extra["verification_hours"] = max(VERIFICATION_HOURS_MIN, min(VERIFICATION_HOURS_MAX, vh))
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="verification_hours 须为整数")
     category = (getattr(body, "category", None) or "").strip()[:64] or None
     requirements = (getattr(body, "requirements", None) or "").strip() or None
     # NOTE: translated comment in English.
@@ -1955,6 +2026,12 @@ def publish_task(
     db.add(task)
     db.commit()
     db.refresh(task)
+    try:
+        vh = _task_verification_hours(task)
+        _append_timeline_event(task, "published", f"任务已发布（验收窗口 {vh} 小时，超时自动确认发奖）")
+        db.commit()
+    except Exception:
+        db.rollback()
     try:
         db.add(SystemLog(
             level="info",
@@ -2112,6 +2189,7 @@ def subscribe_task(
         task.agent_id = body.agent_id
     if get_escrow(task) and task.status == "open":
         task.status = "in_progress"
+    _append_timeline_event(task, "subscribed", f"Agent「{agent.name}」已接取任务")
     db.commit()
     db.refresh(sub)
     return {"message": "订阅成功", "subscription_id": sub.id}
@@ -2195,7 +2273,16 @@ def submit_completion(
             raise HTTPException(status_code=502, detail=f"{last_err}（已重试 {max_attempts} 次）")
     task.status = "pending_verification"
     task.submitted_at = datetime.utcnow()
-    task.verification_deadline_at = datetime.utcnow() + timedelta(hours=VERIFICATION_HOURS)
+    vh = _task_verification_hours(task)
+    base_in = task.input_data if isinstance(task.input_data, dict) else {}
+    base_in = copy.deepcopy(base_in) if base_in else {}
+    base_in["verification_extend_used"] = 0
+    task.input_data = base_in
+    try:
+        flag_modified(task, "input_data")
+    except Exception:
+        pass
+    task.verification_deadline_at = datetime.utcnow() + timedelta(hours=vh)
     if body.result_summary or body.evidence:
         base = task.output_data if isinstance(task.output_data, dict) else {}
         task.output_data = {
@@ -2215,6 +2302,7 @@ def submit_completion(
         base = task.output_data if isinstance(task.output_data, dict) else {}
         idx = int(escrow.get("current_index", 0) or 0)
         task.output_data = {**(base or {}), "escrow_submit_milestone_index": idx}
+    _append_timeline_event(task, "submitted_for_review", f"已提交验收，截止 {iso_utc(task.verification_deadline_at)}（{vh} 小时内未确认将自动发奖）")
     db.commit()
     _append_task_status_update_comment(
         db,
@@ -2224,9 +2312,10 @@ def submit_completion(
         content=f"任务已提交验收，截止时间：{iso_utc(task.verification_deadline_at)}",
     )
     return {
-        "message": "已提交验收，发布者需在 6 小时内确认，否则将自动完成并发奖",
+        "message": f"已提交验收，发布者需在 {vh} 小时内确认，否则将自动完成并发奖",
         "task_id": task_id,
         "verification_deadline_at": iso_utc(task.verification_deadline_at),
+        "verification_hours": vh,
         "preflight": preflight,
     }
 
@@ -2333,6 +2422,12 @@ def confirm_task(
     escrow = get_escrow(task)
     if task.status == "pending_verification" and escrow:
         info = apply_escrow_milestone_confirm(task, db, auto=False)
+        fin = bool(info.get("escrow_finished"))
+        _append_timeline_event(
+            task,
+            "milestone_confirmed",
+            "托管里程碑已确认并放款" + ("（全部里程碑已完成）" if fin else ""),
+        )
         db.commit()
         _append_task_status_update_comment(
             db,
@@ -2359,6 +2454,7 @@ def confirm_task(
         }
     if task.status == "pending_verification":
         _pay_task_reward(task, db)
+        _append_timeline_event(task, "confirmed", "发布方确认验收，任务完成并已发奖")
     elif task.status == "open" and reward_points == 0:
         task.status = "completed"
         task.completed_at = datetime.utcnow()
@@ -2420,7 +2516,24 @@ def reject_completion(
     task.submitted_at = None
     task.verification_deadline_at = None
     base = task.output_data if isinstance(task.output_data, dict) else {}
-    task.output_data = {**(base or {}), "rejection_reason": reason}
+    rh = base.get("rejection_history")
+    if not isinstance(rh, list):
+        rh = []
+    rh.append({"at": datetime.utcnow().isoformat() + "Z", "reason": reason[:2000]})
+    base["rejection_history"] = rh[-20:]
+    base["rejection_reason"] = reason
+    task.output_data = base
+    try:
+        flag_modified(task, "output_data")
+    except Exception:
+        pass
+    esc = get_escrow(task)
+    _append_timeline_event(
+        task,
+        "rejected",
+        ("退回修改（托管）" if esc else "退回修改（非托管：仍由原接取 Agent 负责，其他人不可抢单）")
+        + f"：{reason[:120]}",
+    )
     db.commit()
     _append_task_status_update_comment(
         db,
@@ -2430,6 +2543,48 @@ def reject_completion(
         content=f"发布方拒绝验收：{reason[:160]}",
     )
     return {"message": "已拒绝，接取者可重新提交完成", "task_id": task_id}
+
+
+@app.post("/tasks/{task_id}/extend-verification")
+def extend_task_verification(
+    task_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """发布者延长本轮待验收截止时间一次（+24 小时）；仅 pending_verification 且尚未延长过。"""
+    uid = int(current_user["user_id"])
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    if task.owner_id != uid:
+        raise HTTPException(status_code=403, detail="仅任务发布者可延长验收")
+    if task.status != "pending_verification":
+        raise HTTPException(status_code=400, detail="仅待验收任务可延长")
+    if not getattr(task, "verification_deadline_at", None):
+        raise HTTPException(status_code=400, detail="无验收截止时间")
+    base = task.input_data if isinstance(task.input_data, dict) else {}
+    used = int(base.get("verification_extend_used", 0) or 0)
+    if used >= 1:
+        raise HTTPException(status_code=400, detail="本轮待验收仅可延长一次（+24 小时）")
+    task.verification_deadline_at = task.verification_deadline_at + timedelta(hours=VERIFICATION_EXTEND_HOURS)
+    base = copy.deepcopy(base)
+    base["verification_extend_used"] = 1
+    task.input_data = base
+    try:
+        flag_modified(task, "input_data")
+    except Exception:
+        pass
+    _append_timeline_event(
+        task,
+        "verification_extended",
+        f"发布方延长验收 {VERIFICATION_EXTEND_HOURS} 小时，新截止：{iso_utc(task.verification_deadline_at)}",
+    )
+    db.commit()
+    return {
+        "message": f"已延长 {VERIFICATION_EXTEND_HOURS} 小时",
+        "task_id": task_id,
+        "verification_deadline_at": iso_utc(task.verification_deadline_at),
+    }
 
 
 @app.post("/tasks/{task_id}/escrow/dispute")
@@ -2480,6 +2635,11 @@ def escrow_dispute(
         escrow["dispute_evidence"] = {}
     save_escrow_to_task(task, escrow)
     task.status = "disputed"
+    _append_timeline_event(
+        task,
+        "escrow_dispute",
+        "托管争议已发起，双方暂停提交与放款，请等待管理员处理（详见 /admin 争议列表）",
+    )
     db.commit()
     try:
         db.add(
@@ -2507,15 +2667,22 @@ def batch_confirm_tasks(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    """批量验收通过：仅任务发布者可调用，对多个待验收任务执行验收。"""
+    """批量验收通过：仅任务发布者可调用，对多个待验收任务执行验收。响应含 summary 便于前端提示高额奖励风险。"""
     uid = int(current_user["user_id"])
     task_ids = list(set(body.task_ids or []))[:50]
     results = []
+    total_reward_points = 0
+    high_value_task_ids: List[int] = []
     for task_id in task_ids:
         task = db.query(Task).filter(Task.id == task_id, Task.owner_id == uid).first()
         if not task:
             results.append({"task_id": task_id, "ok": False, "reason": "not_found_or_forbidden"})
             continue
+        rp = int(getattr(task, "reward_points", 0) or 0)
+        if task.status == "pending_verification":
+            total_reward_points += rp
+            if rp >= 5000:
+                high_value_task_ids.append(task_id)
         _maybe_auto_confirm(task, db)
         db.refresh(task)
         if task.status == "completed":
@@ -2537,12 +2704,24 @@ def batch_confirm_tasks(
         except Exception as e:
             db.rollback()
             results.append({"task_id": task_id, "ok": False, "reason": str(e)})
-    return {"results": results}
+    warn = None
+    if total_reward_points >= 10000 or len(high_value_task_ids) >= 3:
+        warn = "批量中含高额奖励任务，请逐条核对后再验收"
+    elif high_value_task_ids:
+        warn = "部分任务奖励点较高（≥5000），请确认无误"
+    return {
+        "results": results,
+        "summary": {
+            "total_reward_points": total_reward_points,
+            "high_value_task_ids": high_value_task_ids[:50],
+            "warning": warn,
+        },
+    }
 
 
 @app.get("/tasks/{task_id}")
 async def get_task_by_id(task_id: int, db: Session = Depends(get_db)):
-    """获取单条任务详情（公开）；若处于待验收且已过 6 小时则自动完成。"""
+    """获取单条任务详情（公开）；若处于待验收且已超过截止时间则自动完成。"""
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
@@ -2551,6 +2730,14 @@ async def get_task_by_id(task_id: int, db: Session = Depends(get_db)):
     owner = db.query(User).filter(User.id == task.owner_id).first()
     subs = db.query(TaskSubscription).filter(TaskSubscription.task_id == task_id).all()
     creator_agent = db.query(Agent).filter(Agent.id == task.creator_agent_id).first() if getattr(task, "creator_agent_id", None) else None
+    tin = task.input_data if isinstance(task.input_data, dict) else {}
+    tout = task.output_data if isinstance(task.output_data, dict) else {}
+    tl = tin.get("timeline")
+    if not isinstance(tl, list):
+        tl = []
+    rh = tout.get("rejection_history")
+    if not isinstance(rh, list):
+        rh = []
     return {
         "id": task.id,
         "title": task.title,
@@ -2569,6 +2756,11 @@ async def get_task_by_id(task_id: int, db: Session = Depends(get_db)):
         "verification_deadline_at": iso_utc(getattr(task, "verification_deadline_at", None)),
         "created_at": iso_utc(task.created_at),
         "output_data": task.output_data if isinstance(getattr(task, "output_data", None), dict) else None,
+        "timeline": tl,
+        "verification_hours": _task_verification_hours(task),
+        "verification_extend_used": int(tin.get("verification_extend_used", 0) or 0),
+        "rejection_history": rh,
+        "payment_breakdown": _task_payment_breakdown(task, db),
         **_task_extra(task, db),
     }
 

@@ -61,6 +61,11 @@ CLAWJOB_USERNAME=bot
 
 ## 端到端与浏览器流程测试
 
+- **verify_online_e2e.py**：对线上/指定 API 做公开冒烟（`/health`、`/stats`、`/stats/roi-series`）。本地若设 `CLAWJOB_E2E_FULL=1` 且 `CLAWJOB_API_URL` 为 localhost，会再跑 **e2e_publish_and_complete.py**。
+  ```bash
+  python3 verify_online_e2e.py
+  CLAWJOB_API_URL=https://api.clawjob.com.cn python3 verify_online_e2e.py
+  ```
 - **e2e_publish_and_complete.py**：完整 API 流程（发布者/接取者注册 → 充值 → 发布 → 接取 → 验收），无需浏览器。
   ```bash
   export CLAWJOB_API_URL=http://localhost:8002

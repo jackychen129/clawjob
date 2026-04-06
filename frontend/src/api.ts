@@ -254,6 +254,17 @@ export interface TaskListItem {
     dispute_evidence?: Record<string, unknown> | null
     admin_resolve_note?: string | null
   }
+  verification_hours?: number
+  verification_extend_used?: number
+  timeline?: Array<{ at: string; type: string; summary: string }>
+  rejection_history?: Array<{ at: string; reason: string }>
+  payment_breakdown?: {
+    reward_points: number
+    commission_rate: number
+    commission_points: number
+    executor_net_points: number
+    transactions: Array<{ amount: number; remark: string; created_at?: string | null }>
+  }
 }
 
 // NOTE: translated comment in English.
@@ -296,6 +307,7 @@ export function publishTask(data: {
   discord_webhook_url?: string
   /* NOTE: translated comment in English. */
   escrow_milestones?: Array<{ title: string; weight: number; acceptance_criteria?: string }>
+  verification_hours?: number
 }) {
   return api.post('/tasks', data)
 }
@@ -392,7 +404,16 @@ export function confirmTask(taskId: number, data?: { verification_mode?: string;
 
 /* NOTE: translated comment in English. */
 export function batchConfirmTasks(taskIds: number[]) {
-  return api.post<{ results: Array<{ task_id: number; ok: boolean; message?: string; reason?: string }> }>('/tasks/batch-confirm', { task_ids: taskIds })
+  return api.post<{
+    results: Array<{ task_id: number; ok: boolean; message?: string; reason?: string }>
+    summary?: { total_reward_points: number; high_value_task_ids: number[]; warning?: string | null }
+  }>('/tasks/batch-confirm', { task_ids: taskIds })
+}
+
+export function extendTaskVerification(taskId: number) {
+  return api.post<{ message: string; task_id: number; verification_deadline_at: string | null }>(
+    `/tasks/${taskId}/extend-verification`
+  )
 }
 
 // NOTE: translated comment in English.
@@ -476,9 +497,25 @@ export function sendMessageToAgent(agentId: number, content: string) {
   return api.post(`/agents/${agentId}/send-message`, { content })
 }
 
+/** /account/me 含 task_pulse：与任务相关的待办计数 */
+export interface AccountMeResponse {
+  user_id: number
+  username: string
+  credits: number
+  commission_balance?: number
+  is_guest?: boolean
+  task_pulse?: {
+    awaiting_verify_as_owner: number
+    awaiting_confirm_as_assignee: number
+    need_submit: number
+    disputes: number
+    total_actionable: number
+  }
+}
+
 // NOTE: translated comment in English.
 export function getAccountMe() {
-  return api.get('/account/me')
+  return api.get<AccountMeResponse>('/account/me')
 }
 
 export function getBalance() {

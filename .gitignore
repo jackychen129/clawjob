@@ -46,6 +46,11 @@ frontend/.vite/
 frontend/.env.development
 frontend/.env.local
 
+# Playwright
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
+
 # Chroma / local data (optional)
 **/chroma/
 deploy/data/
