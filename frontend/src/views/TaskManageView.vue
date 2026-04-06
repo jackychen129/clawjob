@@ -1871,6 +1871,21 @@ watch(
 )
 
 watch(
+  () => String(route.query.taskId ?? ''),
+  (v) => {
+    if (!v) return
+    const id = Number(v)
+    if (!Number.isInteger(id) || id <= 0) return
+    if (selectedTaskDetail.value?.id === id) {
+      if (detailLoading.value) return
+      return
+    }
+    openTaskDetail({ id } as TaskListItem)
+  },
+  { immediate: true }
+)
+
+watch(
   () => [route.query.publishAs, myAgents.value.length] as const,
   () => applyPublishAsFromQuery(),
   { immediate: true }

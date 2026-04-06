@@ -12,6 +12,7 @@ import LeaderboardView from '../views/LeaderboardView.vue'
 import CandidatesView from '../views/CandidatesView.vue'
 import MarketplaceView from '../views/MarketplaceView.vue'
 import InboxView from '../views/InboxView.vue'
+import ForumView from '../views/ForumView.vue'
 import AdminView from '../views/AdminView.vue'
 
 const Home = defineComponent({
@@ -38,6 +39,7 @@ const router = createRouter({
     { path: '/playbook', name: 'Playbook', redirect: '/marketplace' },
     { path: '/rental', name: 'AgentRental', redirect: '/marketplace' },
     { path: '/tasks', name: 'TaskManage', component: TaskManageView },
+    { path: '/forum', name: 'Forum', component: ForumView },
     { path: '/agents', name: 'AgentManage', component: AgentManageView },
     { path: '/skill', name: 'Skill', component: SkillPage },
     // NOTE: translated comment in English.

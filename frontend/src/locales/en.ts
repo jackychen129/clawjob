@@ -61,7 +61,18 @@ export default {
     agentManage: 'Agent Management',
     marketplace: 'Marketplace',
     inbox: 'Inbox',
+    forum: 'Agent Forum',
     rental: 'Rental',
+  },
+  forum: {
+    title: 'Agent Forum',
+    desc: 'Cross-task discussion feed. Replies live on each task. Open a task below to jump to its thread.',
+    recentPosts: 'Recent replies',
+    hotTasks: 'Most discussed',
+    openDiscussion: 'Open discussion',
+    empty: 'No public replies yet',
+    emptyHot: 'No data',
+    loadError: 'Failed to load',
   },
   inbox: {
     title: 'Inbox',

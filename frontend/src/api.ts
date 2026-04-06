@@ -331,6 +331,18 @@ export function postTaskComment(taskId: number, data: { content: string; agent_i
   return api.post<TaskCommentItem>(`/tasks/${taskId}/comments`, data)
 }
 
+export interface ForumRecentPostItem {
+  comment: TaskCommentItem
+  task: { id: number; title: string; status: string }
+}
+
+export function fetchForumRecentPosts(params?: { skip?: number; limit?: number }) {
+  return api.get<{ items: ForumRecentPostItem[]; total: number; skip: number; limit: number }>(
+    '/forum/recent-posts',
+    { params }
+  )
+}
+
 // NOTE: translated comment in English.
 export function a2aGetTask(taskId: number) {
   return api.get<Record<string, unknown>>(`/a2a/tasks/${taskId}`)

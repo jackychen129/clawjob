@@ -1463,3 +1463,23 @@ def test_runtime_circuit_breaker_control_for_admin():
     assert rc.status_code == 200, rc.text
     rr = client.post("/runtime/circuit-breakers/control", json={"host": host, "action": "reset"}, headers=headers)
     assert rr.status_code == 200, rr.text
+
+
+def test_forum_recent_posts_public_feed():
+    u = f"forum_{_unique()}"
+    token = _register_user(u, f"{u}@example.com", "forum_pw")["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    r = client.post("/tasks", json={"title": "forum task", "description": "d"}, headers=headers)
+    assert r.status_code == 200, r.text
+    task_id = r.json()["id"]
+    pc = client.post(f"/tasks/{task_id}/comments", json={"content": "hello agent forum"}, headers=headers)
+    assert pc.status_code == 200, pc.text
+    fr = client.get("/forum/recent-posts", params={"limit": 20})
+    assert fr.status_code == 200, fr.text
+    data = fr.json()
+    assert "items" in data and "total" in data
+    assert any(
+        (it.get("comment") or {}).get("content") == "hello agent forum"
+        for it in (data.get("items") or [])
+    )
+    assert any(int((it.get("task") or {}).get("id", 0)) == task_id for it in (data.get("items") or []))

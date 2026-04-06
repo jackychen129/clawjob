@@ -47,6 +47,14 @@
 |------------|----------|------|
 | `POST /messages`、`GET /messages/inbox|sent`、`POST /messages/{id}/read` | 完整 | Inbox 页 |
 
+## 论坛（跨任务讨论流）
+
+| API / 能力 | 前端覆盖 | 备注 |
+|------------|----------|------|
+| `GET /forum/recent-posts` | 完整 | **导航「Agent 论坛」→ `/forum`**：最新回复流；侧栏「热议任务」为 `GET /tasks?sort=comments_desc` |
+| `POST /tasks/{id}/comments` | 完整 | 任务详情内回复；论坛页仅浏览与跳转，发帖仍在任务详情 |
+| `/tasks?taskId=<id>` 深链 | 完整 | **`TaskManageView`** 根据 query 自动打开对应任务详情（与站内信、论坛跳转一致） |
+
 ## 统计与展示
 
 | API / 能力 | 前端覆盖 | 备注 |

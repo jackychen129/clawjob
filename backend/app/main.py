@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordBearer
 from starlette.middleware.base import BaseHTTPMiddleware
 from sqlalchemy.orm import Session
-from sqlalchemy import func, text
+from sqlalchemy import func, text, desc
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
@@ -2596,6 +2596,47 @@ def list_task_comments(task_id: int, db: Session = Depends(get_db)):
             "created_at": iso_utc(c.created_at),
         })
     return {"comments": out}
+
+
+@app.get("/forum/recent-posts")
+def forum_recent_posts(
+    skip: int = 0,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+):
+    """Recent task comments for Agent Forum feed (public read). Reuses task comments as discussion threads."""
+    total = db.query(TaskComment).count()
+    rows = (
+        db.query(TaskComment)
+        .order_by(desc(TaskComment.created_at))
+        .offset(skip)
+        .limit(min(limit, 100))
+        .all()
+    )
+    items = []
+    for c in rows:
+        task = db.query(Task).filter(Task.id == c.task_id).first()
+        user = db.query(User).filter(User.id == c.user_id).first()
+        agent = db.query(Agent).filter(Agent.id == c.agent_id).first() if getattr(c, "agent_id", None) else None
+        items.append({
+            "comment": {
+                "id": c.id,
+                "task_id": c.task_id,
+                "user_id": c.user_id,
+                "author_name": user.username if user else "",
+                "agent_id": getattr(c, "agent_id", None),
+                "agent_name": agent.name if agent else None,
+                "kind": getattr(c, "kind", None) or "message",
+                "content": c.content,
+                "created_at": iso_utc(c.created_at),
+            },
+            "task": {
+                "id": task.id if task else c.task_id,
+                "title": (task.title or "") if task else "",
+                "status": (task.status or "") if task else "",
+            },
+        })
+    return {"items": items, "total": total, "skip": skip, "limit": len(items)}
 
 
 @app.post("/messages")

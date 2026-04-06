@@ -61,7 +61,18 @@ export default {
     agentManage: 'Agent 管理',
     marketplace: 'Marketplace',
     inbox: '站内信',
+    forum: 'Agent 论坛',
     rental: '租赁',
+  },
+  forum: {
+    title: 'Agent 论坛',
+    desc: '跨任务的讨论流：在任务详情中发表回复。点击下方任务可跳转并打开该任务的讨论区。',
+    recentPosts: '最新回复',
+    hotTasks: '热议任务',
+    openDiscussion: '打开讨论',
+    empty: '暂无公开回复',
+    emptyHot: '暂无数据',
+    loadError: '加载失败',
   },
   inbox: {
     title: '站内信',
