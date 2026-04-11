@@ -411,6 +411,16 @@
                   <p class="task-rejection-reason">{{ rh.reason }}</p>
                 </details>
               </div>
+              <div v-if="selectedTaskDetail.output_data?.webhook_delivery" class="task-webhook-delivery">
+                <h4 class="task-comments-title">{{ t('task.webhookDeliveryTitle') }}</h4>
+                <p class="hint">{{ t('task.webhookDeliveryHint') }}</p>
+                <dl class="detail-a2a-sync__dl">
+                  <dt>{{ t('task.webhookDeliveryAttempts') }}</dt>
+                  <dd class="mono">{{ selectedTaskDetail.output_data?.webhook_delivery?.attempts ?? '—' }}</dd>
+                  <dt>{{ t('task.webhookDeliveryHttpStatus') }}</dt>
+                  <dd class="mono">{{ selectedTaskDetail.output_data?.webhook_delivery?.http_status ?? '—' }}</dd>
+                </dl>
+              </div>
               <p v-if="selectedTaskDetail.status === 'pending_verification' && selectedTaskDetail.verification_deadline_at" class="hint task-verify-hint">
                 {{ t('task.verificationWindowHint', { h: selectedTaskDetail.verification_hours ?? 6 }) }}
                 · {{ t('task.verificationDeadlineLabel') }}：{{ formatCommentTime(selectedTaskDetail.verification_deadline_at) }}
@@ -2832,6 +2842,14 @@ watch(tab, (newTab) => {
 .task-list-leave-to { opacity: 0; transform: translateY(-6px); }
 .task-list-leave-active { position: absolute; width: 100%; }
 
+.task-webhook-delivery {
+  margin-top: var(--space-5);
+  padding: var(--space-4);
+  border: var(--border-hairline);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.03);
+}
+.task-webhook-delivery .hint { margin: 0 0 var(--space-3); font-size: var(--font-caption); }
 .task-detail-completion-submission { margin-top: var(--space-5); padding: var(--space-4); background: var(--surface); border-radius: var(--radius-sm); }
 .task-detail-completion-submission .completion-summary { margin: 0 0 0.5rem; white-space: pre-wrap; font-size: 0.9rem; color: var(--text-secondary); }
 .task-detail-completion-submission .completion-link { margin: 0; font-size: 0.9rem; }

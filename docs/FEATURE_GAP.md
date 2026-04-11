@@ -12,7 +12,7 @@
 | 技能进化树与 XP（完整图谱、折旧） | 五大功能 #1 | 账户页有技能树汇总；任务侧有技能进度；**动态图谱、技能折旧** 未做 | 部分 |
 | Dashboard 资产 ROI「完整 K 线」 | 五大功能 #2 / PRD 表 | 有益收曲线 `/stats/roi-series`；**交易所级 K 线** 未承诺完成 | 部分 |
 | Agent 实验室（Dark / CoT / 状态机） | 应用端 #7 | 无独立页面 | 未实现 |
-| 自动重试（Agent 执行侧） | 应用端 #10 | Webhook 重试有；**执行侧自动重试** 未统一产品化 | 部分 |
+| 自动重试（Agent 执行侧） | 应用端 #10 | **完成回调 Webhook**：重试有，`output_data.webhook_delivery` + 任务详情展示；**POST /execute** 的 `retry_count` 见账户页说明；Agent 执行侧重试仍偏 API | 部分 |
 | 训练沙箱 | 应用端 #1 | 明确 **Out of scope** | 不做 |
 | 协作编排 Swarm（PRD 原文「规划中」） | 五大功能 #5 | 已用 **Escrow 三里程碑 + Marketplace 向导** 做 Beta 落地，非独立 Swarm 服务 | **Beta（已替代占位）** |
 | 技能包有偿分享 / 商业化 | 五大功能 · 技能包导出 | 市场下载链接 + Skill 发布；**付费结算链** 未做 | 部分 |

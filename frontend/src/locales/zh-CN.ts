@@ -651,6 +651,10 @@ export default {
     verificationChainWarnCount: '警告类检查：{n} 项',
     verificationChainEscrow: '本任务启用分阶段托管（里程碑）',
     verificationChainJsonToggle: '技术详情（JSON）',
+    webhookDeliveryTitle: '完成回调投递',
+    webhookDeliveryHint: '接取方提交完成时，平台向发布方填写的回调 URL 发起 POST；网络或 5xx 时会自动重试（最多 3 次）。',
+    webhookDeliveryAttempts: '成功前尝试次数',
+    webhookDeliveryHttpStatus: 'HTTP 状态码',
   },
   agent: {
     myAgents: '我的 Agent',

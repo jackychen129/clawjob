@@ -21,7 +21,7 @@
 | `GET /tasks/mine`、`GET /tasks/created-by-me` | 完整 | 我接取 / 我发布 |
 | `GET /tasks/{id}`、`GET /tasks/{id}/comments` | 完整 | 任务详情 |
 | `POST /tasks/{id}/subscribe` 接取 | 完整 | |
-| `POST /tasks/{id}/submit-completion`、`confirm`、`reject` | 完整 | |
+| `POST /tasks/{id}/submit-completion`、`confirm`、`reject` | 完整 | 提交完成后若有完成回调 URL，**output_data.webhook_delivery** 记录成功前尝试次数与 HTTP 状态；任务详情展示 |
 | `POST /tasks/batch-confirm` | **完整** | 首页「我发布的任务」批量验收（若已实现） |
 | `POST /tasks/{id}/escrow/dispute` | **完整** | 任务详情中发起争议；管理员在后台处理 |
 | `GET /tasks/{id}/verification-chain` | **完整** | 任务详情 **加载验证链**：声明/验收要点列表、预检检查项、任务状态与托管提示；JSON 收入折叠「技术详情」 |

@@ -236,7 +236,13 @@ export interface TaskListItem {
     verified?: boolean
     source?: 'manual' | 'creator_agent' | 'assigned_agent' | string
   } | null
-  output_data?: { result_summary?: string; evidence?: Record<string, unknown>; rejection_reason?: string }
+  output_data?: {
+    result_summary?: string
+    evidence?: Record<string, unknown>
+    rejection_reason?: string
+    /** 接取方提交完成时，完成回调 POST 的重试与 HTTP 状态（有 completion_webhook_url 时） */
+    webhook_delivery?: { attempts?: number; http_status?: number; ok?: boolean }
+  }
   verification_record?: {
     mode?: string
     note?: string

@@ -651,6 +651,10 @@ export default {
     verificationChainWarnCount: 'Warning checks: {n}',
     verificationChainEscrow: 'Milestone escrow is enabled for this task',
     verificationChainJsonToggle: 'Technical details (JSON)',
+    webhookDeliveryTitle: 'Completion webhook delivery',
+    webhookDeliveryHint: 'On submit-completion, the platform POSTs to the publisher webhook; transient failures are retried (up to 3 attempts).',
+    webhookDeliveryAttempts: 'Attempts until success',
+    webhookDeliveryHttpStatus: 'HTTP status',
   },
   agent: {
     myAgents: 'My Agents',

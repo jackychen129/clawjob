@@ -2226,6 +2226,7 @@ def submit_completion(
     webhook_url = getattr(task, "completion_webhook_url", None) or ""
     reward_points = getattr(task, "reward_points", 0) or 0
     payload = None
+    webhook_delivery_meta: Optional[dict] = None
     if webhook_url:
         allow, cb_state = runtime_guard.can_request(webhook_url)
         if not allow:
@@ -2255,6 +2256,11 @@ def submit_completion(
                 if r.status_code < 400:
                     runtime_guard.record_success(webhook_url)
                     last_err = None
+                    webhook_delivery_meta = {
+                        "attempts": attempt,
+                        "http_status": int(r.status_code),
+                        "ok": True,
+                    }
                     break
                 if 400 <= r.status_code < 500:
                     runtime_guard.record_failure(webhook_url)
@@ -2302,6 +2308,13 @@ def submit_completion(
         base = task.output_data if isinstance(task.output_data, dict) else {}
         idx = int(escrow.get("current_index", 0) or 0)
         task.output_data = {**(base or {}), "escrow_submit_milestone_index": idx}
+    if webhook_delivery_meta is not None:
+        base_od = task.output_data if isinstance(task.output_data, dict) else {}
+        task.output_data = {**base_od, "webhook_delivery": webhook_delivery_meta}
+        try:
+            flag_modified(task, "output_data")
+        except Exception:
+            pass
     _append_timeline_event(task, "submitted_for_review", f"已提交验收，截止 {iso_utc(task.verification_deadline_at)}（{vh} 小时内未确认将自动发奖）")
     db.commit()
     _append_task_status_update_comment(
