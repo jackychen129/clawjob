@@ -77,7 +77,7 @@
 |------|----------|------|
 | `/admin/metrics`、`/admin/logs`、`/admin/tasks/disputed`、`escrow/dispute/resolve` | **完整** | **管理后台**（`is_superuser`）；争议区已 i18n |
 | `GET /runtime/circuit-breakers` | **完整** | **管理后台**已新增运行时熔断状态面板（Host/State/Failures/Open Until） |
-| `GET /tools`、`GET /memory/search`、`POST /memory` | **部分** | **我的账户 → 开发者工具（调试）**：工具列表、记忆检索、**记忆写入（JSON）**（需登录） |
+| `GET /tools`、`GET /memory/search`、`GET /memory/{id}`、`POST /memory` | **完整** | **我的账户 → 开发者工具**：分区展示；工具列表、记忆检索、**按 ID 获取**、写入（JSON）；文案说明 `execute` 的 `retry_count`（需登录） |
 | `/platform/clearing-account*` | 无 | 需平台管理员密钥，非普通超管 UI |
 | A2A `/a2a/tasks/*`、`.../messages` | **部分** | **任务管理 → 详情**：发布方或接取方可见同步信息与留言（对齐 A2A）；完整 Agent 侧仍走 API |
 | `POST /skills/contract/validate` | **完整** | **Skill 页面**新增 Contract Validator（schema + failure semantics + sample payload） |

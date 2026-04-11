@@ -58,24 +58,52 @@
       <section class="card card-content account-dev">
         <h3>{{ t('account.devToolsTitle') || '开发者工具（调试）' }}</h3>
         <p class="hint">{{ t('account.devToolsHint') || '调用平台已暴露的工具列表与记忆检索 API，便于本地 Agent 联调。' }}</p>
-        <div class="dev-actions">
-          <Button type="button" size="sm" variant="secondary" :disabled="toolsLoading" @click="loadTools">
-            {{ t('account.devLoadTools') || '加载工具列表 GET /tools' }}
-          </Button>
-        </div>
-        <pre v-if="toolsJson" class="account-json-pre">{{ toolsJson }}</pre>
+        <p class="hint dev-api-hint">{{ t('account.devExecuteHint') }}</p>
 
-        <div class="memory-search-row">
-          <input v-model="memoryQuery" class="input" type="text" :placeholder="t('account.devMemoryPlaceholder') || '记忆检索关键词'" @keyup.enter="searchMemoryNow" />
-          <Button type="button" size="sm" :disabled="memoryLoading" @click="searchMemoryNow">{{ t('account.devMemorySearch') || '检索 GET /memory/search' }}</Button>
+        <div class="dev-subsection">
+          <h4 class="dev-subtitle">{{ t('account.devSectionTools') }}</h4>
+          <div class="dev-actions">
+            <Button type="button" size="sm" variant="secondary" :disabled="toolsLoading" @click="loadTools">
+              {{ t('account.devLoadTools') || '加载工具列表 GET /tools' }}
+            </Button>
+          </div>
+          <details v-if="toolsJson" class="dev-json-details" open>
+            <summary>{{ t('account.devToolsResponse') }}</summary>
+            <pre class="account-json-pre">{{ toolsJson }}</pre>
+          </details>
         </div>
-        <pre v-if="memoryJson" class="account-json-pre">{{ memoryJson }}</pre>
-        <p class="hint memory-store-hint">{{ t('account.devMemoryStoreHint') || '写入为 JSON Body，对应 POST /memory（联调占位）。' }}</p>
-        <textarea v-model="memoryStoreBody" class="input memory-store-textarea" rows="5" :placeholder="t('account.devMemoryStorePlaceholder')" />
-        <div class="memory-search-row">
-          <Button type="button" size="sm" :disabled="memoryStoreLoading" @click="storeMemoryNow">{{ t('account.devMemoryStore') || '写入 POST /memory' }}</Button>
+
+        <div class="dev-subsection">
+          <h4 class="dev-subtitle">{{ t('account.devSectionMemory') }}</h4>
+          <div class="memory-search-row">
+            <input v-model="memoryQuery" class="input" type="text" :placeholder="t('account.devMemoryPlaceholder') || '记忆检索关键词'" @keyup.enter="searchMemoryNow" />
+            <Button type="button" size="sm" :disabled="memoryLoading" @click="searchMemoryNow">{{ t('account.devMemorySearch') || '检索 GET /memory/search' }}</Button>
+          </div>
+          <details v-if="memoryJson" class="dev-json-details" open>
+            <summary>{{ t('account.devMemorySearchResponse') }}</summary>
+            <pre class="account-json-pre">{{ memoryJson }}</pre>
+          </details>
+
+          <div class="memory-search-row memory-by-id-row">
+            <input v-model="memoryIdInput" class="input" type="text" :placeholder="t('account.devMemoryGetPlaceholder')" @keyup.enter="loadMemoryByIdNow" />
+            <Button type="button" size="sm" variant="secondary" :disabled="memoryByIdLoading" @click="loadMemoryByIdNow">{{ t('account.devMemoryGet') }}</Button>
+          </div>
+          <p class="hint dev-memory-get-hint">{{ t('account.devMemoryGetHint') }}</p>
+          <details v-if="memoryByIdJson" class="dev-json-details" open>
+            <summary>{{ t('account.devMemoryGetResponse') }}</summary>
+            <pre class="account-json-pre">{{ memoryByIdJson }}</pre>
+          </details>
+
+          <p class="hint memory-store-hint">{{ t('account.devMemoryStoreHint') || '写入为 JSON Body，对应 POST /memory（联调占位）。' }}</p>
+          <textarea v-model="memoryStoreBody" class="input memory-store-textarea" rows="5" :placeholder="t('account.devMemoryStorePlaceholder')" />
+          <div class="memory-search-row">
+            <Button type="button" size="sm" :disabled="memoryStoreLoading" @click="storeMemoryNow">{{ t('account.devMemoryStore') || '写入 POST /memory' }}</Button>
+          </div>
+          <details v-if="memoryStoreJson" class="dev-json-details" open>
+            <summary>{{ t('account.devMemoryStoreResponse') }}</summary>
+            <pre class="account-json-pre">{{ memoryStoreJson }}</pre>
+          </details>
         </div>
-        <pre v-if="memoryStoreJson" class="account-json-pre">{{ memoryStoreJson }}</pre>
       </section>
     </template>
     <div class="account-footer-actions">
@@ -115,6 +143,9 @@ const memoryJson = ref('')
 const memoryStoreBody = ref('{\n  "content": "hello from clawjob",\n  "type": "text"\n}')
 const memoryStoreLoading = ref(false)
 const memoryStoreJson = ref('')
+const memoryIdInput = ref('')
+const memoryByIdLoading = ref(false)
+const memoryByIdJson = ref('')
 
 const emit = defineEmits<{ (e: 'credits-updated'): void }>()
 
@@ -187,6 +218,23 @@ function loadTools() {
     })
     .finally(() => {
       toolsLoading.value = false
+    })
+}
+
+function loadMemoryByIdNow() {
+  const id = memoryIdInput.value.trim()
+  if (!id) return
+  memoryByIdLoading.value = true
+  memoryByIdJson.value = ''
+  api.getMemoryById(id)
+    .then((res) => {
+      memoryByIdJson.value = JSON.stringify(res.data, null, 2)
+    })
+    .catch((e: unknown) => {
+      memoryByIdJson.value = JSON.stringify({ error: String(e) }, null, 2)
+    })
+    .finally(() => {
+      memoryByIdLoading.value = false
     })
 }
 
@@ -284,6 +332,15 @@ onMounted(() => {
 .memory-search-row .input { flex: 1; min-width: 180px; }
 .memory-store-hint { margin-top: var(--space-4); }
 .memory-store-textarea { width: 100%; margin-top: var(--space-2); font-family: ui-monospace, monospace; font-size: 0.8125rem; }
+.dev-subsection { margin-top: var(--space-5); padding-top: var(--space-4); border-top: var(--border-hairline); }
+.dev-subsection:first-of-type { margin-top: var(--space-3); padding-top: 0; border-top: none; }
+.dev-subtitle { margin: 0 0 var(--space-2); font-size: var(--font-caption); font-weight: 650; color: var(--text-primary); }
+.dev-api-hint { margin-top: var(--space-2); font-size: var(--font-caption); }
+.dev-json-details { margin-top: var(--space-2); }
+.dev-json-details summary { cursor: pointer; font-size: var(--font-caption); color: var(--text-secondary); user-select: none; margin-bottom: var(--space-2); }
+.dev-json-details .account-json-pre { margin-top: 0; }
+.memory-by-id-row { margin-top: var(--space-3); }
+.dev-memory-get-hint { margin-top: var(--space-1); font-size: var(--font-caption); }
 .account-json-pre {
   margin-top: var(--space-3); padding: var(--space-3); border-radius: var(--radius-md);
   background: rgba(0,0,0,0.2); border: var(--border-hairline); font-size: 0.75rem;

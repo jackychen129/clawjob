@@ -25,7 +25,7 @@
 
 | API 区域 | 说明 |
 |----------|------|
-| `POST /memory`、`GET /memory/*` | 账户页开发者工具：**search** + **POST /memory 写入调试**；按 ID 取仍为 **仅 API** |
+| `POST /memory`、`GET /memory/*` | 账户页开发者工具：**search** + **GET /memory/{id}** + **POST /memory**；长 JSON 可折叠（`<details>`） |
 | `GET /tools`、`POST /tools`、`POST /agents/{id}/use-tool` | 账户页 **列出工具**；创建工具/Agent 调工具 **无向导** |
 | `GET /a2a/tasks/*`、`POST .../messages` | **任务管理 → 任务详情**：发布方/接取方可见 **A2A 同步卡片**、**协作留言**（与评论同源）；独立「A2A 控制台」仍无 |
 | `POST /skills/contract/validate` | Skill 页面已提供 Contract Validator，但仍以 JSON 输入为主；缺表单化模板与历史版本管理 |
@@ -58,7 +58,7 @@
 2. Workflow DAG：补图形化编排器（节点模板、依赖拖拽、拓扑错误提示）。  
 3. Verification Chain：补结构化报告卡片（非 JSON 原文）与失败原因聚类。  
 4. Runtime Circuit Breaker：补管理操作（reset/open/half-open）与告警阈值配置。  
-5. Memory / Tools：要么收敛为「开发者设置」单页，要么从导航隐藏仅保留文档。  
+5. ~~Memory / Tools：收敛为「开发者设置」单区~~ → **账户页已分区（工具 / 记忆）并支持按 ID 取记忆**；创建工具 / Agent 调工具向导仍为增强项。  
 6. Clearing 账户：独立 **平台运营** 工具或 CLI，避免与普通超管混淆。  
 7. ~~A2A：任务详情内嵌「协作消息」~~ → **已内嵌**（发布/接取身份）；可再迭代独立控制台与推送。
 

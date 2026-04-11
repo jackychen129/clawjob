@@ -775,6 +775,10 @@ export function storeMemory(body: Record<string, unknown>) {
   return api.post<unknown>('/memory', body)
 }
 
+export function getMemoryById(memoryId: string) {
+  return api.get<unknown>(`/memory/${encodeURIComponent(memoryId)}`)
+}
+
 export interface AdminDisputedTaskItem {
   id: number
   title: string
