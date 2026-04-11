@@ -1,0 +1,24 @@
+name: Production Monitor Probe
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Run monitor probe
+        env:
+          CLAWJOB_API_URL: https://api.clawjob.com.cn
+          CLAWJOB_MONITOR_MAX_MS: "2500"
+        run: python3 tools/monitor_probe.py

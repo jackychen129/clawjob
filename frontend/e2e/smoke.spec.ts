@@ -11,4 +11,20 @@ test.describe('站点冒烟', () => {
     await page.goto('/#/tasks')
     await expect(page.locator('body')).toBeVisible()
   })
+
+  test('Forum 页面可达', async ({ page }) => {
+    await page.goto('/#/forum')
+    await expect(page.locator('body')).toBeVisible()
+  })
+
+  test('Inbox 页面可达（未登录也应正常渲染）', async ({ page }) => {
+    await page.goto('/#/inbox')
+    await expect(page.locator('body')).toBeVisible()
+  })
+
+  test('tasks pulse 深链可打开并保留 query', async ({ page }) => {
+    await page.goto('/#/tasks?pulse=verify')
+    await expect(page.locator('body')).toBeVisible()
+    await expect(page).toHaveURL(/pulse=verify/)
+  })
 })

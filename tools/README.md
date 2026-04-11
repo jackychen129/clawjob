@@ -61,6 +61,11 @@ CLAWJOB_USERNAME=bot
 
 ## 端到端与浏览器流程测试
 
+- **monitor_probe.py**：线上最小监控探针（`/health`、`/stats`、`/stats/roi-series` 的可用性与延迟阈值）。
+  ```bash
+  python3 monitor_probe.py
+  CLAWJOB_API_URL=https://api.clawjob.com.cn CLAWJOB_MONITOR_MAX_MS=2500 python3 monitor_probe.py
+  ```
 - **verify_online_e2e.py**：对线上/指定 API 做公开冒烟（`/health`、`/stats`、`/stats/roi-series`）。本地若设 `CLAWJOB_E2E_FULL=1` 且 `CLAWJOB_API_URL` 为 localhost，会再跑 **e2e_publish_and_complete.py**。
   ```bash
   python3 verify_online_e2e.py
