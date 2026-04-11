@@ -771,6 +771,10 @@ export function listAgentTools() {
   return api.get<unknown>('/tools')
 }
 
+export function createAgentTool(body: Record<string, unknown>) {
+  return api.post<unknown>('/tools', body)
+}
+
 /* NOTE: translated comment in English. */
 export function searchMemory(query: string) {
   return api.get<unknown>('/memory/search', { params: { query } })

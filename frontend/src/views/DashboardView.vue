@@ -36,14 +36,24 @@
       </Card>
 
       <!-- ROI placeholder -->
-      <section class="dash-card dash-chart bento bento--roi">
+      <section class="dash-card dash-chart bento bento--roi" :aria-busy="roiLoading">
         <div class="card-content">
           <div class="dash-bento-head">
             <h2 class="section-title">{{ t('dashboard.roiCurve') }}</h2>
             <span class="dash-bento-sub">{{ t('dashboard.roiLastDays', { n: roiSeries.length || 0 }) || ('近 ' + (roiSeries.length || 0) + ' 天') }}</span>
           </div>
-          <div class="dash-roi-wrap">
-            <svg class="roi-line" viewBox="0 0 640 180" preserveAspectRatio="none" aria-hidden="true">
+          <div v-if="roiLoading" class="dash-roi-skeleton tw-skeleton" style="height:180px;border-radius:var(--radius-md)" />
+          <div v-else-if="roiChartEmpty" class="dash-roi-empty">
+            <p class="dash-roi-empty-hint">{{ t('dashboard.roiEmpty', { n: 14 }) }}</p>
+          </div>
+          <div v-else class="dash-roi-wrap">
+            <svg
+              class="roi-line"
+              viewBox="0 0 640 180"
+              preserveAspectRatio="none"
+              role="img"
+              :aria-label="roiChartAriaLabel || undefined"
+            >
               <polyline :points="roiPoints" fill="none" stroke="rgba(34,197,94,0.95)" stroke-width="3" stroke-linecap="round" />
             </svg>
             <div class="dash-roi-x"><span v-for="p in roiSeries.slice(-7)" :key="p.date">{{ p.date.slice(5) }}</span></div>
@@ -127,6 +137,7 @@ const statsLoading = ref(true)
 const activityEvents = ref<api.ActivityEvent[]>([])
 const activityLoading = ref(true)
 const roiSeries = ref<Array<{ date: string; rewards: number; tasks: number }>>([])
+const roiLoading = ref(true)
 const skillTree = ref<api.SkillNode[]>([])
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
@@ -161,6 +172,18 @@ const roiPoints = computed(() => {
     const y = 170 - (Number(p.rewards || 0) / max) * 150
     return `${x.toFixed(1)},${y.toFixed(1)}`
   }).join(' ')
+})
+
+const roiChartEmpty = computed(() => {
+  const arr = roiSeries.value
+  if (!arr.length) return true
+  return Math.max(...arr.map((x) => Number(x.rewards || 0)), 0) === 0
+})
+
+const roiChartAriaLabel = computed(() => {
+  if (roiChartEmpty.value) return ''
+  const total = roiSeries.value.reduce((s, x) => s + Number(x.rewards || 0), 0)
+  return String(t('dashboard.roiChartAria', { days: roiSeries.value.length, total }))
 })
 
 function getEventWho(ev: api.ActivityEvent): string {
@@ -235,11 +258,14 @@ async function reloadAll() {
   } finally {
     activityLoading.value = false
   }
+  roiLoading.value = true
   try {
     const rs = await api.fetchRoiSeries(14)
     roiSeries.value = rs.data.series || []
   } catch {
     roiSeries.value = []
+  } finally {
+    roiLoading.value = false
   }
   try {
     const st = await api.fetchMySkillTree()
@@ -393,6 +419,24 @@ async function reloadAll() {
   border-radius: var(--radius-xl);
   border: var(--border-hairline);
   overflow: hidden;
+}
+.dash-roi-empty {
+  min-height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  border: var(--border-hairline);
+  background: rgba(255, 255, 255, 0.02);
+}
+.dash-roi-empty-hint {
+  margin: 0;
+  padding: var(--space-4);
+  text-align: center;
+  font-size: var(--font-caption);
+  color: var(--text-secondary);
+  line-height: 1.5;
+  max-width: 28rem;
 }
 .dash-roi-wrap {
   min-height: 160px;

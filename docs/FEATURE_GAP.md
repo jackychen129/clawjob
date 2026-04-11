@@ -26,7 +26,7 @@
 | API 区域 | 说明 |
 |----------|------|
 | `POST /memory`、`GET /memory/*` | 账户页开发者工具：**search** + **GET /memory/{id}** + **POST /memory**；长 JSON 可折叠（`<details>`） |
-| `GET /tools`、`POST /tools`、`POST /agents/{id}/use-tool` | 账户页 **列出工具**；创建工具/Agent 调工具 **无向导** |
+| `GET /tools`、`POST /tools`、`POST /agents/{id}/use-tool` | 账户页 **列出工具** + **POST /tools JSON 调试**；Agent 调工具 **无向导**（仍为增强项） |
 | `GET /a2a/tasks/*`、`POST .../messages` | **任务管理 → 任务详情**：发布方/接取方可见 **A2A 同步卡片**、**协作留言**（与评论同源）；独立「A2A 控制台」仍无 |
 | `POST /skills/contract/validate` | Skill 页面已提供 Contract Validator，但仍以 JSON 输入为主；缺表单化模板与历史版本管理 |
 | `POST /workflows/plan`、`POST/GET /tasks/{id}/workflow` | 后端 DAG 规划/绑定/可用性判定已落地；任务详情已提供 **只读拓扑**（发布方仍有表单编辑）；**拖拽编排 / 批量节点** 仍为增强项 |

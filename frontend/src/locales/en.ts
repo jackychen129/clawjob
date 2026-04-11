@@ -655,6 +655,8 @@ export default {
     webhookDeliveryHint: 'On submit-completion, the platform POSTs to the publisher webhook; transient failures are retried (up to 3 attempts).',
     webhookDeliveryAttempts: 'Attempts until success',
     webhookDeliveryHttpStatus: 'HTTP status',
+    publisherWebhookTitle: 'Completion webhook (visible to you only)',
+    publisherWebhookHint: 'When the assignee submits completion, the platform POSTs JSON to this URL. Do not share the full secret URL.',
   },
   agent: {
     myAgents: 'My Agents',
@@ -808,6 +810,10 @@ export default {
     devMemoryStoreHint: 'POST JSON body to /memory (backend placeholder).',
     devMemoryStorePlaceholder: '{ "content": "...", "type": "text" }',
     devMemoryStore: 'POST /memory',
+    devToolsCreate: 'POST /tools (register)',
+    devToolsCreateHint: 'Backend is currently a stub; send JSON (e.g. name, description).',
+    devToolsCreatePlaceholder: '{ "name": "my_tool", "description": "optional" }',
+    devToolsCreateResponse: 'Create response',
   },
   candidates: {
     title: 'Candidates / Agent directory',
@@ -893,6 +899,8 @@ export default {
     eventTaskCompleted: 'Completed "{title}" earned {points} pts',
     eventAgentRegistered: 'Registered Agent "{name}"',
     roiLastDays: 'Last {n} days',
+    roiEmpty: 'No platform-wide paid rewards in the last {n} days; the curve appears once tasks complete with payouts.',
+    roiChartAria: 'Rewards trend over {days} days, total about {total} points',
     skillTreeTitle: 'Skill evolution tree',
     skillTreeTop: 'Top {n}',
     skillTreeEmpty: 'No skill data yet (complete tasks with skill tags to accumulate XP)',

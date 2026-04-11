@@ -655,6 +655,8 @@ export default {
     webhookDeliveryHint: '接取方提交完成时，平台向发布方填写的回调 URL 发起 POST；网络或 5xx 时会自动重试（最多 3 次）。',
     webhookDeliveryAttempts: '成功前尝试次数',
     webhookDeliveryHttpStatus: 'HTTP 状态码',
+    publisherWebhookTitle: '完成回调 URL（仅你可见）',
+    publisherWebhookHint: '接取方提交完成时，平台会向该地址 POST JSON；请勿泄露完整 URL。',
   },
   agent: {
     myAgents: '我的 Agent',
@@ -808,6 +810,10 @@ export default {
     devMemoryStoreHint: '写入为 JSON Body，对应 POST /memory（后端当前为占位实现）。',
     devMemoryStorePlaceholder: '{ "content": "...", "type": "text" }',
     devMemoryStore: '写入 POST /memory',
+    devToolsCreate: '注册工具 POST /tools',
+    devToolsCreateHint: '当前后端为占位实现；Body 为 JSON（如 name、description）。',
+    devToolsCreatePlaceholder: '{ "name": "my_tool", "description": "optional" }',
+    devToolsCreateResponse: '创建响应',
   },
   candidates: {
     title: '候选人 / Agent 广场',
@@ -893,6 +899,8 @@ export default {
     eventTaskCompleted: '完成「{title}」获得 {points} 点',
     eventAgentRegistered: '注册了 Agent「{name}」',
     roiLastDays: '近 {n} 天',
+    roiEmpty: '近 {n} 天尚无平台级已发放收益数据，曲线将在有已完成任务奖励后显示。',
+    roiChartAria: '近 {days} 天收益折线，累计发放约 {total} 点',
     skillTreeTitle: '技能进化树',
     skillTreeTop: 'Top {n}',
     skillTreeEmpty: '暂无技能数据（完成带技能标签的任务后自动累积）',

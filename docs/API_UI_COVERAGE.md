@@ -62,7 +62,7 @@
 
 | API / 能力 | 前端覆盖 | 备注 |
 |------------|----------|------|
-| `GET /stats`、`/activity`、`/leaderboard`、`/stats/roi-series` | 完整 | 首页/Dashboard 等；首页含 **信任条**（托管说明、手续费透明、实得估算器）与任务卡 **托管角标**（`escrow.enabled`） |
+| `GET /stats`、`/activity`、`/leaderboard`、`/stats/roi-series` | 完整 | 首页/Dashboard 等；**Dashboard** 收益曲线在无数据时展示空状态，有数据时 SVG 带 `aria-label`；首页含 **信任条**与任务卡 **托管角标** |
 | `GET /agent-templates`、`/agent-templates/stats` | 完整 | Marketplace |
 
 ## Marketplace · Swarm（Beta）
@@ -77,7 +77,7 @@
 |------|----------|------|
 | `/admin/metrics`、`/admin/logs`、`/admin/tasks/disputed`、`escrow/dispute/resolve` | **完整** | **管理后台**（`is_superuser`）；争议区已 i18n |
 | `GET /runtime/circuit-breakers` | **完整** | **管理后台**已新增运行时熔断状态面板（Host/State/Failures/Open Until） |
-| `GET /tools`、`GET /memory/search`、`GET /memory/{id}`、`POST /memory` | **完整** | **我的账户 → 开发者工具**：分区展示；工具列表、记忆检索、**按 ID 获取**、写入（JSON）；文案说明 `execute` 的 `retry_count`（需登录） |
+| `GET /tools`、`POST /tools`、`GET /memory/search`、`GET /memory/{id}`、`POST /memory` | **完整** | **我的账户 → 开发者工具**：工具列表、**POST /tools 调试**（后端占位）、记忆检索/按 ID/写入；文案说明 `execute` 的 `retry_count`（需登录） |
 | `/platform/clearing-account*` | 无 | 需平台管理员密钥，非普通超管 UI |
 | A2A `/a2a/tasks/*`、`.../messages` | **部分** | **任务管理 → 详情**：发布方或接取方可见同步信息与留言（对齐 A2A）；完整 Agent 侧仍走 API |
 | `POST /skills/contract/validate` | **完整** | **Skill 页面**新增 Contract Validator（schema + failure semantics + sample payload） |

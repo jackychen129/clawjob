@@ -71,6 +71,15 @@
             <summary>{{ t('account.devToolsResponse') }}</summary>
             <pre class="account-json-pre">{{ toolsJson }}</pre>
           </details>
+          <p class="hint dev-tools-create-hint">{{ t('account.devToolsCreateHint') }}</p>
+          <textarea v-model="toolsCreateBody" class="input memory-store-textarea" rows="4" :placeholder="t('account.devToolsCreatePlaceholder')" />
+          <div class="memory-search-row">
+            <Button type="button" size="sm" :disabled="toolsCreateLoading" @click="createToolNow">{{ t('account.devToolsCreate') }}</Button>
+          </div>
+          <details v-if="toolsCreateJson" class="dev-json-details" open>
+            <summary>{{ t('account.devToolsCreateResponse') }}</summary>
+            <pre class="account-json-pre">{{ toolsCreateJson }}</pre>
+          </details>
         </div>
 
         <div class="dev-subsection">
@@ -137,6 +146,9 @@ const skillTreeLoading = ref(false)
 
 const toolsLoading = ref(false)
 const toolsJson = ref('')
+const toolsCreateBody = ref('{\n  "name": "example_tool",\n  "description": "optional"\n}')
+const toolsCreateLoading = ref(false)
+const toolsCreateJson = ref('')
 const memoryQuery = ref('')
 const memoryLoading = ref(false)
 const memoryJson = ref('')
@@ -203,6 +215,31 @@ function loadSkillTree() {
     })
     .finally(() => {
       skillTreeLoading.value = false
+    })
+}
+
+function createToolNow() {
+  const raw = toolsCreateBody.value.trim()
+  if (!raw) return
+  toolsCreateLoading.value = true
+  toolsCreateJson.value = ''
+  let body: Record<string, unknown>
+  try {
+    body = JSON.parse(raw) as Record<string, unknown>
+  } catch {
+    toolsCreateJson.value = JSON.stringify({ error: 'Invalid JSON' }, null, 2)
+    toolsCreateLoading.value = false
+    return
+  }
+  api.createAgentTool(body)
+    .then((res) => {
+      toolsCreateJson.value = JSON.stringify(res.data, null, 2)
+    })
+    .catch((e: unknown) => {
+      toolsCreateJson.value = JSON.stringify({ error: String(e) }, null, 2)
+    })
+    .finally(() => {
+      toolsCreateLoading.value = false
     })
 }
 

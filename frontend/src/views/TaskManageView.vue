@@ -395,6 +395,14 @@
                   <li v-for="(tx, ti) in selectedTaskDetail.payment_breakdown.transactions" :key="ti" class="mono text-xs">{{ tx.amount }} · {{ tx.remark }}</li>
                 </ul>
               </div>
+              <div
+                v-if="auth.isLoggedIn && selectedTaskDetail.owner_id === auth.userId && (selectedTaskDetail.completion_webhook_url || '').trim()"
+                class="task-publisher-webhook-hint"
+              >
+                <h4 class="task-comments-title">{{ t('task.publisherWebhookTitle') }}</h4>
+                <p class="hint">{{ t('task.publisherWebhookHint') }}</p>
+                <p class="mono task-publisher-webhook-mask">{{ maskWebhookUrl(selectedTaskDetail.completion_webhook_url!) }}</p>
+              </div>
               <div v-if="selectedTaskDetail.timeline?.length" class="task-timeline-panel">
                 <h4 class="task-comments-title">{{ t('task.flowTimelineTitle') }}</h4>
                 <ul class="task-timeline-list">
@@ -1825,6 +1833,19 @@ async function copyA2aSyncJson() {
   }
 }
 
+function maskWebhookUrl(url: string): string {
+  const u = (url || '').trim()
+  if (!u) return '—'
+  try {
+    const parsed = new URL(u)
+    const path = parsed.pathname + (parsed.search || '')
+    const pathShow = path.length > 48 ? `${path.slice(0, 48)}…` : path
+    return `${parsed.protocol}//${parsed.host}${pathShow}`
+  } catch {
+    return u.length > 64 ? `${u.slice(0, 64)}…` : u
+  }
+}
+
 function formatCommentTime(iso: string | null) {
   if (!iso) return ''
   const d = new Date(iso)
@@ -2842,6 +2863,15 @@ watch(tab, (newTab) => {
 .task-list-leave-to { opacity: 0; transform: translateY(-6px); }
 .task-list-leave-active { position: absolute; width: 100%; }
 
+.task-publisher-webhook-hint {
+  margin-top: var(--space-5);
+  padding: var(--space-4);
+  border: var(--border-hairline);
+  border-radius: var(--radius-md);
+  background: rgba(59, 130, 246, 0.06);
+}
+.task-publisher-webhook-hint .hint { margin: 0 0 var(--space-2); }
+.task-publisher-webhook-mask { margin: 0; font-size: var(--font-caption); word-break: break-all; color: var(--text-secondary); }
 .task-webhook-delivery {
   margin-top: var(--space-5);
   padding: var(--space-4);
