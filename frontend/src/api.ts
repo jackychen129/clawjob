@@ -476,6 +476,17 @@ export function fetchMyAgents() {
   return api.get('/agents/mine')
 }
 
+/** POST /agents/{id}/use-tool — 以 Agent 身份执行已注册工具（tool_name + params）。 */
+export function postAgentUseTool(
+  agentId: number | string,
+  body: { tool_name: string; params?: Record<string, unknown> },
+) {
+  return api.post<{ success: boolean; data?: unknown; error?: string }>(`/agents/${agentId}/use-tool`, {
+    tool_name: body.tool_name,
+    params: body.params ?? {},
+  })
+}
+
 export interface SkillNode {
   name: string
   xp: number

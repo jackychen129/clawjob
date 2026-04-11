@@ -38,13 +38,27 @@
       <!-- ROI placeholder -->
       <section class="dash-card dash-chart bento bento--roi" :aria-busy="roiLoading">
         <div class="card-content">
-          <div class="dash-bento-head">
-            <h2 class="section-title">{{ t('dashboard.roiCurve') }}</h2>
-            <span class="dash-bento-sub">{{ t('dashboard.roiLastDays', { n: roiSeries.length || 0 }) || ('近 ' + (roiSeries.length || 0) + ' 天') }}</span>
+          <div class="dash-bento-head dash-bento-head--roi">
+            <div class="dash-roi-head-main">
+              <h2 class="section-title">{{ t('dashboard.roiCurve') }}</h2>
+              <div class="dash-roi-period" role="group" :aria-label="t('dashboard.roiPeriodAria')">
+                <button
+                  v-for="d in roiDayOptions"
+                  :key="d"
+                  type="button"
+                  class="dash-roi-period-btn"
+                  :class="{ 'dash-roi-period-btn--active': roiDays === d }"
+                  @click="setRoiDays(d)"
+                >
+                  {{ d }}
+                </button>
+              </div>
+            </div>
+            <span class="dash-bento-sub">{{ t('dashboard.roiLastDays', { n: roiDays }) }}</span>
           </div>
           <div v-if="roiLoading" class="dash-roi-skeleton tw-skeleton" style="height:180px;border-radius:var(--radius-md)" />
           <div v-else-if="roiChartEmpty" class="dash-roi-empty">
-            <p class="dash-roi-empty-hint">{{ t('dashboard.roiEmpty', { n: 14 }) }}</p>
+            <p class="dash-roi-empty-hint">{{ t('dashboard.roiEmpty', { n: roiDays }) }}</p>
           </div>
           <div v-else class="dash-roi-wrap">
             <svg
@@ -56,7 +70,7 @@
             >
               <polyline :points="roiPoints" fill="none" stroke="rgba(34,197,94,0.95)" stroke-width="3" stroke-linecap="round" />
             </svg>
-            <div class="dash-roi-x"><span v-for="p in roiSeries.slice(-7)" :key="p.date">{{ p.date.slice(5) }}</span></div>
+            <div class="dash-roi-x"><span v-for="p in roiXLabels" :key="p.date">{{ p.date.slice(5) }}</span></div>
           </div>
         </div>
       </section>
@@ -138,6 +152,8 @@ const activityEvents = ref<api.ActivityEvent[]>([])
 const activityLoading = ref(true)
 const roiSeries = ref<Array<{ date: string; rewards: number; tasks: number }>>([])
 const roiLoading = ref(true)
+const roiDayOptions = [7, 14, 30] as const
+const roiDays = ref<7 | 14 | 30>(14)
 const skillTree = ref<api.SkillNode[]>([])
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
@@ -162,6 +178,13 @@ const kpiLabels = computed(() => [
   t('dashboard.rewardsPaid'),
   t('dashboard.agentsActive'),
 ])
+
+const roiXLabels = computed(() => {
+  const arr = roiSeries.value
+  if (!arr.length) return []
+  const take = Math.min(8, arr.length)
+  return arr.slice(-take)
+})
 
 const roiPoints = computed(() => {
   const arr = roiSeries.value
@@ -235,6 +258,24 @@ onUnmounted(() => {
   pollTimer = null
 })
 
+async function loadRoiSeries() {
+  roiLoading.value = true
+  try {
+    const rs = await api.fetchRoiSeries(roiDays.value)
+    roiSeries.value = rs.data.series || []
+  } catch {
+    roiSeries.value = []
+  } finally {
+    roiLoading.value = false
+  }
+}
+
+function setRoiDays(d: 7 | 14 | 30) {
+  if (roiDays.value === d) return
+  roiDays.value = d
+  void loadRoiSeries()
+}
+
 async function reloadAll() {
   statsLoading.value = true
   activityLoading.value = true
@@ -258,15 +299,7 @@ async function reloadAll() {
   } finally {
     activityLoading.value = false
   }
-  roiLoading.value = true
-  try {
-    const rs = await api.fetchRoiSeries(14)
-    roiSeries.value = rs.data.series || []
-  } catch {
-    roiSeries.value = []
-  } finally {
-    roiLoading.value = false
-  }
+  await loadRoiSeries()
   try {
     const st = await api.fetchMySkillTree()
     skillTree.value = (st.data.nodes || []).slice(0, 12)
@@ -328,6 +361,47 @@ async function reloadAll() {
   justify-content: space-between;
   gap: var(--space-3);
   margin-bottom: var(--space-4);
+}
+.dash-bento-head--roi {
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+.dash-roi-head-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.dash-roi-period {
+  display: inline-flex;
+  gap: var(--space-1);
+  padding: 2px;
+  border-radius: var(--radius-md);
+  background: rgba(0, 0, 0, 0.18);
+  border: var(--border-hairline);
+}
+.dash-roi-period-btn {
+  min-width: 2.25rem;
+  padding: 4px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-caption);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  background: transparent;
+  cursor: pointer;
+  line-height: 1.2;
+}
+.dash-roi-period-btn:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.06);
+}
+.dash-roi-period-btn--active {
+  color: var(--text-primary);
+  background: rgba(34, 197, 94, 0.18);
+  box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.35);
 }
 .dash-bento-sub {
   color: var(--text-secondary);

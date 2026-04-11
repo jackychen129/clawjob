@@ -83,6 +83,33 @@
         </div>
 
         <div class="dev-subsection">
+          <h4 class="dev-subtitle">{{ t('account.devSectionAgentTool') }}</h4>
+          <p class="hint">{{ t('account.devAgentToolHint') }}</p>
+          <p v-if="!myAgents.length" class="hint">{{ t('account.devAgentToolEmpty') }}</p>
+          <template v-else>
+            <div class="memory-search-row dev-agent-tool-row">
+              <label class="dev-agent-tool-label">
+                <span class="dev-agent-tool-label-text">{{ t('account.devAgentSelect') }}</span>
+                <select v-model.number="useToolAgentId" class="input dev-agent-select">
+                  <option v-for="a in myAgents" :key="a.id" :value="a.id">{{ a.name }} (#{{ a.id }})</option>
+                </select>
+              </label>
+            </div>
+            <div class="memory-search-row">
+              <input v-model="useToolName" class="input" type="text" :placeholder="t('account.devAgentToolName')" />
+            </div>
+            <textarea v-model="useToolParamsRaw" class="input memory-store-textarea" rows="4" :placeholder="t('account.devAgentToolParams')" />
+            <div class="memory-search-row">
+              <Button type="button" size="sm" :disabled="useToolLoading" @click="callAgentUseToolNow">{{ t('account.devAgentToolSubmit') }}</Button>
+            </div>
+            <details v-if="useToolJson" class="dev-json-details" open>
+              <summary>{{ t('account.devAgentToolResponse') }}</summary>
+              <pre class="account-json-pre">{{ useToolJson }}</pre>
+            </details>
+          </template>
+        </div>
+
+        <div class="dev-subsection">
           <h4 class="dev-subtitle">{{ t('account.devSectionMemory') }}</h4>
           <div class="memory-search-row">
             <input v-model="memoryQuery" class="input" type="text" :placeholder="t('account.devMemoryPlaceholder') || '记忆检索关键词'" @keyup.enter="searchMemoryNow" />
@@ -159,6 +186,13 @@ const memoryIdInput = ref('')
 const memoryByIdLoading = ref(false)
 const memoryByIdJson = ref('')
 
+const myAgents = ref<Array<{ id: number; name: string }>>([])
+const useToolAgentId = ref<number | null>(null)
+const useToolName = ref('search_knowledge_base')
+const useToolParamsRaw = ref('{\n  "query": "test",\n  "top_k": 3\n}')
+const useToolLoading = ref(false)
+const useToolJson = ref('')
+
 const emit = defineEmits<{ (e: 'credits-updated'): void }>()
 
 function loadMe() {
@@ -199,6 +233,58 @@ function createApiKey() {
 
 function removeApiKey(id: number) {
   api.deleteAccountApiKey(id).then(() => loadApiKeys()).catch(() => {})
+}
+
+function loadMyAgentsForTools() {
+  if (!auth.token) return
+  api.fetchMyAgents()
+    .then((res) => {
+      const list = (res.data?.agents || []) as Array<{ id: number; name: string }>
+      myAgents.value = list
+      if (list.length && (useToolAgentId.value == null || !list.some((a) => a.id === useToolAgentId.value))) {
+        useToolAgentId.value = list[0].id
+      }
+    })
+    .catch(() => {
+      myAgents.value = []
+    })
+}
+
+function callAgentUseToolNow() {
+  const agentId = useToolAgentId.value
+  const name = useToolName.value.trim()
+  if (agentId == null || !name) {
+    useToolJson.value = JSON.stringify({ error: 'agent and tool_name required' }, null, 2)
+    return
+  }
+  let params: Record<string, unknown> = {}
+  const raw = useToolParamsRaw.value.trim()
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw) as unknown
+      if (parsed != null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        params = parsed as Record<string, unknown>
+      } else {
+        useToolJson.value = JSON.stringify({ error: 'params must be a JSON object' }, null, 2)
+        return
+      }
+    } catch {
+      useToolJson.value = JSON.stringify({ error: 'Invalid JSON in params' }, null, 2)
+      return
+    }
+  }
+  useToolLoading.value = true
+  useToolJson.value = ''
+  api.postAgentUseTool(agentId, { tool_name: name, params })
+    .then((res) => {
+      useToolJson.value = JSON.stringify(res.data, null, 2)
+    })
+    .catch((e: unknown) => {
+      useToolJson.value = JSON.stringify({ error: String(e) }, null, 2)
+    })
+    .finally(() => {
+      useToolLoading.value = false
+    })
 }
 
 function loadSkillTree() {
@@ -345,6 +431,7 @@ onMounted(() => {
   loadMe()
   loadApiKeys()
   loadSkillTree()
+  loadMyAgentsForTools()
 })
 </script>
 
@@ -377,6 +464,10 @@ onMounted(() => {
 .dev-json-details summary { cursor: pointer; font-size: var(--font-caption); color: var(--text-secondary); user-select: none; margin-bottom: var(--space-2); }
 .dev-json-details .account-json-pre { margin-top: 0; }
 .memory-by-id-row { margin-top: var(--space-3); }
+.dev-agent-tool-row { margin-top: var(--space-2); }
+.dev-agent-tool-label { display: flex; flex-direction: column; gap: var(--space-1); flex: 1; min-width: 200px; }
+.dev-agent-tool-label-text { font-size: var(--font-caption); color: var(--text-secondary); }
+.dev-agent-select { width: 100%; }
 .dev-memory-get-hint { margin-top: var(--space-1); font-size: var(--font-caption); }
 .account-json-pre {
   margin-top: var(--space-3); padding: var(--space-3); border-radius: var(--radius-md);
