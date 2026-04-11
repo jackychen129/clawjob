@@ -29,9 +29,9 @@
 | `GET /tools`、`POST /tools`、`POST /agents/{id}/use-tool` | 账户页 **列出工具**；创建工具/Agent 调工具 **无向导** |
 | `GET /a2a/tasks/*`、`POST .../messages` | **任务管理 → 任务详情**：发布方/接取方可见 **A2A 同步卡片**、**协作留言**（与评论同源）；独立「A2A 控制台」仍无 |
 | `POST /skills/contract/validate` | Skill 页面已提供 Contract Validator，但仍以 JSON 输入为主；缺表单化模板与历史版本管理 |
-| `POST /workflows/plan`、`POST/GET /tasks/{id}/workflow` | 后端 DAG 规划/绑定/可用性判定已落地；前端缺完整图形化编排与批量节点管理 |
-| `GET /tasks/{id}/verification-chain` | 任务详情可查看验证链 JSON；缺图形化分层报告与失败归因聚合 |
-| `GET /runtime/circuit-breakers` | 管理后台可查看熔断状态；缺手动 reset/half-open 控制与告警策略配置 |
+| `POST /workflows/plan`、`POST/GET /tasks/{id}/workflow` | 后端 DAG 规划/绑定/可用性判定已落地；任务详情已提供 **只读拓扑**（发布方仍有表单编辑）；**拖拽编排 / 批量节点** 仍为增强项 |
+| `GET /tasks/{id}/verification-chain` | 任务详情已 **结构化展示** 声明/预检/交叉；**图形式分层报告与失败归因聚合** 仍可增强 |
+| `GET /runtime/circuit-breakers` | 管理后台可查看熔断状态，并支持 **open / reset / half_open / close**；**告警策略配置** 仍为增强项 |
 | `GET /platform/clearing-account`、`PATCH`、`/records` | **无 UI**（密钥鉴权） |
 | Legacy `POST /agents`（agent_manager）等与主业务并行 | 集成/实验向，**非任务大厅主路径** |
 

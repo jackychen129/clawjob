@@ -501,37 +501,80 @@
                   <Button size="sm" type="button" variant="secondary" @click="copyA2aSyncJson">{{ t('task.a2aCopyPayload') || '复制 JSON（供 Agent）' }}</Button>
                 </template>
               </div>
+              <div v-if="auth.isLoggedIn && selectedTaskDetail" class="detail-workflow-preview">
+                <h4 class="task-comments-title">{{ t('task.workflowPreviewTitle') }}</h4>
+                <p class="hint">{{ t('task.workflowPreviewHint') }}</p>
+                <div v-if="workflowPreviewLoading" class="loading"><div class="spinner"></div></div>
+                <WorkflowDagPreview
+                  v-else
+                  :task-id="selectedTaskDetail.id"
+                  :dag="workflowPreviewDag"
+                  :ready="workflowPreviewReady"
+                  :blocked-by="workflowPreviewBlocked"
+                  :empty-text="t('task.workflowPreviewEmpty')"
+                  :ready-label="t('task.workflowPreviewReady')"
+                  :blocked-label="t('task.workflowPreviewBlocked')"
+                  :blocked-detail-label="t('task.workflowPreviewBlockedBy')"
+                  :edges-title="t('task.workflowPreviewEdges')"
+                  :node-label-prefix="t('task.workflowPreviewNodePrefix')"
+                />
+              </div>
               <div class="detail-verification-chain">
-                <h4 class="task-comments-title">{{ t('task.verificationRecord') || '验收记录' }} / Chain</h4>
+                <h4 class="task-comments-title">{{ t('task.verificationChainTitle') }}</h4>
+                <p class="hint">{{ t('task.verificationChainHint') }}</p>
                 <Button
                   size="sm"
                   type="button"
                   variant="secondary"
                   :disabled="verificationChainLoading"
                   @click="loadVerificationChain"
-                >{{ verificationChainLoading ? 'Loading...' : 'Load verification chain' }}</Button>
+                >{{ verificationChainLoading ? '…' : t('task.verificationChainLoad') }}</Button>
                 <div v-if="verificationChainData" class="verification-chain-cards">
                   <div class="verification-chain-card">
-                    <p class="mono">Declaration</p>
-                    <p class="hint">Method: {{ verificationChainData.declaration?.verification_method || '-' }}</p>
-                    <p class="hint">Requirements: {{ (verificationChainData.declaration?.verification_requirements || []).length }}</p>
+                    <p class="verification-chain-card__title">{{ t('task.verificationChainDeclaration') }}</p>
+                    <p class="hint">
+                      {{ t('task.verificationChainMethod') }}：
+                      <span class="mono">{{ verificationChainData.declaration?.verification_method || '—' }}</span>
+                    </p>
+                    <p class="hint">{{ t('task.verificationChainRequirements') }}</p>
+                    <ul v-if="(verificationChainData.declaration?.verification_requirements || []).length" class="verification-chain-ul">
+                      <li v-for="(req, ri) in verificationChainData.declaration.verification_requirements.slice(0, 12)" :key="'req-' + ri">{{ typeof req === 'string' ? req : JSON.stringify(req) }}</li>
+                    </ul>
+                    <p v-else class="hint">{{ t('task.verificationChainNoRequirements') }}</p>
                   </div>
                   <div class="verification-chain-card">
-                    <p class="mono">Sandbox</p>
-                    <p class="hint">Preflight ok: {{ verificationChainData.sandbox?.ok ? 'yes' : 'no' }}</p>
-                    <p class="hint">Warnings: {{ verificationChainData.sandbox?.warnings ?? 0 }}</p>
+                    <p class="verification-chain-card__title">{{ t('task.verificationChainSandbox') }}</p>
+                    <p class="hint">
+                      {{ t('task.verificationChainPreflightOk') }}：
+                      <strong>{{ verificationChainData.sandbox?.ok ? t('task.verificationChainPreflightYes') : t('task.verificationChainPreflightNo') }}</strong>
+                      · {{ t('task.verificationChainWarnCount', { n: verificationChainData.sandbox?.warnings ?? 0 }) }}
+                    </p>
+                    <ul v-if="(verificationChainData.sandbox?.checks || []).length" class="verification-chain-ul verification-chain-ul--compact">
+                      <li v-for="(c, ci) in verificationChainData.sandbox.checks.slice(0, 10)" :key="'chk-' + ci">
+                        <span class="mono">{{ c.name }}</span> · {{ c.status }} — {{ c.message }}
+                      </li>
+                    </ul>
                   </div>
                   <div class="verification-chain-card">
-                    <p class="mono">Cross</p>
-                    <p class="hint">Status: {{ verificationChainData.cross?.status || '-' }}</p>
-                    <p class="hint">Rejected: {{ verificationChainData.cross?.rejection_reason ? 'yes' : 'no' }}</p>
+                    <p class="verification-chain-card__title">{{ t('task.verificationChainCross') }}</p>
+                    <p class="hint">
+                      {{ t('task.a2aFieldStatus') }}：
+                      <span :class="taskStatusPillClass(String(verificationChainData.cross?.status || ''))">{{ t('status.' + String(verificationChainData.cross?.status || '')) || verificationChainData.cross?.status || '—' }}</span>
+                    </p>
+                    <p v-if="verificationChainData.cross?.submitted_at" class="hint mono">{{ t('task.a2aFieldSubmitted') }}：{{ verificationChainData.cross.submitted_at }}</p>
+                    <p v-if="verificationChainData.cross?.verification_deadline_at" class="hint mono">{{ t('task.a2aFieldDeadline') }}：{{ verificationChainData.cross.verification_deadline_at }}</p>
+                    <p v-if="verificationChainData.cross?.has_escrow" class="hint">{{ t('task.verificationChainEscrow') }}</p>
+                    <p v-if="verificationChainData.cross?.rejection_reason" class="hint">{{ t('task.rejectTitle') }}：{{ verificationChainData.cross.rejection_reason }}</p>
                   </div>
                 </div>
-                <pre v-if="verificationChainJson" class="account-json-pre">{{ verificationChainJson }}</pre>
+                <details v-if="verificationChainJson" class="verification-chain-json">
+                  <summary>{{ t('task.verificationChainJsonToggle') }}</summary>
+                  <pre class="account-json-pre">{{ verificationChainJson }}</pre>
+                </details>
               </div>
               <div v-if="auth.isLoggedIn && selectedTaskDetail.owner_id === auth.userId" class="detail-workflow-dag">
-                <h4 class="task-comments-title">Workflow DAG</h4>
-                <p class="hint">可视化编辑节点与依赖关系（from -> to）。</p>
+                <h4 class="task-comments-title">{{ t('task.workflowEditorTitle') }}</h4>
+                <p class="hint">{{ t('task.workflowEditorHint') }}</p>
                 <div class="workflow-editor">
                   <div class="workflow-editor__col">
                     <div class="workflow-editor__head">
@@ -957,6 +1000,7 @@ import { Input } from '../components/ui/input'
 import { Textarea } from '../components/ui/textarea'
 import EmptyState from '../components/EmptyState.vue'
 import MarkdownHtml from '../components/MarkdownHtml.vue'
+import WorkflowDagPreview from '../components/WorkflowDagPreview.vue'
 import { cn } from '../lib/utils'
 import { safeT } from '../i18n'
 import { useAuthStore } from '../stores/auth'
@@ -1536,6 +1580,12 @@ const a2aSyncLoading = ref(false)
 const verificationChainLoading = ref(false)
 const verificationChainJson = ref('')
 const verificationChainData = ref<any>(null)
+/** 登录用户可见：Workflow 只读拓扑（含接取方） */
+type WorkflowDagPayload = { nodes: number[]; edges: Array<{ from: number; to: number }>; topo_order?: number[] }
+const workflowPreviewLoading = ref(false)
+const workflowPreviewDag = ref<WorkflowDagPayload | null>(null)
+const workflowPreviewReady = ref(true)
+const workflowPreviewBlocked = ref<number[]>([])
 const workflowLoading = ref(false)
 const workflowJson = ref('')
 const workflowNodes = ref<number[]>([])
@@ -1560,6 +1610,7 @@ function openTaskDetail(task: TaskListItem) {
   api.getTaskDetail(task.id).then((res) => {
     selectedTaskDetail.value = res.data as TaskListItem
     const detail = res.data as TaskListItem
+    loadWorkflowPreview(task.id)
     loadA2aSync(task.id)
     if (detail.agent_id) {
       api.fetchAgentSkills(Number(detail.agent_id)).then((r) => {
@@ -1587,6 +1638,44 @@ function loadA2aSync(taskId: number) {
     .then((res) => { a2aSync.value = res.data as Record<string, unknown> })
     .catch(() => { a2aSync.value = null })
     .finally(() => { a2aSyncLoading.value = false })
+}
+
+function applyWorkflowPayload(data: {
+  ready?: boolean
+  blocked_by?: number[]
+  workflow_dag?: WorkflowDagPayload | null
+}) {
+  workflowPreviewReady.value = data.ready !== undefined && data.ready !== null ? !!data.ready : true
+  workflowPreviewBlocked.value = Array.isArray(data.blocked_by)
+    ? data.blocked_by.map((x) => Number(x)).filter((n) => Number.isInteger(n))
+    : []
+  const dag = data.workflow_dag
+  workflowPreviewDag.value = dag && typeof dag === 'object' ? (dag as WorkflowDagPayload) : null
+  const owner = selectedTaskDetail.value?.owner_id === auth.userId
+  if (owner && dag && typeof dag === 'object' && Array.isArray((dag as WorkflowDagPayload).nodes)) {
+    const d = dag as WorkflowDagPayload
+    workflowNodes.value = d.nodes.map((n) => Number(n)).filter((n) => Number.isInteger(n) && n > 0)
+    if (Array.isArray(d.edges)) {
+      workflowEdges.value = d.edges.map((e) => ({
+        from: Number.isInteger(Number((e as { from?: unknown }).from)) ? Number((e as { from: number }).from) : null,
+        to: Number.isInteger(Number((e as { to?: unknown }).to)) ? Number((e as { to: number }).to) : null,
+      }))
+    }
+  }
+}
+
+function loadWorkflowPreview(taskId: number) {
+  if (!auth.isLoggedIn) return
+  workflowPreviewLoading.value = true
+  workflowPreviewDag.value = null
+  workflowPreviewReady.value = true
+  workflowPreviewBlocked.value = []
+  api.getTaskWorkflow(taskId)
+    .then((res) => applyWorkflowPayload(res.data as { ready?: boolean; blocked_by?: number[]; workflow_dag?: WorkflowDagPayload | null }))
+    .catch(() => {
+      workflowPreviewDag.value = null
+    })
+    .finally(() => { workflowPreviewLoading.value = false })
 }
 
 function loadVerificationChain() {
@@ -1672,7 +1761,10 @@ function attachWorkflowNow() {
   workflowJson.value = ''
   const body = parseWorkflowInput()
   api.attachTaskWorkflow(selectedTaskDetail.value.id, body)
-    .then((res) => { workflowJson.value = JSON.stringify(res.data, null, 2) })
+    .then((res) => {
+      workflowJson.value = JSON.stringify(res.data, null, 2)
+      loadWorkflowPreview(selectedTaskDetail.value!.id)
+    })
     .catch((e: unknown) => { workflowJson.value = JSON.stringify({ error: String(e) }, null, 2) })
     .finally(() => { workflowLoading.value = false })
 }
@@ -1684,16 +1776,7 @@ function loadWorkflowNow() {
   api.getTaskWorkflow(selectedTaskDetail.value.id)
     .then((res) => {
       workflowJson.value = JSON.stringify(res.data, null, 2)
-      const dag = (res.data as any)?.workflow_dag
-      if (dag && Array.isArray(dag.nodes)) {
-        workflowNodes.value = dag.nodes.map((n: unknown) => Number(n)).filter((n: number) => Number.isInteger(n) && n > 0)
-      }
-      if (dag && Array.isArray(dag.edges)) {
-        workflowEdges.value = dag.edges.map((e: any) => ({
-          from: Number.isInteger(Number(e?.from)) ? Number(e.from) : null,
-          to: Number.isInteger(Number(e?.to)) ? Number(e.to) : null,
-        }))
-      }
+      applyWorkflowPayload(res.data as { ready?: boolean; blocked_by?: number[]; workflow_dag?: WorkflowDagPayload | null })
     })
     .catch((e: unknown) => { workflowJson.value = JSON.stringify({ error: String(e) }, null, 2) })
     .finally(() => { workflowLoading.value = false })
@@ -1779,6 +1862,10 @@ function closeTaskDetail() {
   a2aSync.value = null
   verificationChainJson.value = ''
   verificationChainData.value = null
+  workflowPreviewLoading.value = false
+  workflowPreviewDag.value = null
+  workflowPreviewReady.value = true
+  workflowPreviewBlocked.value = []
   workflowJson.value = ''
   workflowNodes.value = []
   workflowEdges.value = []
@@ -2447,6 +2534,37 @@ watch(tab, (newTab) => {
   border-radius: var(--radius-md);
   padding: var(--space-3);
   background: rgba(255, 255, 255, 0.03);
+}
+.verification-chain-card__title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-caption);
+  font-weight: 650;
+  color: var(--text-primary);
+}
+.verification-chain-ul {
+  margin: var(--space-2) 0 0;
+  padding-left: 1.2rem;
+  font-size: var(--font-caption);
+  color: var(--text-secondary);
+}
+.verification-chain-ul--compact li { margin-bottom: 0.25rem; }
+.verification-chain-json {
+  margin-top: var(--space-2);
+  font-size: var(--font-caption);
+  color: var(--text-secondary);
+}
+.verification-chain-json summary { cursor: pointer; user-select: none; }
+@media (max-width: 900px) {
+  .verification-chain-cards {
+    grid-template-columns: 1fr;
+  }
+}
+.detail-workflow-preview {
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: var(--border-hairline);
+  display: grid;
+  gap: var(--space-3);
 }
 .detail-workflow-dag {
   margin-top: var(--space-5);

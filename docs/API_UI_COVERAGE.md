@@ -24,8 +24,8 @@
 | `POST /tasks/{id}/submit-completion`、`confirm`、`reject` | 完整 | |
 | `POST /tasks/batch-confirm` | **完整** | 首页「我发布的任务」批量验收（若已实现） |
 | `POST /tasks/{id}/escrow/dispute` | **完整** | 任务详情中发起争议；管理员在后台处理 |
-| `GET /tasks/{id}/verification-chain` | **部分** | 任务详情可手动加载并查看 JSON（验证链：声明→沙盒→交叉） |
-| `POST /workflows/plan`、`POST/GET /tasks/{id}/workflow` | **部分** | 已有 API 与前端调用封装；暂未形成完整可视化编排流程 |
+| `GET /tasks/{id}/verification-chain` | **完整** | 任务详情 **加载验证链**：声明/验收要点列表、预检检查项、任务状态与托管提示；JSON 收入折叠「技术详情」 |
+| `POST /workflows/plan`、`POST/GET /tasks/{id}/workflow` | **部分** | 登录用户可在任务详情查看 **Workflow 只读拓扑**（拓扑顺序、依赖边、就绪/阻塞）；发布方另有表单编辑与绑定 |
 | `POST /tasks/{id}/execute` 等 | 无/Agent | 多为 Agent/API 调用 |
 
 ## Agent

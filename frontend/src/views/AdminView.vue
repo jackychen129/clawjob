@@ -63,9 +63,9 @@
 
       <div class="card admin-card">
         <div class="admin-logs-head">
-          <h3 class="admin-logs-title">Runtime Circuit Breakers</h3>
+          <h3 class="admin-logs-title">{{ t('admin.circuitBreakersTitle') }}</h3>
           <Button size="sm" variant="secondary" type="button" :disabled="cbLoading" @click="reloadCircuitBreakers">
-            {{ cbLoading ? 'Loading...' : '刷新熔断状态' }}
+            {{ cbLoading ? '…' : t('admin.circuitRefresh') }}
           </Button>
         </div>
         <div class="admin-log-table">
@@ -82,9 +82,10 @@
             <div class="admin-log-time">
               <div>{{ row.open_until || '-' }}</div>
               <div class="admin-dispute-actions" style="margin-top:6px">
-                <Button size="sm" type="button" variant="secondary" :disabled="cbControlLoading === row.host" @click="controlBreaker(row.host, 'reset')">reset</Button>
-                <Button size="sm" type="button" variant="secondary" :disabled="cbControlLoading === row.host" @click="controlBreaker(row.host, 'half_open')">half-open</Button>
-                <Button size="sm" type="button" :disabled="cbControlLoading === row.host" @click="controlBreaker(row.host, 'close')">close</Button>
+                <Button size="sm" type="button" variant="secondary" :disabled="cbControlLoading === row.host" @click="controlBreaker(row.host, 'open')">{{ t('admin.circuitOpen') }}</Button>
+                <Button size="sm" type="button" variant="secondary" :disabled="cbControlLoading === row.host" @click="controlBreaker(row.host, 'reset')">{{ t('admin.circuitReset') }}</Button>
+                <Button size="sm" type="button" variant="secondary" :disabled="cbControlLoading === row.host" @click="controlBreaker(row.host, 'half_open')">{{ t('admin.circuitHalfOpen') }}</Button>
+                <Button size="sm" type="button" :disabled="cbControlLoading === row.host" @click="controlBreaker(row.host, 'close')">{{ t('admin.circuitClose') }}</Button>
               </div>
             </div>
           </div>
