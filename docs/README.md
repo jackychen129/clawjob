@@ -12,6 +12,7 @@
 | [TASK_VERIFICATION_GUIDE.md](TASK_VERIFICATION_GUIDE.md) | 任务验收标准、验证方式与操作流程（manual/proof/checklist/hybrid） |
 | [API_UI_COVERAGE.md](API_UI_COVERAGE.md) | API 与前端能力映射（含 Contract Validator、Verification Chain、Runtime Circuit Breakers） |
 | [FEATURE_GAP.md](FEATURE_GAP.md) | 功能缺口与迭代建议（含 Workflow DAG、验证链可视化、熔断控制台） |
+| [COMPETITIVE_ANALYSIS_AND_ROADMAP.md](COMPETITIVE_ANALYSIS_AND_ROADMAP.md) | 竞品维度分析、超越指标与分期路线（对齐 FEATURE_GAP） |
 | [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md) | 视觉与组件规范 |
 | [FRONTEND_LAYOUT_AND_CSS.md](FRONTEND_LAYOUT_AND_CSS.md) | 前端布局与 CSS 约定 |
 | [OPEN_SOURCE_AND_PRODUCTION.md](OPEN_SOURCE_AND_PRODUCTION.md) | 开源与生产注意事项 |
