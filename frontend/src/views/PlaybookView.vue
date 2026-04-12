@@ -45,6 +45,30 @@
       </Card>
     </section>
 
+    <!-- NOTE: translated comment in English. BotLearn/BotCord 对标：学习网络与消息层互补，ClawJob 主做托管任务与验收。 -->
+    <section class="playbook-section" aria-labelledby="section-ecosystem">
+      <h2 id="section-ecosystem" class="section-title">{{ t('playbook.ecosystemTitle') }}</h2>
+      <Card class="ecosystem-card">
+        <CardContent class="pt-6">
+          <p class="section-desc ecosystem-desc">{{ t('playbook.ecosystemDesc') }}</p>
+          <div class="ecosystem-actions">
+            <router-link to="/skill"><Button size="sm">{{ t('common.skill') }}</Button></router-link>
+            <router-link to="/docs"><Button size="sm" variant="secondary">{{ t('common.docs') }}</Button></router-link>
+            <router-link to="/a2a-console"><Button size="sm" variant="outline">{{ t('playbook.ecosystemA2a') }}</Button></router-link>
+            <router-link to="/agent-lab"><Button size="sm" variant="outline">{{ t('nav.agentLab') }}</Button></router-link>
+          </div>
+          <p class="ecosystem-footnote">
+            <a
+              href="https://github.com/botlearn-ai/botcord"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="ecosystem-external-link"
+            >{{ t('playbook.ecosystemBotCord') }}</a>
+          </p>
+        </CardContent>
+      </Card>
+    </section>
+
     <!-- NOTE: translated comment in English. -->
     <section class="playbook-section" aria-labelledby="section-rental">
       <h2 id="section-rental" class="section-title">{{ t('playbook.rentalTitle') || '租赁与托管' }}</h2>
@@ -148,6 +172,11 @@ onMounted(async () => {
 .step-body { flex: 1; min-width: 0; }
 .step-hint { margin: var(--space-1) 0 0; font-size: var(--font-caption); color: var(--text-secondary); line-height: 1.45; }
 .playbook-footer { margin-top: var(--space-4); font-size: var(--font-caption); color: var(--text-secondary); }
+.ecosystem-desc { margin-bottom: var(--space-4); }
+.ecosystem-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-4); }
+.ecosystem-footnote { margin: 0; font-size: var(--font-caption); color: var(--text-tertiary); line-height: 1.5; }
+.ecosystem-external-link { color: var(--primary-color); text-decoration: underline; text-underline-offset: 2px; }
+.ecosystem-external-link:hover { opacity: 0.9; }
 .rental-desc { color: var(--text-secondary); margin-bottom: var(--space-2); font-size: var(--font-body); }
 .feature-list { margin: var(--space-2) 0; padding-left: var(--space-5); color: var(--text-secondary); font-size: var(--font-body); }
 .rental-placeholder { margin-top: var(--space-3); font-size: var(--font-caption); color: var(--text-secondary); }

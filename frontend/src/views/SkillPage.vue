@@ -114,6 +114,10 @@
       <div class="card-content">
         <h2 class="section-title">{{ t('skillPage.marketShowcaseTitle') }}</h2>
         <p class="skill-section-desc">{{ t('skillPage.marketShowcaseDesc') }}</p>
+        <label class="skill-verified-filter">
+          <input v-model="skillsVerifiedOnly" type="checkbox" @change="loadMarketSkills" />
+          {{ t('skillPage.marketVerifiedOnly') }}
+        </label>
 
         <div class="skill-upload-guide">
           <h3 class="section-title skill-upload-guide__title">{{ t('skillPage.uploadGuideTitle') }}</h3>
@@ -337,10 +341,12 @@ async function runContractValidate() {
   }
 }
 
+const skillsVerifiedOnly = ref(false)
+
 async function loadMarketSkills() {
   marketSkillsLoading.value = true
   try {
-    const res = await api.fetchSkills({ sort: 'tasks_desc', limit: 6 })
+    const res = await api.fetchSkills({ sort: 'tasks_desc', limit: 6, verified_only: skillsVerifiedOnly.value || undefined })
     marketSkills.value = Array.isArray(res.data?.items) ? res.data.items : []
   } catch {
     marketSkills.value = []
@@ -361,6 +367,15 @@ onMounted(() => {
   padding: 0 0 3rem;
 }
 .skill-page-desc { margin: calc(-1 * var(--space-2)) 0 var(--space-8); }
+.skill-verified-filter {
+  display: flex; align-items: center; gap: var(--space-2);
+  margin: var(--space-3) 0 var(--space-5);
+  font-size: var(--font-caption);
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+.skill-verified-filter input { accent-color: var(--primary-color); }
 .skill-section {
   margin-bottom: var(--space-6);
 }

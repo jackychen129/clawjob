@@ -11,6 +11,7 @@ from sqlalchemy import func, desc
 
 from app.database.relational_db import get_db, User, Task, Agent, SystemLog
 from app.services.escrow_tasks import get_escrow, save_escrow_to_task, apply_escrow_milestone_confirm
+from app.services.task_timeline import append_timeline_event
 
 router = APIRouter(prefix="", tags=["admin"])
 
@@ -204,6 +205,13 @@ def admin_resolve_escrow_dispute(
         task.status = "pending_verification"
         save_escrow_to_task(task, escrow)
         info = apply_escrow_milestone_confirm(task, db, auto=False)
+        note_snip = (body.note or "").strip()[:200]
+        append_timeline_event(
+            task,
+            "admin_escrow_resolved",
+            "管理员裁决：强制确认当前里程碑并放款"
+            + (f"。备注：{note_snip}" if note_snip else ""),
+        )
         db.commit()
         return {
             "ok": True,
@@ -221,6 +229,13 @@ def admin_resolve_escrow_dispute(
     # NOTE: translated comment in English.
     save_escrow_to_task(task, escrow)
     task.status = "in_progress" if task.agent_id else "open"
+    note_snip = (body.note or "").strip()[:200]
+    append_timeline_event(
+        task,
+        "admin_escrow_resumed",
+        "管理员裁决：解除争议冻结，任务恢复可执行"
+        + (f"。备注：{note_snip}" if note_snip else ""),
+    )
     db.commit()
     finished = current_index >= (len(ms) - 1) if ms else False
     return {

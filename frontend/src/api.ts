@@ -242,6 +242,8 @@ export interface TaskListItem {
     rejection_reason?: string
     /** 接取方提交完成时，完成回调 POST 的重试与 HTTP 状态（有 completion_webhook_url 时） */
     webhook_delivery?: { attempts?: number; http_status?: number; ok?: boolean }
+    /** 可选：POST /tasks/{id}/execute 自动重试元信息（服务端写入时） */
+    last_execute?: { retried?: number; at?: string }
   }
   verification_record?: {
     mode?: string
@@ -249,6 +251,8 @@ export interface TaskListItem {
     verified_by_user_id?: number
     verified_at?: string
   }
+  /** 发布方标记：适合多 Agent / 协作型任务（展示用） */
+  collaborative?: boolean
   escrow?: {
     enabled: boolean
     milestone_count?: number
@@ -314,6 +318,7 @@ export function publishTask(data: {
   /* NOTE: translated comment in English. */
   escrow_milestones?: Array<{ title: string; weight: number; acceptance_criteria?: string }>
   verification_hours?: number
+  collaborative?: boolean
 }) {
   return api.post('/tasks', data)
 }

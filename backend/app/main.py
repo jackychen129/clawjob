@@ -58,6 +58,7 @@ from app.services.preflight import run_preflight, enforce_preflight
 from app.services.skill_contract import validate_contract, validate_payload
 from app.services.workflow_dag import validate_workflow_dag, predecessors
 from app.services.runtime_guard import RuntimeCircuitGuard
+from app.services.task_timeline import append_timeline_event as _append_timeline_event
 
 # Agent system imports
 from app.agents.agent_manager import AgentManager
@@ -1347,26 +1348,6 @@ def _task_verification_hours(task: Task) -> int:
     return VERIFICATION_HOURS_DEFAULT
 
 
-def _append_timeline_event(task: Task, event_type: str, summary: str) -> None:
-    base = copy.deepcopy(task.input_data) if isinstance(task.input_data, dict) else {}
-    tl = base.get("timeline")
-    if not isinstance(tl, list):
-        tl = []
-    tl.append(
-        {
-            "at": datetime.utcnow().isoformat() + "Z",
-            "type": event_type,
-            "summary": (summary or "")[:500],
-        }
-    )
-    base["timeline"] = tl[-100:]
-    task.input_data = base
-    try:
-        flag_modified(task, "input_data")
-    except Exception:
-        pass
-
-
 def _task_payment_breakdown(task: Task, db: Session) -> dict:
     rp = int(getattr(task, "reward_points", 0) or 0)
     comm = int(rp * PLATFORM_COMMISSION_RATE) if rp else 0
@@ -1423,6 +1404,7 @@ class PublishTaskBody(BaseModel):
     verification_requirements: list = []  # 验收清单要求（用于 checklist / hybrid）
     related_skill_token: str = ""  # 可选：将任务显式关联到某个已发布 Skill token
     verification_hours: Optional[int] = None  # 发布者验收窗口（小时），默认 6，范围 1–168
+    collaborative: bool = False  # 可选：标记为适合多 Agent / 协作型任务（展示用）
 
 
 def _push_task_to_discord(task: Task, webhook_url: str, frontend_url: str) -> None:
@@ -1647,10 +1629,18 @@ def _maybe_auto_confirm(task: Task, db: Session) -> None:
     if esc and esc.get("disputed"):
         return
     if esc:
-        apply_escrow_milestone_confirm(task, db, auto=True)
+        info = apply_escrow_milestone_confirm(task, db, auto=True)
+        fin = bool(info.get("escrow_finished"))
+        _append_timeline_event(
+            task,
+            "auto_milestone_confirmed",
+            "验收截止未操作，系统自动确认当前里程碑并放款"
+            + ("（全部里程碑已完成）" if fin else ""),
+        )
         db.commit()
         return
     _pay_task_reward(task, db)
+    _append_timeline_event(task, "auto_confirmed", "验收截止未操作，系统自动确认并发奖")
     db.commit()
 
 
@@ -1669,6 +1659,7 @@ def _task_extra(t: Task, db: Session) -> dict:
         "verification_method": _normalize_verification_method(d.get("verification_method") or "manual_review"),
         "verification_requirements": d.get("verification_requirements") if isinstance(d.get("verification_requirements"), list) else [],
         "related_skill": _task_related_skill(db, t, d),
+        "collaborative": bool(d.get("collaborative")),
     }
     out["verification_hours"] = _task_verification_hours(t)
     out["verification_extend_used"] = int(d.get("verification_extend_used", 0) or 0)
@@ -2007,6 +1998,8 @@ def publish_task(
             extra["escrow"] = plan
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
+    if bool(getattr(body, "collaborative", False)):
+        extra["collaborative"] = True
     task = Task(
         title=body.title,
         description=body.description,
@@ -3164,7 +3157,7 @@ async def execute_task(task_id: str, retry_count: int = 0, current_user: str = D
     last_err: Optional[str] = None
     for attempt in range(retries + 1):
         try:
-            result = await task_system.execute_task(task_id, current_user)
+            result = await task_system.execute_task(task_id)
             if attempt > 0 and isinstance(result, dict):
                 result["retried"] = attempt
             return result

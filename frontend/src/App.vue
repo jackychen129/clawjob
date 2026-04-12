@@ -16,6 +16,10 @@
             <Home class="nav-icon" aria-hidden="true" />
             <span>{{ t('common.home') }}</span>
           </router-link>
+          <router-link to="/playbook" class="nav-link" :class="{ active: route.path === '/playbook' }">
+            <ListChecks class="nav-icon" aria-hidden="true" />
+            <span>{{ t('nav.playbook') }}</span>
+          </router-link>
           <router-link to="/dashboard" class="nav-link" :class="{ active: route.path === '/dashboard' }">
             <LayoutGrid class="nav-icon" aria-hidden="true" />
             <span>{{ t('nav.dashboard') || '实况' }}</span>
@@ -75,7 +79,7 @@
           </router-link>
           <router-link to="/agent-lab" class="nav-link" :class="{ active: route.path === '/agent-lab' }">
             <Bot class="nav-icon" aria-hidden="true" />
-            <span>Agent Lab</span>
+            <span>{{ t('nav.agentLab') }}</span>
           </router-link>
           <router-link v-if="isAdmin" to="/admin" class="nav-link" :class="{ active: route.path === '/admin' }">
             <Shield class="nav-icon" aria-hidden="true" />
@@ -162,6 +166,7 @@
       <LeaderboardView v-else-if="route.path === '/leaderboard'" />
       <CandidatesView v-else-if="route.path === '/candidates'" />
       <MarketplaceView v-else-if="route.path === '/marketplace' || route.path === '/marketplace/'" />
+      <PlaybookView v-else-if="route.path === '/playbook'" />
       <ForumView v-else-if="route.path === '/forum'" />
       <TaskManageView v-else-if="route.path === '/tasks'" @success="showSuccess" @register-hint="postPublishRegisterHint = true" />
       <AgentManageView v-else-if="route.path === '/agents'" />
@@ -173,6 +178,14 @@
       <template v-else>
       <div class="home-wrap apple-layout">
         <!-- NOTE: translated comment in English. -->
+        <section class="home-playbook-cta apple-section" aria-label="Onboarding">
+          <p class="home-playbook-cta__tagline">{{ t('home.heroTagline') }}</p>
+          <div class="home-playbook-cta__actions">
+            <Button :as="RouterLink" to="/playbook" size="sm">{{ t('home.ctaPlaybook') }}</Button>
+            <Button :as="RouterLink" to="/tasks" size="sm" variant="secondary">{{ t('home.ctaTasks') }}</Button>
+            <Button :as="RouterLink" to="/skill" size="sm" variant="ghost">{{ t('home.ctaSkill') }}</Button>
+          </div>
+        </section>
         <section class="home-dashboard" aria-label="Dashboard">
           <div class="home-kpi">
             <div v-if="homeStatsLoading" class="home-kpi-skeleton">
@@ -287,6 +300,7 @@
               <span v-if="task.task_type" class="task-card__type" data-attr="task_type">{{ task.task_type }}</span>
               <span v-if="task.priority && task.priority !== 'medium'" class="task-card__priority" :class="'priority--' + task.priority">{{ task.priority }}</span>
               <span v-if="task.escrow?.enabled" class="task-badge-escrow" :title="t('marketing.escrowBadgeTitle')">{{ t('marketing.escrowBadge') }}</span>
+              <span v-if="task.collaborative" class="task-badge-collab" :title="t('task.collaborativeBadgeTitle')">{{ t('task.collaborativeBadge') }}</span>
               <span class="badge" :class="task.status">{{ t('status.' + task.status) || task.status }}</span>
               <span v-if="task.reward_points" class="task-card__reward mono" data-attr="reward">{{ t('task.reward', { n: task.reward_points }) }}</span>
             </div>
@@ -514,6 +528,13 @@
               <label class="form-label">{{ t('task.skills') }}</label>
               <Input v-model="publishForm.skills_text" type="text" :placeholder="t('task.skillsPlaceholder')" />
             </div>
+            <div class="form-group">
+              <label class="form-label flex items-center gap-2">
+                <input v-model="publishForm.collaborative" type="checkbox" class="rounded border-input" />
+                {{ t('task.collaborativePublish') }}
+              </label>
+              <p class="form-hint">{{ t('task.collaborativePublishHint') }}</p>
+            </div>
             <div class="step-actions">
               <Button type="button" variant="ghost" @click="saveDraft">{{ t('task.draftSave') || '保存草稿' }}</Button>
               <Button type="button" @click="createStep = 2">{{ t('common.next') }}</Button>
@@ -734,7 +755,9 @@
         <p v-if="homeTaskDetail.status === 'pending_verification' && homeTaskDetail.verification_deadline_at" class="hint text-sm">
           {{ t('task.verificationWindowHint', { h: homeTaskDetail.verification_hours ?? 6 }) }}
         </p>
-        <router-link v-if="homeTaskDetail.timeline?.length" :to="'/tasks?taskId=' + homeTaskDetail.id" class="app-link text-sm">{{ t('task.openFullFlow') }}</router-link>
+        <TaskTimelinePanel v-if="homeTaskDetail.timeline?.length" :events="homeTaskDetail.timeline ?? []">
+          <router-link :to="'/tasks?taskId=' + homeTaskDetail.id" class="app-link text-sm">{{ t('task.openFullFlow') }}</router-link>
+        </TaskTimelinePanel>
         <dl v-if="homeTaskDetail.requirements || homeTaskDetail.category || (getTaskSkills(homeTaskDetail).length) || homeTaskDetail.location || homeTaskDetail.duration_estimate" class="task-detail-modal-attrs">
           <template v-if="homeTaskDetail.category"><dt>{{ t('task.detailCategory') }}</dt><dd>{{ taskCategoryLabel(homeTaskDetail.category) }}</dd></template>
           <template v-if="homeTaskDetail.requirements"><dt>{{ t('task.detailRequirements') }}</dt><dd class="task-detail-requirements">{{ homeTaskDetail.requirements }}</dd></template>
@@ -780,6 +803,19 @@
     <div v-if="subscribeTaskItem" class="modal-mask" @click.self="subscribeTaskItem = null">
       <div class="modal">
         <h3>{{ t('task.selectAgentTitle', { title: subscribeTaskItem.title }) }}</h3>
+        <div class="subscribe-preflight">
+          <p class="hint">{{ t('task.subscribePreflightIntro') }}</p>
+          <ul class="subscribe-preflight-list">
+            <li>{{ t('task.preflightItemToken') }}</li>
+            <li>{{ t('task.preflightItemSkill') }}</li>
+            <li>{{ t('task.preflightItemWebhook') }}</li>
+          </ul>
+          <p class="hint subscribe-preflight-links">
+            <RouterLink to="/account">{{ t('common.myAccount') }}</RouterLink>
+            ·
+            <RouterLink to="/skill">{{ t('common.skill') }}</RouterLink>
+          </p>
+        </div>
         <div class="agent-select-list">
           <Button
             v-for="a in myAgents"
@@ -823,6 +859,7 @@ import { i18n, setLocale, safeT, type LocaleKey } from './i18n'
 import { useAuthStore } from './stores/auth'
 import * as api from './api'
 import { taskPulseRelevantNav } from './utils/taskPulseHub'
+import { formatTaskRelativeTime } from './utils/taskTimeline'
 import SkillPage from './views/SkillPage.vue'
 import DocsPage from './views/DocsPage.vue'
 import ManualPage from './views/ManualPage.vue'
@@ -835,6 +872,7 @@ import DashboardView from './views/DashboardView.vue'
 import LeaderboardView from './views/LeaderboardView.vue'
 import CandidatesView from './views/CandidatesView.vue'
 import MarketplaceView from './views/MarketplaceView.vue'
+import PlaybookView from './views/PlaybookView.vue'
 import ForumView from './views/ForumView.vue'
 import AdminView from './views/AdminView.vue'
 import A2aConsoleView from './views/A2aConsoleView.vue'
@@ -845,8 +883,9 @@ import { Card, CardContent, CardHeader, CardTitle } from './components/ui/card'
 import { Textarea } from './components/ui/textarea'
 import EmptyState from './components/EmptyState.vue'
 import MarkdownHtml from './components/MarkdownHtml.vue'
+import TaskTimelinePanel from './components/TaskTimelinePanel.vue'
 import { getTemplateById } from './constants/taskTemplates'
-import { BookOpen, Bot, Home, LayoutGrid, ListTodo, LogIn, LogOut, Mail, MessagesSquare, Shield, Sparkles, Trophy, Users, Wallet } from 'lucide-vue-next'
+import { BookOpen, Bot, Home, LayoutGrid, ListChecks, ListTodo, LogIn, LogOut, Mail, MessagesSquare, Shield, Sparkles, Trophy, Users, Wallet } from 'lucide-vue-next'
 
 const route = useRoute()
 const router = useRouter()
@@ -966,6 +1005,7 @@ const publishForm = reactive({
   verification_hours: 6,
   escrow_enabled: false,
   escrow_rows: defaultEscrowRowsHome(),
+  collaborative: false,
 })
 const escrowWeightSumHome = computed(() =>
   publishForm.escrow_rows.reduce((s, r) => s + (Number(r.weight) || 0), 0),
@@ -1046,6 +1086,7 @@ function saveDraft() {
     escrow_enabled: publishForm.escrow_enabled,
     escrow_rows: publishForm.escrow_rows.map((r) => ({ ...r })),
     verification_hours: publishForm.verification_hours,
+    collaborative: publishForm.collaborative,
     updated_at: Date.now(),
   }
   try {
@@ -1080,6 +1121,7 @@ function loadDraft() {
       acceptance_criteria: String((r as any).acceptance_criteria ?? ''),
     }))
   }
+  if (typeof (d as any).collaborative === 'boolean') publishForm.collaborative = (d as any).collaborative
 }
 function openCreateTaskModalWithDraft() {
   loadDraft()
@@ -1104,6 +1146,7 @@ function clearDraft() {
   publishForm.escrow_enabled = false
   publishForm.escrow_rows = defaultEscrowRowsHome()
   publishForm.verification_hours = 6
+  publishForm.collaborative = false
   draftLoadedAt.value = 0
 }
 
@@ -1262,14 +1305,7 @@ function onHomeSearchInput() {
 }
 
 function formatCommentTimeHome(iso: string | null) {
-  if (!iso) return ''
-  const d = new Date(iso)
-  const now = new Date()
-  const diff = (now.getTime() - d.getTime()) / 60000
-  if (diff < 1) return t('task.justNow')
-  if (diff < 60) return t('task.minutesAgo', { n: Math.floor(diff) })
-  if (diff < 1440) return t('task.hoursAgo', { n: Math.floor(diff / 60) })
-  return d.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
+  return formatTaskRelativeTime(t, iso)
 }
 
 function formatTaskCreatedAt(iso: string | undefined) {
@@ -1532,6 +1568,7 @@ function doPublish() {
     skills,
     escrow_milestones: escrow_milestones,
     verification_hours: vh,
+    collaborative: publishForm.collaborative || undefined,
   }).then(() => {
     clearDraft()
     publishForm.title = ''
@@ -1548,6 +1585,7 @@ function doPublish() {
     publishForm.escrow_enabled = false
     publishForm.escrow_rows = defaultEscrowRowsHome()
     publishForm.verification_hours = 6
+    publishForm.collaborative = false
     showSuccess(t('task.publishSuccess'))
     if (showCreateTaskModal.value) closeCreateTaskModal()
     loadAccountMe()
@@ -1853,6 +1891,33 @@ onUnmounted(() => {
 .escrow-sum { margin-top: 0.35rem; font-weight: 500; color: var(--primary-color); }
 
 /* NOTE: translated comment in English. */
+.home-playbook-cta {
+  margin-bottom: var(--space-6);
+  padding: var(--space-5) var(--space-6);
+  border-radius: var(--radius-xl);
+  border: var(--border-hairline);
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.08), rgba(59, 130, 246, 0.06));
+}
+.home-playbook-cta__tagline {
+  margin: 0 0 var(--space-4);
+  font-size: var(--font-body);
+  color: var(--text-secondary);
+  line-height: 1.55;
+  max-width: 52rem;
+}
+.home-playbook-cta__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.task-badge-collab {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background: rgba(59, 130, 246, 0.22);
+  color: rgba(191, 219, 254, 0.98);
+  vertical-align: middle;
+}
+.subscribe-preflight { margin-bottom: var(--space-4); text-align: left; }
+.subscribe-preflight-list { margin: var(--space-2) 0 0 var(--space-4); padding: 0; font-size: var(--font-caption); color: var(--text-secondary); line-height: 1.5; }
+.subscribe-preflight-links { margin-top: var(--space-2); }
 .home-dashboard { margin-bottom: var(--space-6, 1.5rem); }
 .home-kpi { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-3, 0.75rem); margin-bottom: var(--space-5, 1.25rem); }
 @media (min-width: 640px) { .home-kpi { grid-template-columns: repeat(4, 1fr); } }

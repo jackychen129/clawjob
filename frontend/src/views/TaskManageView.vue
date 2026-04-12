@@ -58,6 +58,7 @@
                   >
                     <div class="task-row__head">
                       <span v-if="item.data!.category" class="task-row__category">{{ taskCategoryLabel(item.data!.category) }}</span>
+                      <span v-if="item.data!.collaborative" class="task-tag task-tag--collab">{{ t('task.collaborativeBadge') }}</span>
                       <span :class="taskStatusPillClass(item.data!.status)">{{ t('status.' + item.data!.status) || item.data!.status }}</span>
                       <span v-if="item.data!.reward_points" class="task-row__reward mono">{{ t('task.reward', { n: item.data!.reward_points }) }}</span>
                     </div>
@@ -128,7 +129,8 @@
                   </div>
                   <h3 class="task-row__title">{{ item.data!.title }}</h3>
                   <p class="task-row__desc">{{ (item.data!.description || t('common.noDescription')).slice(0, 120) }}{{ (item.data!.description || '').length > 120 ? '…' : '' }}</p>
-                  <div v-if="item.data!.location || item.data!.duration_estimate || (getTaskSkills(item.data!).length) || item.data!.related_skill?.skill_token" class="task-row__tags">
+                  <div v-if="item.data!.location || item.data!.duration_estimate || (getTaskSkills(item.data!).length) || item.data!.related_skill?.skill_token || item.data!.collaborative" class="task-row__tags">
+                    <span v-if="item.data!.collaborative" class="task-tag task-tag--collab">{{ t('task.collaborativeBadge') }}</span>
                     <span v-if="item.data!.location" class="task-tag task-tag--location">{{ item.data!.location }}</span>
                     <span v-if="item.data!.duration_estimate" class="task-tag task-tag--duration">{{ item.data!.duration_estimate }}</span>
                     <span v-for="s in getTaskSkills(item.data!)" :key="s" class="task-tag task-tag--skill">{{ s }}</span>
@@ -350,6 +352,10 @@
                 · <span :class="taskStatusPillClass(selectedTaskDetail.status)">{{ t('status.' + selectedTaskDetail.status) || selectedTaskDetail.status }}</span>
                 <span v-if="selectedTaskDetail.reward_points" class="detail-reward mono">{{ t('task.reward', { n: selectedTaskDetail.reward_points }) }}</span>
               </p>
+              <details v-if="selectedTaskDetail.reward_points" class="detail-economy-explainer">
+                <summary>{{ t('task.economyHowItWorks') }}</summary>
+                <p class="hint detail-economy-explainer__body">{{ t('task.economyHowItWorksBody') }}</p>
+              </details>
               <div v-if="selectedTaskDetail.escrow?.enabled" class="detail-escrow">
                 <div class="detail-escrow__head">
                   <h4 class="detail-escrow__title">{{ t('rental.escrow') || '托管协议 (Escrow)' }}</h4>
@@ -358,12 +364,35 @@
                     · {{ t('task.escrowReleased') || '已放款' }}：{{ selectedTaskDetail.escrow.released_points ?? 0 }} 点
                   </p>
                 </div>
+                <p v-if="selectedTaskDetail.escrow.disputed" class="detail-escrow__phase">
+                  <span class="detail-escrow__phase-badge">{{ t('task.escrowDisputePhaseFrozen') }}</span>
+                </p>
                 <p v-if="selectedTaskDetail.escrow.disputed" class="detail-escrow__disputed">
                   {{ t('task.escrowDisputed') || '已进入争议冻结，等待管理员处理' }}
                   <span v-if="selectedTaskDetail.escrow.dispute_reason">（{{ selectedTaskDetail.escrow.dispute_reason }}）</span>
-                  <span v-if="selectedTaskDetail.escrow.dispute_evidence?.summary"> · 证据摘要：{{ selectedTaskDetail.escrow.dispute_evidence?.summary }}</span>
+                  <span v-if="disputeEvidenceSummary(selectedTaskDetail.escrow.dispute_evidence)"> · {{ t('task.escrowDisputeEvidenceSummaryLabel') }}：{{ disputeEvidenceSummary(selectedTaskDetail.escrow.dispute_evidence) }}</span>
+                </p>
+                <p v-if="selectedTaskDetail.escrow.disputed && disputeEvidenceLinkHref(selectedTaskDetail.escrow.dispute_evidence)" class="detail-escrow__evidence-link">
+                  <a
+                    :href="disputeEvidenceLinkHref(selectedTaskDetail.escrow.dispute_evidence)"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="app-link"
+                  >{{ t('task.escrowDisputeEvidenceOpenLink') }}</a>
                 </p>
                 <p v-if="selectedTaskDetail.escrow.disputed" class="detail-escrow__sla hint">{{ t('task.escrowDisputeSla') }}</p>
+                <div
+                  v-if="selectedTaskDetail.escrow.enabled && !selectedTaskDetail.escrow.disputed && (selectedTaskDetail.escrow.admin_resolve_note || '').trim()"
+                  class="detail-escrow__resolved"
+                >
+                  <p class="detail-escrow__phase">
+                    <span class="detail-escrow__phase-badge detail-escrow__phase-badge--ok">{{ t('task.escrowDisputePhaseResolved') }}</span>
+                  </p>
+                  <p class="detail-escrow__admin-note">
+                    <strong>{{ t('task.escrowAdminResolveNoteTitle') }}</strong>
+                    {{ selectedTaskDetail.escrow.admin_resolve_note }}
+                  </p>
+                </div>
                 <div class="detail-escrow__milestones">
                   <div
                     v-for="(m, idx) in selectedTaskDetail.escrow.milestones_preview || []"
@@ -403,15 +432,7 @@
                 <p class="hint">{{ t('task.publisherWebhookHint') }}</p>
                 <p class="mono task-publisher-webhook-mask">{{ maskWebhookUrl(selectedTaskDetail.completion_webhook_url!) }}</p>
               </div>
-              <div v-if="selectedTaskDetail.timeline?.length" class="task-timeline-panel">
-                <h4 class="task-comments-title">{{ t('task.flowTimelineTitle') }}</h4>
-                <ul class="task-timeline-list">
-                  <li v-for="(ev, ei) in selectedTaskDetail.timeline" :key="ei" class="task-timeline-item">
-                    <span class="task-timeline-time mono">{{ formatCommentTime(ev.at) }}</span>
-                    <span class="task-timeline-summary">{{ ev.summary }}</span>
-                  </li>
-                </ul>
-              </div>
+              <TaskTimelinePanel :events="selectedTaskDetail.timeline ?? []" />
               <div v-if="selectedTaskDetail.rejection_history?.length" class="task-rejection-history">
                 <h4 class="task-comments-title">{{ t('task.rejectionHistoryTitle') }}</h4>
                 <details v-for="(rh, ri) in selectedTaskDetail.rejection_history" :key="ri" class="task-rejection-details">
@@ -419,16 +440,29 @@
                   <p class="task-rejection-reason">{{ rh.reason }}</p>
                 </details>
               </div>
-              <div v-if="selectedTaskDetail.output_data?.webhook_delivery" class="task-webhook-delivery">
-                <h4 class="task-comments-title">{{ t('task.webhookDeliveryTitle') }}</h4>
-                <p class="hint">{{ t('task.webhookDeliveryHint') }}</p>
-                <dl class="detail-a2a-sync__dl">
-                  <dt>{{ t('task.webhookDeliveryAttempts') }}</dt>
-                  <dd class="mono">{{ selectedTaskDetail.output_data?.webhook_delivery?.attempts ?? '—' }}</dd>
-                  <dt>{{ t('task.webhookDeliveryHttpStatus') }}</dt>
-                  <dd class="mono">{{ selectedTaskDetail.output_data?.webhook_delivery?.http_status ?? '—' }}</dd>
-                </dl>
-              </div>
+              <details v-if="auth.isLoggedIn" class="task-observability-details">
+                <summary class="task-comments-title">{{ t('task.observabilityTitle') }}</summary>
+                <div v-if="selectedTaskDetail.output_data?.webhook_delivery" class="task-webhook-delivery task-webhook-delivery--nested">
+                  <h4 class="task-observability-sub">{{ t('task.webhookDeliveryTitle') }}</h4>
+                  <p class="hint">{{ t('task.webhookDeliveryHint') }}</p>
+                  <dl class="detail-a2a-sync__dl">
+                    <dt>{{ t('task.webhookDeliveryAttempts') }}</dt>
+                    <dd class="mono">{{ selectedTaskDetail.output_data?.webhook_delivery?.attempts ?? '—' }}</dd>
+                    <dt>{{ t('task.webhookDeliveryHttpStatus') }}</dt>
+                    <dd class="mono">{{ selectedTaskDetail.output_data?.webhook_delivery?.http_status ?? '—' }}</dd>
+                  </dl>
+                </div>
+                <div v-if="selectedTaskDetail.output_data?.last_execute" class="task-last-execute">
+                  <h4 class="task-observability-sub">{{ t('task.lastExecuteTitle') }}</h4>
+                  <dl class="detail-a2a-sync__dl">
+                    <dt>{{ t('task.lastExecuteRetried') }}</dt>
+                    <dd class="mono">{{ selectedTaskDetail.output_data?.last_execute?.retried ?? '—' }}</dd>
+                    <dt>{{ t('task.lastExecuteAt') }}</dt>
+                    <dd class="mono">{{ selectedTaskDetail.output_data?.last_execute?.at ?? '—' }}</dd>
+                  </dl>
+                </div>
+                <p class="hint task-execute-obs-hint">{{ t('task.executeRetryApiHint') }}</p>
+              </details>
               <p v-if="selectedTaskDetail.status === 'pending_verification' && selectedTaskDetail.verification_deadline_at" class="hint task-verify-hint">
                 {{ t('task.verificationWindowHint', { h: selectedTaskDetail.verification_hours ?? 6 }) }}
                 · {{ t('task.verificationDeadlineLabel') }}：{{ formatCommentTime(selectedTaskDetail.verification_deadline_at) }}
@@ -529,6 +563,7 @@
                   :dag="workflowPreviewDag"
                   :ready="workflowPreviewReady"
                   :blocked-by="workflowPreviewBlocked"
+                  :svg-title="t('task.workflowGraphTitle')"
                   :empty-text="t('task.workflowPreviewEmpty')"
                   :ready-label="t('task.workflowPreviewReady')"
                   :blocked-label="t('task.workflowPreviewBlocked')"
@@ -567,9 +602,23 @@
                       <strong>{{ verificationChainData.sandbox?.ok ? t('task.verificationChainPreflightYes') : t('task.verificationChainPreflightNo') }}</strong>
                       · {{ t('task.verificationChainWarnCount', { n: verificationChainData.sandbox?.warnings ?? 0 }) }}
                     </p>
+                    <p
+                      v-if="verificationChainData.sandbox && verificationChainData.sandbox.ok === false"
+                      class="verification-chain-alert"
+                      role="status"
+                    >
+                      {{ t('task.verificationChainBlockers', { n: Number(verificationChainData.sandbox.failed_blockers ?? 0) }) }}
+                    </p>
                     <ul v-if="(verificationChainData.sandbox?.checks || []).length" class="verification-chain-ul verification-chain-ul--compact">
-                      <li v-for="(c, ci) in verificationChainData.sandbox.checks.slice(0, 10)" :key="'chk-' + ci">
-                        <span class="mono">{{ c.name }}</span> · {{ c.status }} — {{ c.message }}
+                      <li
+                        v-for="(c, ci) in verificationChainData.sandbox.checks.slice(0, 16)"
+                        :key="'chk-' + ci"
+                        :class="verificationCheckClass(c)"
+                      >
+                        <span class="mono">{{ c.name }}</span>
+                        · {{ c.status }}
+                        <span v-if="c.severity" class="verification-chain-sev">（{{ c.severity }}）</span>
+                        — {{ c.message }}
                       </li>
                     </ul>
                   </div>
@@ -583,6 +632,15 @@
                     <p v-if="verificationChainData.cross?.verification_deadline_at" class="hint mono">{{ t('task.a2aFieldDeadline') }}：{{ verificationChainData.cross.verification_deadline_at }}</p>
                     <p v-if="verificationChainData.cross?.has_escrow" class="hint">{{ t('task.verificationChainEscrow') }}</p>
                     <p v-if="verificationChainData.cross?.rejection_reason" class="hint">{{ t('task.rejectTitle') }}：{{ verificationChainData.cross.rejection_reason }}</p>
+                    <div
+                      v-if="crossVerificationRecordLines(verificationChainData.cross?.verification_record).length"
+                      class="verification-record-box"
+                    >
+                      <p class="verification-record-box__title">{{ t('task.verificationRecordTitle') }}</p>
+                      <ul class="verification-record-box__ul">
+                        <li v-for="(line, ri) in crossVerificationRecordLines(verificationChainData.cross?.verification_record)" :key="'vr-' + ri" class="mono text-xs">{{ line }}</li>
+                      </ul>
+                    </div>
                   </div>
                 </div>
                 <details v-if="verificationChainJson" class="verification-chain-json">
@@ -778,6 +836,13 @@
             <label class="form-label">{{ t('task.skills') || '技能标签' }}</label>
             <Input v-model="publishForm.skills_text" type="text" :placeholder="t('task.skillsPlaceholder') || '逗号分隔'" />
           </div>
+          <div class="form-group">
+            <label class="form-label flex items-center gap-2">
+              <input v-model="publishForm.collaborative" type="checkbox" class="rounded border-input" />
+              {{ t('task.collaborativePublish') }}
+            </label>
+            <p class="form-hint">{{ t('task.collaborativePublishHint') }}</p>
+          </div>
           <div class="form-group" v-if="auth.isLoggedIn && myPublishedSkills.length">
             <label class="form-label" for="publish-related-skill">关联已上传 Skill（可选）</label>
             <select id="publish-related-skill" v-model="publishForm.related_skill_token" class="input select-input">
@@ -877,6 +942,19 @@
     <div v-if="subscribeTaskItem" class="modal-mask" @click.self="subscribeTaskItem = null">
       <div class="modal">
         <h3>{{ t('task.selectAgentTitle', { title: subscribeTaskItem.title }) }}</h3>
+        <div class="subscribe-preflight">
+          <p class="hint">{{ t('task.subscribePreflightIntro') }}</p>
+          <ul class="subscribe-preflight-list">
+            <li>{{ t('task.preflightItemToken') }}</li>
+            <li>{{ t('task.preflightItemSkill') }}</li>
+            <li>{{ t('task.preflightItemWebhook') }}</li>
+          </ul>
+          <p class="hint subscribe-preflight-links">
+            <RouterLink to="/account">{{ t('common.myAccount') }}</RouterLink>
+            ·
+            <RouterLink to="/skill">{{ t('common.skill') }}</RouterLink>
+          </p>
+        </div>
         <div class="agent-select-list">
           <Button
             v-for="a in myAgents"
@@ -1019,12 +1097,14 @@ import { Textarea } from '../components/ui/textarea'
 import EmptyState from '../components/EmptyState.vue'
 import MarkdownHtml from '../components/MarkdownHtml.vue'
 import WorkflowDagPreview from '../components/WorkflowDagPreview.vue'
+import TaskTimelinePanel from '../components/TaskTimelinePanel.vue'
 import { cn } from '../lib/utils'
 import { safeT } from '../i18n'
 import { useAuthStore } from '../stores/auth'
 import * as api from '../api'
 import type { TaskListItem, TaskCommentItem } from '../api'
 import { canA2aTaskParams } from '../utils/taskA2a'
+import { formatTaskRelativeTime } from '../utils/taskTimeline'
 
 const route = useRoute()
 const router = useRouter()
@@ -1084,6 +1164,7 @@ const publishForm = reactive<{
   escrow_enabled: boolean
   escrow_rows: EscrowRow[]
   verification_hours: number
+  collaborative: boolean
 }>({
   title: '',
   description: '',
@@ -1103,6 +1184,7 @@ const publishForm = reactive<{
   escrow_enabled: false,
   escrow_rows: defaultEscrowRows(),
   verification_hours: 6,
+  collaborative: false,
 })
 const escrowWeightSum = computed(() =>
   publishForm.escrow_rows.reduce((s, r) => s + (Number(r.weight) || 0), 0)
@@ -1542,6 +1624,47 @@ function taskStatusPillClass(status: string): string {
   return 'task-status-pill task-status-pill--open'
 }
 
+type PreflightCheckRow = { name?: string; severity?: string; status?: string; message?: string }
+
+function verificationCheckClass(c: unknown): string {
+  const row = c as PreflightCheckRow
+  const st = String(row.status || '').toLowerCase()
+  const sev = String(row.severity || '').toLowerCase()
+  if (st === 'fail' && sev === 'blocker') return 'verification-chain-li verification-chain-li--blocker'
+  if (st === 'fail' || st === 'warn') return 'verification-chain-li verification-chain-li--warn'
+  return 'verification-chain-li'
+}
+
+function crossVerificationRecordLines(rec: unknown): string[] {
+  if (rec == null || typeof rec !== 'object') return []
+  const o = rec as Record<string, unknown>
+  const lines: string[] = []
+  if (typeof o.mode === 'string') lines.push(`mode: ${o.mode}`)
+  if (typeof o.note === 'string' && o.note) lines.push(`note: ${o.note}`)
+  if (typeof o.verified_at === 'string') lines.push(`verified_at: ${o.verified_at}`)
+  if (lines.length) return lines
+  try {
+    return [JSON.stringify(rec, null, 2)]
+  } catch {
+    return []
+  }
+}
+
+function disputeEvidenceSummary(ev: unknown): string {
+  if (!ev || typeof ev !== 'object') return ''
+  const s = (ev as Record<string, unknown>).summary
+  return typeof s === 'string' ? s : ''
+}
+
+function disputeEvidenceLinkHref(ev: unknown): string {
+  if (!ev || typeof ev !== 'object') return ''
+  const raw = (ev as Record<string, unknown>).link
+  if (typeof raw !== 'string' || !raw.trim()) return ''
+  const u = raw.trim()
+  if (u.startsWith('http://') || u.startsWith('https://')) return u
+  return ''
+}
+
 function escrowConfirmedCount(task: TaskListItem): number {
   const esc = task.escrow
   if (!esc?.enabled) return 0
@@ -1630,6 +1753,7 @@ function openTaskDetail(task: TaskListItem) {
     const detail = res.data as TaskListItem
     loadWorkflowPreview(task.id)
     loadA2aSync(task.id)
+    if (auth.isLoggedIn) loadVerificationChain()
     if (detail.agent_id) {
       api.fetchAgentSkills(Number(detail.agent_id)).then((r) => {
         const requested = getTaskSkills(detail)
@@ -1847,14 +1971,7 @@ function maskWebhookUrl(url: string): string {
 }
 
 function formatCommentTime(iso: string | null) {
-  if (!iso) return ''
-  const d = new Date(iso)
-  const now = new Date()
-  const diff = (now.getTime() - d.getTime()) / 60000
-  if (diff < 1) return t('task.justNow')
-  if (diff < 60) return t('task.minutesAgo', { n: Math.floor(diff) })
-  if (diff < 1440) return t('task.hoursAgo', { n: Math.floor(diff / 60) })
-  return d.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
+  return formatTaskRelativeTime(t, iso)
 }
 
 async function postComment() {
@@ -2094,6 +2211,7 @@ function doPublish() {
     discord_webhook_url: publishForm.discord_webhook_url.trim() || undefined,
     escrow_milestones: escrow_milestones,
     verification_hours: reward > 0 ? Math.min(168, Math.max(1, Number(publishForm.verification_hours) || 6)) : undefined,
+    collaborative: publishForm.collaborative || undefined,
   }).then(() => {
     try { localStorage.removeItem(TASK_DRAFT_KEY) } catch {}
     hasTaskDraft.value = false
@@ -2115,6 +2233,7 @@ function doPublish() {
     publishForm.escrow_enabled = false
     publishForm.escrow_rows = defaultEscrowRows()
     publishForm.verification_hours = 6
+    publishForm.collaborative = false
     showSuccessLocal(t('task.publishSuccess'))
     showCreateModal.value = false
     if (auth.isGuestUser || !myAgents.value.length) emit('register-hint')
@@ -2579,6 +2698,33 @@ watch(tab, (newTab) => {
   color: var(--text-secondary);
 }
 .verification-chain-ul--compact li { margin-bottom: 0.25rem; }
+.verification-chain-li { list-style: disc; }
+.verification-chain-li--blocker { color: rgba(248, 113, 113, 0.95); }
+.verification-chain-li--warn { color: rgba(251, 191, 36, 0.95); }
+.verification-chain-sev { font-size: 0.75em; opacity: 0.9; }
+.verification-chain-alert {
+  margin: var(--space-2) 0 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  background: rgba(248, 113, 113, 0.08);
+  font-size: var(--font-caption);
+  color: rgba(254, 202, 202, 0.95);
+}
+.verification-record-box {
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  border: var(--border-hairline);
+  background: rgba(255, 255, 255, 0.02);
+}
+.verification-record-box__title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-caption);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.verification-record-box__ul { margin: 0; padding-left: 1rem; color: var(--text-secondary); }
 .verification-chain-json {
   margin-top: var(--space-2);
   font-size: var(--font-caption);
@@ -2701,7 +2847,7 @@ watch(tab, (newTab) => {
 .task-comment-content :deep(.claw-md) { color: inherit; }
 .task-comments-empty { margin: 0; color: var(--text-secondary); font-size: var(--font-caption); }
 .task-comment-form { margin-top: var(--space-5); display: flex; flex-direction: column; gap: var(--space-3); }
-.task-payment-panel, .task-timeline-panel, .task-rejection-history {
+.task-payment-panel, .task-rejection-history {
   margin-top: var(--space-4);
   padding: var(--space-3);
   border-radius: var(--radius-md);
@@ -2710,10 +2856,6 @@ watch(tab, (newTab) => {
 }
 .task-payment-list { margin: 0; padding-left: 1.1rem; font-size: var(--font-small); color: var(--text-secondary); }
 .task-payment-tx { margin: 0.5rem 0 0; padding-left: 1rem; list-style: disc; color: var(--text-tertiary); }
-.task-timeline-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 0.5rem; }
-.task-timeline-item { display: flex; flex-direction: column; gap: 0.15rem; font-size: var(--font-small); }
-.task-timeline-time { color: var(--text-tertiary); font-size: 0.75rem; }
-.task-timeline-summary { color: var(--text-secondary); }
 .task-rejection-details { margin-bottom: 0.5rem; }
 .task-rejection-reason { margin: 0.35rem 0 0; white-space: pre-wrap; font-size: var(--font-small); color: var(--text-secondary); }
 .task-verify-hint { margin-top: var(--space-3); }
@@ -2797,6 +2939,19 @@ watch(tab, (newTab) => {
 .task-tag--duration { border-color: rgba(59, 130, 246, 0.35); color: rgba(191, 219, 254, 0.9); }
 .task-tag--skill { border-color: rgba(168, 85, 247, 0.35); color: rgba(233, 213, 255, 0.95); }
 .task-tag--skill-related { border-color: rgba(34, 197, 94, 0.38); color: rgba(187, 247, 208, 0.95); }
+.task-tag--collab { border-color: rgba(59, 130, 246, 0.45); color: rgba(191, 219, 254, 0.98); }
+.detail-economy-explainer {
+  margin: var(--space-3) 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  border: var(--border-hairline);
+  background: rgba(255, 255, 255, 0.02);
+}
+.detail-economy-explainer summary { cursor: pointer; font-weight: 600; font-size: var(--font-caption); color: var(--text-primary); }
+.detail-economy-explainer__body { margin: var(--space-2) 0 0; line-height: 1.55; }
+.subscribe-preflight { margin-bottom: var(--space-4); text-align: left; }
+.subscribe-preflight-list { margin: var(--space-2) 0 0 var(--space-4); padding: 0; font-size: var(--font-caption); color: var(--text-secondary); line-height: 1.5; }
+.subscribe-preflight-links { margin-top: var(--space-2); }
 .task-row__meta {
   font-size: var(--font-caption);
   color: var(--text-tertiary);
@@ -2880,6 +3035,32 @@ watch(tab, (newTab) => {
   background: rgba(255, 255, 255, 0.03);
 }
 .task-webhook-delivery .hint { margin: 0 0 var(--space-3); font-size: var(--font-caption); }
+.task-webhook-delivery--nested {
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.02);
+}
+.task-observability-details {
+  margin-top: var(--space-5);
+  padding: var(--space-4);
+  border: var(--border-hairline);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.03);
+}
+.task-observability-details summary {
+  cursor: pointer;
+  list-style: none;
+}
+.task-observability-details summary::-webkit-details-marker { display: none; }
+.task-observability-sub {
+  margin: var(--space-3) 0 var(--space-2);
+  font-size: var(--font-caption);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.task-last-execute { margin-top: var(--space-3); }
+.task-execute-obs-hint { margin: var(--space-3) 0 0; }
 .task-detail-completion-submission { margin-top: var(--space-5); padding: var(--space-4); background: var(--surface); border-radius: var(--radius-sm); }
 .task-detail-completion-submission .completion-summary { margin: 0 0 0.5rem; white-space: pre-wrap; font-size: 0.9rem; color: var(--text-secondary); }
 .task-detail-completion-submission .completion-link { margin: 0; font-size: 0.9rem; }
@@ -3074,6 +3255,41 @@ watch(tab, (newTab) => {
   font-size: var(--font-caption);
   color: rgba(249, 115, 22, 0.92);
 }
+.detail-escrow__phase { margin: 0 0 var(--space-2); }
+.detail-escrow__phase-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(249, 115, 22, 0.45);
+  color: rgba(254, 215, 170, 0.98);
+  background: rgba(249, 115, 22, 0.12);
+}
+.detail-escrow__phase-badge--ok {
+  border-color: rgba(34, 197, 94, 0.45);
+  color: rgba(187, 247, 208, 0.98);
+  background: rgba(34, 197, 94, 0.12);
+}
+.detail-escrow__evidence-link { margin: 0 0 var(--space-2); font-size: var(--font-caption); }
+.detail-escrow__resolved {
+  margin: 0 0 var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(34, 197, 94, 0.28);
+  background: rgba(34, 197, 94, 0.06);
+}
+.detail-escrow__admin-note {
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-caption);
+  color: rgba(255, 255, 255, 0.85);
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+.detail-escrow__admin-note strong { display: block; margin-bottom: 0.25rem; color: rgba(187, 247, 208, 0.95); font-weight: 650; }
 
 .detail-escrow__milestones { display: flex; flex-direction: column; gap: 0.5rem; }
 .detail-escrow__milestone {

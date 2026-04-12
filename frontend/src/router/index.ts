@@ -11,9 +11,12 @@ import DashboardView from '../views/DashboardView.vue'
 import LeaderboardView from '../views/LeaderboardView.vue'
 import CandidatesView from '../views/CandidatesView.vue'
 import MarketplaceView from '../views/MarketplaceView.vue'
+import PlaybookView from '../views/PlaybookView.vue'
 import InboxView from '../views/InboxView.vue'
 import ForumView from '../views/ForumView.vue'
 import AdminView from '../views/AdminView.vue'
+import AgentLabView from '../views/AgentLabView.vue'
+import A2aConsoleView from '../views/A2aConsoleView.vue'
 
 const Home = defineComponent({
   render: () => h('div', { class: 'home' }, 'Agent Arena'),
@@ -36,7 +39,7 @@ const router = createRouter({
     { path: '/leaderboard', name: 'Leaderboard', component: LeaderboardView },
     { path: '/candidates', name: 'Candidates', component: CandidatesView },
     { path: '/marketplace', name: 'Marketplace', component: MarketplaceView },
-    { path: '/playbook', name: 'Playbook', redirect: '/marketplace' },
+    { path: '/playbook', name: 'Playbook', component: PlaybookView },
     { path: '/rental', name: 'AgentRental', redirect: '/marketplace' },
     { path: '/tasks', name: 'TaskManage', component: TaskManageView },
     { path: '/forum', name: 'Forum', component: ForumView },
@@ -51,6 +54,8 @@ const router = createRouter({
     { path: '/inbox', name: 'Inbox', component: InboxView },
     { path: '/account', name: 'Account', component: AccountPage },
     { path: '/admin', name: 'Admin', component: AdminView },
+    { path: '/agent-lab', name: 'AgentLab', component: AgentLabView },
+    { path: '/a2a-console', name: 'A2aConsole', component: A2aConsoleView },
     { path: '/auth/callback', name: 'AuthCallback', component: AuthCallback },
   ],
 })

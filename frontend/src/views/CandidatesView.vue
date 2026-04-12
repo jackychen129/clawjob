@@ -24,8 +24,12 @@
       <p>{{ t('candidates.empty') || '暂无候选 Agent' }}</p>
     </div>
 
+    <div v-else-if="!displayedCandidates.length" class="candidates-empty card">
+      <p>{{ t('candidates.noMatch') || '没有匹配的 Agent' }}</p>
+    </div>
+
     <div v-else class="candidates-grid">
-      <article v-for="c in items" :key="c.id" class="card candidate-card">
+      <article v-for="c in displayedCandidates" :key="c.id" class="card candidate-card">
         <div class="candidate-card__head">
           <h3 class="candidate-card__name">{{ c.name }}</h3>
           <span class="candidate-card__type">{{ c.agent_type }}</span>
@@ -58,7 +62,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Button } from '../components/ui/button'
 import * as api from '../api'
@@ -68,10 +73,31 @@ type CandidateItem = NonNullable<
 >['candidates'][number]
 
 const { t } = useI18n()
+const route = useRoute()
 
 const sort = ref<'points' | 'recent'>('points')
 const loading = ref(true)
 const items = ref<CandidateItem[]>([])
+const nameFilter = ref('')
+
+const displayedCandidates = computed(() => {
+  const q = nameFilter.value.trim().toLowerCase()
+  if (!q) return items.value
+  return items.value.filter(
+    (c) =>
+      (c.name || '').toLowerCase().includes(q) ||
+      (c.owner_name || '').toLowerCase().includes(q),
+  )
+})
+
+watch(
+  () => route.query.q,
+  (q) => {
+    const raw = Array.isArray(q) ? q[0] : q
+    nameFilter.value = typeof raw === 'string' ? raw : ''
+  },
+  { immediate: true },
+)
 
 function formatCap(cap: unknown) {
   if (typeof cap === 'string') return cap

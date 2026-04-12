@@ -1016,6 +1016,185 @@ def test_admin_force_confirm_escrow_dispute():
     td2 = client.get(f"/tasks/{task_id}").json()
     assert td2["status"] == "in_progress"
     assert td2.get("escrow", {}).get("disputed") is False
+    tl = td2.get("timeline") or []
+    assert any((e.get("type") == "admin_escrow_resolved") for e in tl), tl
+
+
+def test_admin_resume_escrow_dispute_timeline():
+    """管理员 resolve: resume 解除冻结后 timeline 含 admin_escrow_resumed。"""
+    from app.database.relational_db import SessionLocal, User as UserModel
+
+    pub = f"esc_pub_{_unique()}"
+    exe = f"esc_exe_{_unique()}"
+    admin = f"esc_admin_{_unique()}"
+
+    _register_user(pub, f"{pub}@example.com", "pub")
+    _register_user(exe, f"{exe}@example.com", "exe")
+    _register_user(admin, f"{admin}@example.com", "adminpw")
+
+    admin_token = client.post("/auth/login", json={"username": admin, "password": "adminpw"}).json()["access_token"]
+    db = SessionLocal()
+    try:
+        u = db.query(UserModel).filter(UserModel.username == admin).first()
+        assert u is not None
+        u.is_superuser = True
+        db.commit()
+    finally:
+        db.close()
+
+    pub_headers = {"Authorization": f"Bearer {client.post('/auth/login', json={'username': pub, 'password': 'pub'}).json()['access_token']}"}
+    exe_headers = {"Authorization": f"Bearer {client.post('/auth/login', json={'username': exe, 'password': 'exe'}).json()['access_token']}"}
+    admin_headers = {"Authorization": f"Bearer {admin_token}"}
+
+    client.post("/account/recharge", json={"amount": 20}, headers=pub_headers)
+    r = client.post(
+        "/tasks",
+        json={
+            "title": "管理员恢复争议任务",
+            "reward_points": 8,
+            "completion_webhook_url": "https://example.com/cb",
+            "escrow_milestones": [
+                {"title": "阶段一", "weight": 0.5},
+                {"title": "阶段二", "weight": 0.5},
+            ],
+        },
+        headers=pub_headers,
+    )
+    assert r.status_code == 200, r.text
+    task_id = r.json()["id"]
+
+    agent_id = client.post("/agents/register", json={"name": "恢复测试Agent", "description": ""}, headers=exe_headers).json()["id"]
+    assert client.post(f"/tasks/{task_id}/subscribe", json={"agent_id": agent_id}, headers=exe_headers).status_code == 200
+
+    with patch("app.main.httpx") as m:
+        m.Client.return_value.__enter__.return_value.post.return_value.status_code = 200
+        assert client.post(
+            f"/tasks/{task_id}/submit-completion",
+            json={"result_summary": "阶段一交付"},
+            headers=exe_headers,
+        ).status_code == 200
+
+    assert client.post(
+        f"/tasks/{task_id}/escrow/dispute",
+        json={"reason": "需管理员介入", "evidence": {"summary": "证据"}},
+        headers=pub_headers,
+    ).status_code == 200
+
+    rr = client.post(
+        f"/admin/tasks/{task_id}/escrow/dispute/resolve",
+        json={"note": "恢复执行", "resolution_type": "resume"},
+        headers=admin_headers,
+    )
+    assert rr.status_code == 200
+
+    td = client.get(f"/tasks/{task_id}").json()
+    assert td["status"] == "in_progress"
+    tl = td.get("timeline") or []
+    assert any((e.get("type") == "admin_escrow_resumed") for e in tl), tl
+
+
+def test_timeline_auto_confirm_non_escrow():
+    """待验收超时：GET 任务详情触发自动验收，timeline 含 auto_confirmed。"""
+    from datetime import datetime, timedelta
+    from app.database.relational_db import SessionLocal, Task as TaskModel
+
+    pub = f"auto_{_unique()}"
+    exe = f"autoexe_{_unique()}"
+    _register_user(pub, f"{pub}@example.com", "pub")
+    _register_user(exe, f"{exe}@example.com", "exe")
+    pub_headers = {"Authorization": f"Bearer {client.post('/auth/login', json={'username': pub, 'password': 'pub'}).json()['access_token']}"}
+    exe_headers = {"Authorization": f"Bearer {client.post('/auth/login', json={'username': exe, 'password': 'exe'}).json()['access_token']}"}
+    client.post("/account/recharge", json={"amount": 20}, headers=pub_headers)
+    r = client.post(
+        "/tasks",
+        json={
+            "title": "自动验收时间线任务",
+            "reward_points": 4,
+            "completion_webhook_url": "https://example.com/cb",
+        },
+        headers=pub_headers,
+    )
+    assert r.status_code == 200
+    task_id = r.json()["id"]
+    agent_id = client.post("/agents/register", json={"name": "AutoExe", "description": ""}, headers=exe_headers).json()["id"]
+    assert client.post(f"/tasks/{task_id}/subscribe", json={"agent_id": agent_id}, headers=exe_headers).status_code == 200
+
+    with patch("app.main.httpx") as m:
+        m.Client.return_value.__enter__.return_value.post.return_value.status_code = 200
+        assert client.post(
+            f"/tasks/{task_id}/submit-completion",
+            json={"result_summary": "已完成"},
+            headers=exe_headers,
+        ).status_code == 200
+
+    db = SessionLocal()
+    try:
+        t = db.query(TaskModel).filter(TaskModel.id == task_id).first()
+        assert t is not None
+        t.verification_deadline_at = datetime.utcnow() - timedelta(minutes=1)
+        db.commit()
+    finally:
+        db.close()
+
+    td = client.get(f"/tasks/{task_id}").json()
+    assert td["status"] == "completed"
+    tl = td.get("timeline") or []
+    assert any((e.get("type") == "auto_confirmed") for e in tl), tl
+
+
+def test_timeline_auto_milestone_escrow():
+    """托管多里程碑：首阶段待验收超时后 GET 详情触发自动确认，timeline 含 auto_milestone_confirmed，任务进入下一阶段 in_progress。"""
+    from datetime import datetime, timedelta
+    from app.database.relational_db import SessionLocal, Task as TaskModel
+
+    pub = f"auto_esc_{_unique()}"
+    exe = f"auto_escexe_{_unique()}"
+    _register_user(pub, f"{pub}@example.com", "pub")
+    _register_user(exe, f"{exe}@example.com", "exe")
+    pub_headers = {"Authorization": f"Bearer {client.post('/auth/login', json={'username': pub, 'password': 'pub'}).json()['access_token']}"}
+    exe_headers = {"Authorization": f"Bearer {client.post('/auth/login', json={'username': exe, 'password': 'exe'}).json()['access_token']}"}
+    client.post("/account/recharge", json={"amount": 20}, headers=pub_headers)
+    r = client.post(
+        "/tasks",
+        json={
+            "title": "托管自动里程碑时间线",
+            "reward_points": 10,
+            "completion_webhook_url": "https://example.com/cb",
+            "escrow_milestones": [
+                {"title": "阶段一", "weight": 0.5},
+                {"title": "阶段二", "weight": 0.5},
+            ],
+        },
+        headers=pub_headers,
+    )
+    assert r.status_code == 200, r.text
+    task_id = r.json()["id"]
+    agent_id = client.post("/agents/register", json={"name": "EscAutoExe", "description": ""}, headers=exe_headers).json()["id"]
+    assert client.post(f"/tasks/{task_id}/subscribe", json={"agent_id": agent_id}, headers=exe_headers).status_code == 200
+
+    with patch("app.main.httpx") as m:
+        m.Client.return_value.__enter__.return_value.post.return_value.status_code = 200
+        assert client.post(
+            f"/tasks/{task_id}/submit-completion",
+            json={"result_summary": "阶段一交付"},
+            headers=exe_headers,
+        ).status_code == 200
+
+    db = SessionLocal()
+    try:
+        t = db.query(TaskModel).filter(TaskModel.id == task_id).first()
+        assert t is not None
+        t.verification_deadline_at = datetime.utcnow() - timedelta(minutes=1)
+        db.commit()
+    finally:
+        db.close()
+
+    td = client.get(f"/tasks/{task_id}").json()
+    assert td["status"] == "in_progress"
+    tl = td.get("timeline") or []
+    hit = [e for e in tl if e.get("type") == "auto_milestone_confirmed"]
+    assert hit, tl
+    assert "全部里程碑已完成" not in (hit[-1].get("summary") or "")
 
 
 def test_publish_template_and_skill_version_tag():
