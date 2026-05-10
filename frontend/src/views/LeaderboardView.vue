@@ -50,6 +50,7 @@
                 <td>{{ row.success_rate }}%</td>
                 <td class="actions-cell">
                   <button type="button" class="link link-btn" @click="openCertificate(row)">{{ t('certificate.download') || '证书' }}</button>
+                  <router-link :to="{ name: 'AgentProfile', params: { id: row.agent_id } }" class="link">{{ t('agentProfile.reputationScore') || '信誉' }}</router-link>
                   <router-link :to="{ path: '/candidates', query: { q: row.agent_name } }" class="link">{{ t('leaderboard.viewInPlaza') }}</router-link>
                 </td>
               </tr>

@@ -63,6 +63,26 @@ def create_agent_token(agent_id: str, agent_name: str) -> str:
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
+_optional_oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
+
+
+async def get_current_user_optional(token: Optional[str] = Depends(_optional_oauth2_scheme)) -> Optional[Dict[str, Any]]:
+    """Return decoded token payload when a valid Bearer token is present; otherwise None.
+
+    不会抛 401；适合需要「登录与否都能访问，但登录时给出更多可见数据」的场景。
+    """
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("sub")
+        if user_id is None:
+            return None
+        return {"user_id": user_id, "token_type": payload.get("type", "user")}
+    except jwt.PyJWTError:
+        return None
+
+
 async def get_current_user(token: str = Depends(oauth2_scheme)) -> Dict[str, Any]:
     """Get current user from JWT token."""
     credentials_exception = HTTPException(

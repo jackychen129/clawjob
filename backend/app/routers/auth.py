@@ -22,6 +22,8 @@ from sqlalchemy.orm import Session
 
 from app.database.relational_db import User, VerificationCode, Agent, Task, TaskSubscription, SystemLog, CreditTransaction, get_db
 from app.security import get_password_hash, create_access_token, verify_password
+from app.services import referrals as _rf
+from app.services import community as _community
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -42,6 +44,7 @@ class RegisterBody(BaseModel):
     email: str
     password: str
     verification_code: str  # 邮箱验证码，先调用 send-verification-code 获取
+    referral_code: Optional[str] = None  # 可选：邀请码，绑定后好友首单完成时双方获得返点
 
 
 class LoginBody(BaseModel):
@@ -71,17 +74,71 @@ class RegisterViaSkillSecondTaskBody(BaseModel):
 class RegisterViaSkillBody(BaseModel):
     """Agent 通过 Skill 注册：Agent 信息 + OpenClaw 生成的第二条任务内容"""
 
+    model_config = ConfigDict(extra="ignore")
+
     agent_name: str
     description: str = ""
     agent_type: str = "general"
     second_task: RegisterViaSkillSecondTaskBody
+    # 部署探活 / 集成测试专用：携带正确的 `internal_probe_token` 时，
+    # 第二条任务会写入 hidden_from_public=True，不进入公开大厅。
+    # 服务端通过环境变量 CLAWJOB_INTERNAL_PROBE_TOKEN 启用；未配置时此字段被忽略。
+    internal_probe_token: Optional[str] = None
 
 
 CLAWJOB_SYSTEM_USERNAME = "clawjob_system"
 CLAWJOB_SYSTEM_AGENT_NAME = "clawjob-agent"
 SKILL_REGISTER_BONUS_CREDITS = 500
-# NOTE: translated comment in English.
-SKILL_SECOND_TASK_MIN_DESCRIPTION_LEN = 40
+# 第二条任务 description 的最短长度（按 SKILL.md 模板计算过后的合理下限）。
+SKILL_SECOND_TASK_MIN_DESCRIPTION_LEN = 120
+
+# SKILL.md 要求的正文小节；缺任一则视为非真实 Skill 任务。
+_SKILL_REQUIRED_SECTIONS: tuple = (
+    "Context:",
+    "Deliverables:",
+    "Acceptance criteria:",
+    "Constraints:",
+    "Time estimate:",
+)
+
+# 常见占位 / 模板 / 测试 / 自动化标记，出现在 title 或 description 中一律拒绝。
+_SKILL_PLACEHOLDER_TOKENS: tuple = (
+    "你的领域", "你的具体目标", "xxx",
+    "【verify】", "[verify]", "【test】", "[test]", "【smoke】", "[smoke]",
+    "【demo】", "[demo]",
+    "deploy smoke", "deploy verify", "smoke test",
+    "自动验证", "验证部署", "部署验证", "demo 任务",
+)
+
+
+def _second_task_looks_real(title: str, description: str) -> Optional[str]:
+    """校验第二条任务是否为 OpenClaw 按 SKILL.md 模板真实生成。
+
+    返回 None 表示通过，返回字符串表示拒绝理由。"""
+    title_norm = (title or "").strip()
+    desc_norm = (description or "").strip()
+    if len(title_norm) < 6:
+        return "second_task.title 过短，请写出具体目标"
+    if len(desc_norm) < SKILL_SECOND_TASK_MIN_DESCRIPTION_LEN:
+        return (
+            f"second_task.description 过短（至少 {SKILL_SECOND_TASK_MIN_DESCRIPTION_LEN} 字符），"
+            "须按 SKILL.md 模板包含 Context / Deliverables / Acceptance criteria / Constraints / Time estimate 小节"
+        )
+    lowered_title = title_norm.lower()
+    lowered_desc = desc_norm.lower()
+    for bad in _SKILL_PLACEHOLDER_TOKENS:
+        if bad.lower() in lowered_title or bad.lower() in lowered_desc:
+            return (
+                f"second_task 内容疑似模板/测试占位（命中关键词「{bad}」），"
+                "请按对话真实场景生成内容，不要照抄模板或含 verify/test 等字样"
+            )
+    missing = [s for s in _SKILL_REQUIRED_SECTIONS if s.lower() not in lowered_desc]
+    if missing:
+        return (
+            "second_task.description 缺少 SKILL.md 模板要求的小节："
+            f"{'、'.join(missing)}"
+        )
+    return None
 
 
 def _get_or_create_clawjob_system_agent(db: Session):
@@ -227,6 +284,12 @@ def register(body: RegisterBody, db: Session = Depends(get_db)):
             ref_id=None,
             remark=f"完成用户注册赠送 {signup_bonus} 点",
         ))
+    referral_bound = False
+    try:
+        rel = _rf.bind_referral(db, invitee=user, raw_code=body.referral_code)
+        referral_bound = rel is not None
+    except Exception:
+        referral_bound = False
     db.commit()
     db.refresh(user)
     try:
@@ -246,7 +309,13 @@ def register(body: RegisterBody, db: Session = Depends(get_db)):
         data={"sub": str(user.id), "type": "user"},
         expires_delta=timedelta(days=7),
     )
-    return {"access_token": token, "token_type": "bearer", "user_id": user.id, "username": user.username}
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user_id": user.id,
+        "username": user.username,
+        "referral_bound": referral_bound,
+    }
 
 
 @router.post("/login")
@@ -288,11 +357,22 @@ def register_via_skill(body: RegisterViaSkillBody, db: Session = Depends(get_db)
     st_desc = (st.description or "").strip()
     if not st_title:
         raise HTTPException(status_code=400, detail="second_task.title 不能为空")
-    if len(st_desc) < SKILL_SECOND_TASK_MIN_DESCRIPTION_LEN:
-        raise HTTPException(
-            status_code=400,
-            detail=f"second_task.description 过短（至少 {SKILL_SECOND_TASK_MIN_DESCRIPTION_LEN} 字符），须按 SKILL 模板包含 Context、Deliverables、Acceptance criteria 等小节",
-        )
+
+    probe_expected = (os.getenv("CLAWJOB_INTERNAL_PROBE_TOKEN") or "").strip()
+    is_internal_probe = bool(
+        probe_expected
+        and (body.internal_probe_token or "").strip() == probe_expected
+    )
+    if not is_internal_probe:
+        reject = _second_task_looks_real(st_title, st_desc)
+        if reject:
+            raise HTTPException(status_code=400, detail=reject)
+    else:
+        # 内部探活任务只做最低长度检查，避免业务侧因部署而写模板正文。
+        if len(st_desc) < 40:
+            raise HTTPException(
+                status_code=400, detail="internal probe description 过短（<40）"
+            )
     reward_points = max(0, int(st.reward_points or 0))
     webhook = (st.completion_webhook_url or "").strip()
     if reward_points > 0:
@@ -302,7 +382,12 @@ def register_via_skill(body: RegisterViaSkillBody, db: Session = Depends(get_db)
                 detail="second_task 有奖励点时必须填写有效的 completion_webhook_url（http/https）",
             )
     skill_tags = [str(s).strip()[:50] for s in (st.skills or []) if str(s).strip()][:20]
-    st_input = {"source": "register_via_skill_second", "skills": skill_tags} if skill_tags else {"source": "register_via_skill_second"}
+    st_input: dict = {"source": "register_via_skill_second"}
+    if skill_tags:
+        st_input["skills"] = skill_tags
+    if is_internal_probe:
+        st_input["hidden_from_public"] = True
+        st_input["internal_probe"] = True
     st_category = (st.category or "").strip()[:64] or None
     st_requirements = (st.requirements or "").strip() or None
     st_type = (st.task_type or "general").strip()[:64] or "general"
@@ -358,7 +443,11 @@ def register_via_skill(body: RegisterViaSkillBody, db: Session = Depends(get_db)
             agent_id=system_agent.id,
             reward_points=0,
             category="other",
-            input_data={"skills": ["clawjob", "openclaw"], "source": "register_via_skill"},
+            input_data={
+                "skills": ["clawjob", "openclaw"],
+                "source": "register_via_skill",
+                "hidden_from_public": True,
+            },
             output_data={
                 "result_summary": "首个握手任务由 ClawJob 引导 Agent 自动完成，Skill 已可用。",
                 "auto_completed_by": CLAWJOB_SYSTEM_AGENT_NAME,
@@ -396,6 +485,8 @@ def register_via_skill(body: RegisterViaSkillBody, db: Session = Depends(get_db)
         )
         db.add(second_task)
         db.flush()
+        # Agent 注册后按 skill 标签生成社区话题（V1）。
+        _community.ensure_auto_topics_for_agent(db, agent, skill_tags, force=False)
 
         if reward_points > 0:
             user.credits = max(0, (getattr(user, "credits", 0) or 0) - reward_points)

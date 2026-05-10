@@ -2,7 +2,7 @@
 ClawJob - Backend API
 任务发布与接取平台：用户注册 Agent，发布任务，订阅他人任务。
 """
-from fastapi import FastAPI, Depends, HTTPException, Request, Header
+from fastapi import FastAPI, Depends, HTTPException, Request, Header, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordBearer
@@ -13,7 +13,7 @@ from sqlalchemy import func, text, desc
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
-from typing import Optional, List, Any
+from typing import Optional, List, Any, Dict, Tuple
 import copy
 import os
 import time
@@ -45,6 +45,11 @@ from app.database.relational_db import (
     PlatformCommissionRecord,
     UserCommissionRecord,
     InternalMessage,
+    TaskBid,
+    Referral,
+    SafetyEvent,
+    ExecutionRun,
+    ExecutionStep,
 )
 from app.database.cache_db import CacheDB
 from app.utils.datetime_iso import iso_utc
@@ -54,6 +59,11 @@ from app.services.escrow_tasks import (
     save_escrow_to_task,
     apply_escrow_milestone_confirm,
 )
+from app.services import reverse_auction as _ra
+from app.services import safety_pipeline as _safety
+from app.services import execution_sandbox as _sandbox
+from app.services import step_replay as _replay
+from app.services import insights as _insights
 from app.services.preflight import run_preflight, enforce_preflight
 from app.services.skill_contract import validate_contract, validate_payload
 from app.services.workflow_dag import validate_workflow_dag, predecessors
@@ -67,9 +77,20 @@ from app.agents.memory_system import MemorySystem
 from app.agents.tool_system import ToolSystem
 
 # Security & routers
-from app.security import get_current_user, limiter
+from app.security import get_current_user, get_current_user_optional, limiter
 from app.routers import auth
 from app.routers import account
+from app.routers import kyc as kyc_router
+from app.routers import workspaces as workspaces_router
+from app.routers import billing as billing_router
+from app.routers import community as community_router
+
+
+def _safe_int_env(key: str, default: int) -> int:
+    try:
+        return int(os.getenv(key, str(default)).strip())
+    except (TypeError, ValueError):
+        return default
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -136,7 +157,21 @@ async def _lifespan(app: FastAPI):
         cors = os.getenv("CORS_ORIGINS", "").strip()
         if not cors or cors == "*":
             raise RuntimeError("生产环境必须设置 CORS_ORIGINS 为具体前端域名，禁止使用 *。")
+    community_stop = None
+    community_task = None
+    if os.getenv("CLAWJOB_COMMUNITY_BACKGROUND_JOBS", "1").strip() != "0":
+        from app.services.community_jobs import run_community_background_loop
+
+        community_stop = asyncio.Event()
+        community_task = asyncio.create_task(run_community_background_loop(community_stop))
     yield
+    if community_stop is not None and community_task is not None:
+        community_stop.set()
+        community_task.cancel()
+        try:
+            await community_task
+        except asyncio.CancelledError:
+            pass
     # NOTE: translated comment in English.
 
 
@@ -169,6 +204,11 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 app.include_router(auth.router)
 app.include_router(account.router)
+app.include_router(kyc_router.router)
+app.include_router(kyc_router.withdraw_router)
+app.include_router(workspaces_router.router)
+app.include_router(billing_router.router)
+app.include_router(community_router.router)
 # NOTE: translated comment in English.
 from app.routers import admin as admin_router_module
 from app.database.relational_db import get_db as _get_db
@@ -212,7 +252,13 @@ async def health_check():
             "task_system": "active", 
             "memory_system": "active",
             "tool_system": "active"
-        }
+        },
+        "features": {
+            "community_enabled": os.getenv("CLAWJOB_COMMUNITY_ENABLED", "1").strip() != "0",
+            "community_hot_dispatch_enabled": os.getenv("CLAWJOB_COMMUNITY_HOT_DISPATCH_ENABLED", "1").strip() != "0",
+            "community_background_jobs": os.getenv("CLAWJOB_COMMUNITY_BACKGROUND_JOBS", "1").strip() != "0",
+            "community_dispatch_interval_sec": max(60, _safe_int_env("CLAWJOB_COMMUNITY_DISPATCH_INTERVAL_SEC", 900)),
+        },
     }
 
 
@@ -242,20 +288,39 @@ def get_public_stats(db: Session = Depends(get_db)):
     }
 
 
+def _activity_agent_is_internal(agent: Agent, owner: Optional[User]) -> bool:
+    """判断 Agent 是否是内部探活/部署验证生成的，不应进入公开 Live feed。"""
+    name = (getattr(agent, "name", "") or "").strip()
+    lower = name.lower()
+    if lower.startswith("deployprobe") or lower.startswith("verify_") or "registration handshake" in lower:
+        return True
+    owner_name = (owner.username if owner else "") or ""
+    if owner_name == _CLAWJOB_SYSTEM_USERNAME:
+        return True
+    return False
+
+
 @app.get("/activity")
 def get_activity(limit: int = 50, db: Session = Depends(get_db)):
-    """实时动态流：最近任务发布、任务完成、Agent 注册。用于 Dashboard Live Feed。"""
+    """实时动态流：最近任务发布、任务完成、Agent 注册。用于 Dashboard Live Feed。
+
+    过滤掉 hidden_from_public/register_via_skill 握手任务、clawjob_system 拥有的任务，
+    以及内部部署探活 Agent（DeployProbe_* 等）——保证首页看到的都是真实业务动态。
+    """
     events = []
-    # NOTE: translated comment in English.
+    # NOTE: pull 3x limit per stream so that after filtering we still have enough results.
+    fetch_n = max(limit * 3, limit + 20)
     completed = (
         db.query(Task, Agent, User)
         .outerjoin(Agent, Task.agent_id == Agent.id)
         .join(User, Task.owner_id == User.id)
         .filter(Task.status == "completed")
         .order_by(Task.completed_at.desc().nullslast(), Task.updated_at.desc())
-        .limit(limit)
+        .limit(fetch_n)
     ).all()
     for t, a, owner in completed:
+        if not _task_is_public_listing(t, owner):
+            continue
         at = (t.completed_at or t.updated_at or t.created_at) or datetime.utcnow()
         events.append({
             "type": "task_completed",
@@ -266,15 +331,16 @@ def get_activity(limit: int = 50, db: Session = Depends(get_db)):
             "agent_name": a.name if a else None,
             "publisher_name": owner.username if owner else None,
         })
-    # NOTE: translated comment in English.
     created = (
         db.query(Task, User)
         .join(User, Task.owner_id == User.id)
         .filter(Task.status == "open")
         .order_by(Task.created_at.desc())
-        .limit(limit)
+        .limit(fetch_n)
     ).all()
     for t, owner in created:
+        if not _task_is_public_listing(t, owner):
+            continue
         events.append({
             "type": "task_created",
             "at": iso_utc(t.created_at or datetime.utcnow()),
@@ -282,9 +348,15 @@ def get_activity(limit: int = 50, db: Session = Depends(get_db)):
             "task_title": (t.title or "")[:80],
             "publisher_name": owner.username if owner else None,
         })
-    # NOTE: translated comment in English.
-    agents = db.query(Agent, User).join(User, Agent.owner_id == User.id).order_by(Agent.created_at.desc()).limit(limit).all()
+    agents = (
+        db.query(Agent, User)
+        .join(User, Agent.owner_id == User.id)
+        .order_by(Agent.created_at.desc())
+        .limit(fetch_n)
+    ).all()
     for a, owner in agents:
+        if _activity_agent_is_internal(a, owner):
+            continue
         events.append({
             "type": "agent_registered",
             "at": iso_utc(a.created_at or datetime.utcnow()),
@@ -423,20 +495,78 @@ def _agent_skill_xp_map(db: Session, agent_id: int) -> dict:
     return xp_map
 
 
+def _skill_decay_meta(tasks: List[Task]) -> dict:
+    """
+    惰性技能折旧（P2 最小版）：
+    - 最近 SKILL_DECAY_IDLE_DAYS 天内活跃：不折旧
+    - 超过后：每周衰减 SKILL_DECAY_WEEKLY_RATIO，上限 SKILL_DECAY_MAX_RATIO
+    """
+    last_at: Optional[datetime] = None
+    for t in tasks:
+        ca = getattr(t, "completed_at", None)
+        if ca and (last_at is None or ca > last_at):
+            last_at = ca
+    if not last_at:
+        return {"ratio": 0.0, "last_active_at": None}
+    idle_days = max(0, int((datetime.utcnow() - last_at).total_seconds() // 86400))
+    if idle_days <= SKILL_DECAY_IDLE_DAYS:
+        return {"ratio": 0.0, "last_active_at": last_at}
+    weeks = max(1, (idle_days - SKILL_DECAY_IDLE_DAYS) // 7)
+    ratio = min(SKILL_DECAY_MAX_RATIO, weeks * SKILL_DECAY_WEEKLY_RATIO)
+    return {"ratio": float(round(ratio, 4)), "last_active_at": last_at}
+
+
+def _apply_skill_decay(xp_map: dict, ratio: float) -> dict:
+    if ratio <= 0:
+        return {k: int(v or 0) for k, v in xp_map.items()}
+    out: dict = {}
+    for k, v in xp_map.items():
+        base = max(0, int(v or 0))
+        out[k] = int(round(base * (1.0 - ratio)))
+    return out
+
+
 @app.get("/agents/{agent_id}/skills")
-def get_agent_skills(agent_id: int, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
-    uid = int(current_user["user_id"])
+def get_agent_skills(
+    agent_id: int,
+    db: Session = Depends(get_db),
+    current_user: Optional[dict] = Depends(get_current_user_optional),
+):
+    """技能维度 XP：公开可读（便于 Agent 主页展示）；折旧策略详情仅拥有者可见。"""
     agent = db.query(Agent).filter(Agent.id == agent_id).first()
     if not agent:
         raise HTTPException(status_code=404, detail="Agent 不存在")
-    if agent.owner_id != uid:
-        raise HTTPException(status_code=403, detail="仅 Agent 拥有者可查看技能进度")
+    uid = None
+    if current_user and current_user.get("user_id") is not None:
+        try:
+            uid = int(current_user["user_id"])
+        except (TypeError, ValueError):
+            uid = None
+    is_owner = uid is not None and int(agent.owner_id) == uid
+    tasks = db.query(Task).filter(Task.agent_id == agent_id, Task.status == "completed").all()
     xp_map = _agent_skill_xp_map(db, agent_id)
+    dec = _skill_decay_meta(tasks)
+    xp_map = _apply_skill_decay(xp_map, float(dec.get("ratio") or 0.0))
     items = []
     for name, xp in sorted(xp_map.items(), key=lambda kv: (-kv[1], kv[0])):
         lv = _level_from_xp(int(xp))
         items.append({"name": name, "xp": int(xp), **lv})
-    return {"agent_id": agent_id, "items": items}
+    decay_out: Dict[str, Any] = {
+        "ratio": float(dec.get("ratio") or 0.0),
+        "last_active_at": iso_utc(dec.get("last_active_at")),
+    }
+    if is_owner:
+        decay_out["policy"] = {
+            "idle_days": SKILL_DECAY_IDLE_DAYS,
+            "weekly_ratio": SKILL_DECAY_WEEKLY_RATIO,
+            "max_ratio": SKILL_DECAY_MAX_RATIO,
+        }
+    return {
+        "agent_id": agent_id,
+        "items": items,
+        "decay": decay_out,
+        "viewer_is_owner": is_owner,
+    }
 
 
 @app.get("/account/skill-tree")
@@ -444,15 +574,38 @@ def get_my_skill_tree(db: Session = Depends(get_db), current_user: dict = Depend
     uid = int(current_user["user_id"])
     my_agents = db.query(Agent).filter(Agent.owner_id == uid).all()
     total: dict = {}
+    max_decay = 0.0
+    latest_active: Optional[datetime] = None
     for a in my_agents:
+        tasks = db.query(Task).filter(Task.agent_id == a.id, Task.status == "completed").all()
         xp_map = _agent_skill_xp_map(db, a.id)
+        dec = _skill_decay_meta(tasks)
+        ratio = float(dec.get("ratio") or 0.0)
+        xp_map = _apply_skill_decay(xp_map, ratio)
+        if ratio > max_decay:
+            max_decay = ratio
+        la = dec.get("last_active_at")
+        if la and (latest_active is None or la > latest_active):
+            latest_active = la
         for k, v in xp_map.items():
             total[k] = int(total.get(k, 0) or 0) + int(v or 0)
     nodes = []
     for name, xp in sorted(total.items(), key=lambda kv: (-kv[1], kv[0])):
         lv = _level_from_xp(int(xp))
         nodes.append({"name": name, "xp": int(xp), **lv})
-    return {"nodes": nodes[:24], "total_skills": len(nodes)}
+    return {
+        "nodes": nodes[:24],
+        "total_skills": len(nodes),
+        "decay": {
+            "max_ratio": float(round(max_decay, 4)),
+            "last_active_at": iso_utc(latest_active),
+            "policy": {
+                "idle_days": SKILL_DECAY_IDLE_DAYS,
+                "weekly_ratio": SKILL_DECAY_WEEKLY_RATIO,
+                "max_ratio": SKILL_DECAY_MAX_RATIO,
+            },
+        },
+    }
 
 
 @app.get("/stats/roi-series")
@@ -651,6 +804,13 @@ class PublishSkillBody(BaseModel):
     idempotency_hint: Optional[str] = None
 
 
+class GithubSkillSyncBody(BaseModel):
+    top_n: int = 20
+    min_stars: int = 30
+    query: Optional[str] = None
+    force_update: bool = False
+
+
 class SkillContractValidateBody(BaseModel):
     contract_schema: dict
     failure_semantics: Optional[dict] = None
@@ -676,6 +836,52 @@ def _publisher_for_skill_token(db: Session, skill_token: str) -> tuple:
             u = db.query(User).filter(User.id == a.owner_id).first()
             return (u.username if u else "", a.owner_id)
     return ("", None)
+
+
+async def _fetch_github_hot_skill_repos(top_n: int, min_stars: int, query: Optional[str]) -> List[dict]:
+    q = (query or "").strip() or "skill (openclaw OR mcp OR agent OR cursor) in:name,description,topics"
+    q = f"{q} stars:>={max(0, int(min_stars))}"
+    url = "https://api.github.com/search/repositories"
+    params = {
+        "q": q,
+        "sort": "stars",
+        "order": "desc",
+        "per_page": max(1, min(int(top_n), 50)),
+        "page": 1,
+    }
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    async with httpx.AsyncClient(timeout=20) as client:
+        resp = await client.get(url, params=params, headers=headers)
+        if resp.status_code >= 400:
+            raise HTTPException(status_code=502, detail=f"github api error: {resp.status_code}")
+        data = resp.json()
+    repos = data.get("items") or []
+    out: List[dict] = []
+    for r in repos:
+        full_name = str(r.get("full_name") or "").strip()
+        html_url = str(r.get("html_url") or "").strip()
+        if not full_name or not html_url:
+            continue
+        owner = str((r.get("owner") or {}).get("login") or "").strip()
+        repo = str(r.get("name") or "").strip()
+        archive_url = f"https://github.com/{full_name}/archive/refs/heads/{str(r.get('default_branch') or 'main')}.zip"
+        stars = int(r.get("stargazers_count") or 0)
+        desc = (str(r.get("description") or "").strip() or "GitHub 热门 Skill 仓库")
+        topics = [str(x).strip() for x in (r.get("topics") or []) if str(x).strip()]
+        out.append({
+            "full_name": full_name,
+            "name": repo or full_name.split("/")[-1],
+            "owner": owner,
+            "html_url": html_url,
+            "archive_url": archive_url,
+            "stars": stars,
+            "description": desc,
+            "topics": topics[:10],
+        })
+    return out
 
 
 @app.get("/skills")
@@ -893,6 +1099,60 @@ def publish_skill(
         "preflight": preflight,
         "contract_profile": contract_profile,
     }
+
+
+@app.post("/skills/sync/github-hot")
+async def sync_skills_from_github_hot(
+    body: GithubSkillSyncBody,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """同步 GitHub 热门 Skill 仓库到平台 Skill 市场（含链接与描述）。"""
+    _ = current_user
+    repos = await _fetch_github_hot_skill_repos(body.top_n, body.min_stars, body.query)
+    created = 0
+    updated = 0
+    items: List[dict] = []
+    for r in repos:
+        skill_token = f"gh::{r['full_name']}".lower()[:256]
+        name = f"{r['name']} (GitHub)"
+        topics_txt = ", ".join(r.get("topics") or [])
+        desc = (
+            f"{r['description']}\n\n"
+            f"GitHub: {r['html_url']}\n"
+            f"Stars: {r['stars']}\n"
+            f"Topics: {topics_txt if topics_txt else '-'}"
+        )[:2000]
+        row = db.query(PublishedSkill).filter(PublishedSkill.skill_token == skill_token).first()
+        if row:
+            if body.force_update:
+                row.name = name[:256]
+                row.description = desc
+                row.download_skill_url = r["archive_url"][:2000]
+                row.verified = bool(r["stars"] >= max(100, body.min_stars))
+                row.version_tag = "github-hot"
+                updated += 1
+        else:
+            row = PublishedSkill(
+                skill_token=skill_token,
+                name=name[:256],
+                description=desc,
+                verified=bool(r["stars"] >= max(100, body.min_stars)),
+                version_tag="github-hot",
+                download_skill_url=r["archive_url"][:2000],
+            )
+            db.add(row)
+            created += 1
+        items.append({
+            "skill_token": skill_token,
+            "name": name,
+            "github_url": r["html_url"],
+            "download_skill_url": r["archive_url"],
+            "description": r["description"],
+            "stars": r["stars"],
+        })
+    db.commit()
+    return {"ok": True, "created": created, "updated": updated, "total": len(items), "items": items}
 
 
 @app.delete("/skills/{skill_id}")
@@ -1334,7 +1594,60 @@ VERIFICATION_HOURS_MIN = 1
 VERIFICATION_HOURS_MAX = 168  # 最长 7 天
 VERIFICATION_HOURS = 6  # 兼容旧代码与测试引用
 VERIFICATION_EXTEND_HOURS = 24  # 发布方一键延长的小时数（每轮待验收限 1 次）
-PLATFORM_COMMISSION_RATE = 0.01  # 任务成功发放奖励时，若发布方已配置佣金则按此比例计入发布者（可选功能）
+PLATFORM_COMMISSION_RATE = 0.01  # 默认佣金比例，可被环境变量覆盖（见下方 _env_float 调用）
+MAX_TASK_REWARD_POINTS = 10_000_000  # 单任务奖励点数上限（防止拼写/恶意巨额发布）
+
+
+def _env_int(name: str, default: int, *, min_value: Optional[int] = None, max_value: Optional[int] = None) -> int:
+    raw = os.getenv(name)
+    try:
+        v = int(raw) if raw not in (None, "") else int(default)
+    except (TypeError, ValueError):
+        v = int(default)
+    if min_value is not None:
+        v = max(min_value, v)
+    if max_value is not None:
+        v = min(max_value, v)
+    return v
+
+
+def _env_float(name: str, default: float, *, min_value: Optional[float] = None, max_value: Optional[float] = None) -> float:
+    raw = os.getenv(name)
+    try:
+        v = float(raw) if raw not in (None, "") else float(default)
+    except (TypeError, ValueError):
+        v = float(default)
+    if min_value is not None:
+        v = max(min_value, v)
+    if max_value is not None:
+        v = min(max_value, v)
+    return v
+
+
+SKILL_DECAY_IDLE_DAYS = _env_int("SKILL_DECAY_IDLE_DAYS", 14, min_value=1)
+SKILL_DECAY_WEEKLY_RATIO = _env_float("SKILL_DECAY_WEEKLY_RATIO", 0.02, min_value=0.0, max_value=1.0)
+SKILL_DECAY_MAX_RATIO = _env_float("SKILL_DECAY_MAX_RATIO", 0.2, min_value=0.0, max_value=1.0)
+
+PLATFORM_COMMISSION_RATE = _env_float(
+    "PLATFORM_COMMISSION_RATE",
+    PLATFORM_COMMISSION_RATE,
+    min_value=0.0,
+    max_value=0.5,
+)
+
+
+def _compute_publish_fee(reward_points: int) -> dict:
+    """根据奖励点计算发布费用拆分（统一口径，供发布/估算/校验复用）。"""
+    rp = max(0, int(reward_points or 0))
+    commission = int(rp * PLATFORM_COMMISSION_RATE) if rp else 0
+    executor_net = max(0, rp - commission)
+    return {
+        "reward_points": rp,
+        "commission_rate": PLATFORM_COMMISSION_RATE,
+        "commission_points": commission,
+        "executor_net_points": executor_net,
+        "max_reward_points": MAX_TASK_REWARD_POINTS,
+    }
 
 
 def _task_verification_hours(task: Task) -> int:
@@ -1381,6 +1694,14 @@ class EscrowMilestoneIn(BaseModel):
     acceptance_criteria: str = ""
 
 
+class AuctionConfigIn(BaseModel):
+    """反向竞标配置：开启后 reward_points 作为 max_reward 上限从账户扣除。"""
+    enabled: bool = False
+    min_reward: int = 0  # 底价，可为 0 表示不设
+    deadline: Optional[str] = None  # ISO8601；到期不再接受新报价
+    auto_pick: str = "manual"  # manual | lowest_price
+
+
 class PublishTaskBody(BaseModel):
     title: str
     description: str = ""
@@ -1392,6 +1713,7 @@ class PublishTaskBody(BaseModel):
     creator_agent_id: Optional[int] = None  # 可选：由某 Agent 代发（须为当前用户的 Agent）
     # NOTE: translated comment in English.
     escrow_milestones: List[EscrowMilestoneIn] = []
+    auction: Optional[AuctionConfigIn] = None  # 反向竞标配置
     # NOTE: translated comment in English.
     category: str = ""  # 任务分类：development, design, research, writing, data, other
     requirements: str = ""  # 详细要求说明
@@ -1582,6 +1904,7 @@ def _pay_task_reward(task: Task, db: Session) -> bool:
     if task.status == "completed":
         return False
     reward_points = getattr(task, "reward_points", 0) or 0
+    invitee_user_id_for_referral: Optional[int] = None
     if reward_points > 0 and task.agent_id:
         agent = db.query(Agent).filter(Agent.id == task.agent_id).first()
         if agent:
@@ -1601,6 +1924,7 @@ def _pay_task_reward(task: Task, db: Session) -> bool:
                     remark=remark,
                 )
                 db.add(tx)
+                invitee_user_id_for_referral = int(agent.owner_id)
                 # NOTE: translated comment in English.
                 if commission > 0 and task.owner_id:
                     publisher = db.query(User).filter(User.id == task.owner_id).first()
@@ -1615,7 +1939,79 @@ def _pay_task_reward(task: Task, db: Session) -> bool:
                         db.add(ucr)
     task.status = "completed"
     task.completed_at = datetime.utcnow()
+    if invitee_user_id_for_referral is not None:
+        try:
+            from app.services import referrals as _rf
+            _rf.grant_first_task_reward(
+                db,
+                invitee_user_id=invitee_user_id_for_referral,
+                trigger_task_id=task.id,
+            )
+        except Exception:
+            pass
+    try:
+        _maybe_settle_skill_revenue(task, db)
+    except Exception:
+        db.rollback()
+    try:
+        from app.services import community_task_hooks as _ct_hooks
+
+        _ct_hooks.on_task_completed_community_hooks(db, task)
+    except Exception:
+        pass
     return True
+
+
+def _maybe_settle_skill_revenue(task: Task, db: Session) -> None:
+    """任务关联的 Skill 若为付费类型，结算 invoke 分成（D-19）。
+    幂等：同一 task 只结算一次；余额不足或作者缺失等异常静默处理。
+    """
+    extra = task.input_data if isinstance(task.input_data, dict) else {}
+    tok = (extra.get("related_skill_token") or "").strip()
+    if not tok:
+        return
+    from app.services import skill_revenue as _skill_rev
+    skill = (
+        db.query(PublishedSkill)
+        .filter(PublishedSkill.skill_token == tok)
+        .first()
+    )
+    if skill is None or (skill.pricing_model or "free") == "free":
+        return
+    if int(skill.price_per_unit or 0) <= 0 or skill.author_user_id is None:
+        return
+    publisher = db.query(User).filter(User.id == task.owner_id).first()
+    if publisher is None:
+        return
+    # 不向自己收费
+    if skill.author_user_id == publisher.id:
+        return
+    try:
+        _skill_rev.charge(
+            db,
+            skill=skill,
+            consumer=publisher,
+            event_kind="invoke",
+            related_task_id=task.id,
+        )
+    except ValueError:
+        # 余额不足或重复结算时，记录日志即可
+        try:
+            db.add(
+                SystemLog(
+                    level="warning",
+                    category="task",
+                    message="skill_revenue_charge_failed",
+                    user_id=task.owner_id,
+                    extra={
+                        "task_id": task.id,
+                        "skill_token": tok,
+                    },
+                )
+            )
+            db.commit()
+        except Exception:
+            db.rollback()
 
 
 def _maybe_auto_confirm(task: Task, db: Session) -> None:
@@ -1686,6 +2082,21 @@ def _task_extra(t: Task, db: Session) -> dict:
         }
     else:
         out["escrow"] = {"enabled": False}
+    auction = _ra.get_auction(t)
+    if auction:
+        out["auction"] = {
+            "enabled": True,
+            "status": auction.get("status"),
+            "min_reward": int(auction.get("min_reward", 0) or 0),
+            "max_reward": int(auction.get("max_reward", 0) or 0),
+            "deadline": auction.get("deadline"),
+            "auto_pick": auction.get("auto_pick", "manual"),
+            "selected_bid_id": auction.get("selected_bid_id"),
+            "bid_count": int(auction.get("bid_count", 0) or 0),
+            "is_open": _ra.is_auction_open(auction),
+        }
+    else:
+        out["auction"] = {"enabled": False}
     return out
 
 
@@ -1774,6 +2185,328 @@ def list_agent_tasks(
     return {"tasks": out, "total": len(out), "agent_name": agent.name}
 
 
+@app.get("/agents/{agent_id}/reputation")
+def get_agent_reputation(
+    agent_id: int,
+    db: Session = Depends(get_db),
+):
+    """Agent 信誉卡（公开只读）：聚合接取/完成/拒绝/争议/速度/活跃度并给出综合评分。
+
+    - 无需登录；匿名访问任何 Agent 都可。
+    - 数据来源：`tasks` 表即时聚合 + `input_data.timeline` 事件 + `input_data.escrow.disputed`。
+    - 响应头加 `Cache-Control: public, max-age=300`，5 分钟缓存保护。
+    """
+    from app.services.reputation import compute_agent_reputation
+
+    card = compute_agent_reputation(db, agent_id)
+    if card is None:
+        raise HTTPException(status_code=404, detail="Agent 不存在")
+    return JSONResponse(
+        content=card,
+        headers={"Cache-Control": "public, max-age=300"},
+    )
+
+
+@app.get("/agents/{agent_id}/cases")
+def get_agent_case_studies(
+    agent_id: int,
+    limit: int = 8,
+    db: Session = Depends(get_db),
+):
+    """Agent 公开案例库：返回最近完成的任务摘要，供公开主页 SEO 展示。
+
+    - 公开访问；`Cache-Control: public, max-age=600`。
+    - 仅返回 `status=completed` 且非定向（`invitees_only` / 有 invited_agent_ids）任务。
+    """
+    agent = db.query(Agent).filter(Agent.id == int(agent_id)).first()
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent 不存在")
+    limit = max(1, min(int(limit or 8), 20))
+    q = (
+        db.query(Task)
+        .filter(Task.agent_id == agent_id)
+        .filter(Task.status == "completed")
+        .order_by(desc(Task.completed_at), desc(Task.updated_at))
+    )
+    rows = q.limit(limit).all()
+    cases = []
+    for t in rows:
+        invited = getattr(t, "invited_agent_ids", None) or []
+        if invited:
+            continue
+        owner = db.query(User).filter(User.id == t.owner_id).first()
+        out = t.output_data if isinstance(getattr(t, "output_data", None), dict) else {}
+        summary = (out.get("result_summary") or (t.description or "")).strip()
+        if len(summary) > 320:
+            summary = summary[:317] + "..."
+        cases.append({
+            "task_id": t.id,
+            "title": t.title,
+            "category": getattr(t, "category", None),
+            "reward_points": int(getattr(t, "reward_points", 0) or 0),
+            "publisher_name": owner.username if owner else "",
+            "completed_at": iso_utc(getattr(t, "completed_at", None)),
+            "summary": summary,
+        })
+    return JSONResponse(
+        content={"agent_id": agent_id, "agent_name": agent.name, "cases": cases, "total": len(cases)},
+        headers={"Cache-Control": "public, max-age=600"},
+    )
+
+
+@app.get("/u/{username}")
+def get_public_user_profile(
+    username: str,
+    db: Session = Depends(get_db),
+):
+    """公开用户主页：按 username 返回 owner + 其公开 Agents + 信誉摘要。
+
+    主要用于 `/@:username` 页面的 SEO 流量入口。不包含邮箱、credits、佣金等敏感信息。
+    """
+    uname = (username or "").strip().lstrip("@")
+    if not uname:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    user = db.query(User).filter(User.username == uname).first()
+    if not user or not getattr(user, "is_active", True):
+        raise HTTPException(status_code=404, detail="用户不存在")
+    from app.services.reputation import compute_agent_reputation
+
+    agents = (
+        db.query(Agent)
+        .filter(Agent.owner_id == user.id, Agent.is_active == True)  # noqa: E712
+        .order_by(Agent.created_at.asc())
+        .limit(20)
+        .all()
+    )
+    agent_cards = []
+    total_completed = 0
+    total_earned = 0
+    best_score = 0
+    for a in agents:
+        card = compute_agent_reputation(db, a.id) or {}
+        score = int(card.get("score", 0) or 0)
+        completed = int(card.get("completed_tasks", 0) or 0)
+        earned = int(card.get("total_reward_points", 0) or 0)
+        total_completed += completed
+        total_earned += earned
+        best_score = max(best_score, score)
+        agent_cards.append({
+            "id": a.id,
+            "name": a.name,
+            "description": (a.description or "")[:400],
+            "agent_type": a.agent_type,
+            "category": getattr(a, "category", None),
+            "capabilities": a.capabilities if isinstance(a.capabilities, list) else [],
+            "reputation_score": score,
+            "completed_tasks": completed,
+            "top_skills": card.get("top_skills") or [],
+        })
+    return JSONResponse(
+        content={
+            "username": user.username,
+            "user_id": user.id,
+            "joined_at": iso_utc(user.created_at),
+            "agents": agent_cards,
+            "summary": {
+                "agents_count": len(agent_cards),
+                "total_completed_tasks": total_completed,
+                "total_earned_points": total_earned,
+                "best_reputation_score": best_score,
+            },
+        },
+        headers={"Cache-Control": "public, max-age=300"},
+    )
+
+
+@app.get("/agents/{agent_id}/task-radar")
+def get_agent_task_radar(
+    agent_id: int,
+    k: int = 10,
+    w_skill: Optional[float] = None,
+    w_reward: Optional[float] = None,
+    w_fresh: Optional[float] = None,
+    w_history: Optional[float] = None,
+    reward_min: Optional[int] = None,
+    category: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """任务雷达：面向 Agent 拥有者的实时撮合排名。
+
+    - 仅 Agent 的拥有者可调用（避免别人的雷达视角泄露）。
+    - 通过 `w_skill/w_reward/w_fresh/w_history` 调节四个因子权重（未传则用默认值）。
+    - `reward_min` / `category` 可进一步过滤候选池。
+    - 返回 Top-K 任务 + 每项的 breakdown 与理由；若任务是定向任务但 Agent 是被邀请方，
+      会自动纳入雷达并获得 +20 曝光加成。
+    """
+    uid = int(current_user["user_id"])
+    agent = db.query(Agent).filter(Agent.id == int(agent_id)).first()
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent 不存在")
+    if int(agent.owner_id) != uid:
+        raise HTTPException(status_code=403, detail="仅 Agent 拥有者可查看任务雷达")
+    if getattr(agent, "is_active", True) is False:
+        raise HTTPException(status_code=400, detail="已停用的 Agent 不支持任务雷达")
+
+    weights: Dict[str, float] = {}
+    if w_skill is not None:
+        weights["skill_match"] = float(w_skill)
+    if w_reward is not None:
+        weights["reward_fit"] = float(w_reward)
+    if w_fresh is not None:
+        weights["freshness"] = float(w_fresh)
+    if w_history is not None:
+        weights["history_affinity"] = float(w_history)
+
+    from app.services.task_radar import compute_task_radar
+
+    try:
+        result = compute_task_radar(
+            db,
+            agent.id,
+            k=k,
+            weights=weights or None,
+            reward_min=reward_min,
+            category=category,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return JSONResponse(
+        content=result,
+        headers={"Cache-Control": "private, max-age=30"},
+    )
+
+
+def _task_is_visible_to(task: Task, viewer_user_id: Optional[int], viewer_agent_ids: List[int]) -> bool:
+    """定向任务可见性：仅发布者 + 被邀请 Agent 的拥有者可见。
+
+    同时屏蔽标记为 hidden_from_public / 注册握手 / 平台系统账号发起的内部任务。
+    发布者本人仍可见自己的隐藏任务。
+    """
+    extra = task.input_data if isinstance(task.input_data, dict) else {}
+    if isinstance(extra, dict):
+        hidden = bool(extra.get("hidden_from_public"))
+        source = (extra.get("source") or "").strip()
+        if (hidden or source == "register_via_skill") and viewer_user_id != task.owner_id:
+            return False
+    visibility = extra.get("visibility") if isinstance(extra, dict) else None
+    if visibility != "invitees_only":
+        return True
+    if viewer_user_id is not None and task.owner_id == viewer_user_id:
+        return True
+    invited = getattr(task, "invited_agent_ids", None) or []
+    invited_ints = {int(x) for x in invited if x is not None}
+    if viewer_agent_ids and invited_ints.intersection(set(viewer_agent_ids)):
+        return True
+    return False
+
+
+_CLAWJOB_SYSTEM_USERNAME = "clawjob_system"
+
+
+def _task_is_public_listing(task: Task, owner: Optional[User]) -> bool:
+    """公开大厅/计数是否应当收录该任务（对所有访客一致的真实任务）。"""
+    extra = task.input_data if isinstance(task.input_data, dict) else {}
+    if isinstance(extra, dict):
+        if extra.get("hidden_from_public"):
+            return False
+        if (extra.get("source") or "").strip() == "register_via_skill":
+            return False
+    if owner is not None and owner.username == _CLAWJOB_SYSTEM_USERNAME:
+        return False
+    return True
+
+
+# NOTE: Intent-to-Task 内存限频：每用户 X 次/小时；重启/重部署会重置（正式上线可换 Redis）
+_INTENT_RATE_LIMIT_WINDOW = 3600
+_INTENT_RATE_LIMIT_MAX = int(os.getenv("CLAWJOB_INTENT_RATE_PER_HOUR", "30"))
+_intent_rate_bucket: Dict[int, List[float]] = {}
+
+
+def _intent_rate_check(user_id: int) -> Tuple[bool, int]:
+    import time as _t
+    now = _t.time()
+    window_start = now - _INTENT_RATE_LIMIT_WINDOW
+    bucket = _intent_rate_bucket.setdefault(user_id, [])
+    bucket[:] = [ts for ts in bucket if ts >= window_start]
+    if len(bucket) >= _INTENT_RATE_LIMIT_MAX:
+        reset_in = int(max(0, (bucket[0] + _INTENT_RATE_LIMIT_WINDOW) - now))
+        return False, reset_in
+    bucket.append(now)
+    return True, 0
+
+
+@app.post("/tasks/draft-from-intent")
+def draft_task_from_intent(
+    body: dict = Body(...),
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """一句话需求 → 任务草稿（Intent-to-Task）。
+
+    - 默认启发式解析（免费、零外部依赖），命中技能/类别/难度/期限/预算等。
+    - 设置 `OPENAI_API_KEY` 且传 `use_llm=true` 时调用 LLM 润色；失败自动回退启发式。
+    - 每用户限频：默认 30 次/小时（`CLAWJOB_INTENT_RATE_PER_HOUR`）。
+    - 返回的草稿带 `draft_source="intent"` 标记，前端落库时应一并写入 `input_data` 做审计。
+    """
+    from app.services.intent_parser import parse_intent
+
+    uid = int(current_user["user_id"])
+    ok, reset_in = _intent_rate_check(uid)
+    if not ok:
+        raise HTTPException(
+            status_code=429,
+            detail=f"调用过于频繁，请 {reset_in} 秒后重试",
+            headers={"Retry-After": str(reset_in)},
+        )
+
+    intent = str(body.get("intent") or "").strip()
+    if not intent:
+        raise HTTPException(status_code=400, detail="intent 不可为空")
+    if len(intent) > 2000:
+        raise HTTPException(status_code=400, detail="intent 过长（超过 2000 字）")
+    use_llm = bool(body.get("use_llm") or False)
+
+    try:
+        draft = parse_intent(intent, use_llm=use_llm)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    draft["draft_source"] = "intent"
+    draft["user_id"] = uid
+    return draft
+
+
+@app.get("/tasks/estimate")
+def estimate_task_price_sla(
+    skill: Optional[str] = None,
+    kind: Optional[str] = None,
+    category: Optional[str] = None,
+    difficulty: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    """价格与 SLA 预估（公开）。
+
+    - 依据历史任务（最近 500 单相似样本）聚合出奖励点的中位数与 p25/p75/p90 分位、
+      预估完成时长（p50/p75）、预估接取等待时长（p50/p75）。
+    - `difficulty` 可选 `easy|normal|hard|expert`，对输出做乘数修正。
+    - 样本不足 5 条时自动走启发式回退（按 skill → category → 全局默认表）。
+    - 响应头加 5 分钟缓存；服务内部还有 5 分钟 LRU。
+    """
+    from app.services.price_sla_estimator import estimate_price_sla
+
+    result = estimate_price_sla(
+        db,
+        skill=skill,
+        kind=kind,
+        category=category,
+        difficulty=difficulty,
+    )
+    return JSONResponse(
+        content=result,
+        headers={"Cache-Control": "public, max-age=300"},
+    )
+
+
 @app.get("/tasks")
 def list_tasks_public(
     skip: int = 0,
@@ -1786,41 +2519,70 @@ def list_tasks_public(
     reward_min: Optional[int] = None,
     reward_max: Optional[int] = None,
     db: Session = Depends(get_db),
+    current_user: Optional[dict] = Depends(get_current_user_optional),
 ):
-    """任务大厅：公开列出所有任务（无需登录）；支持分类、关键词、奖励区间、排序；creator_agent_id 可筛选某 Agent 发布的任务。"""
-    query = db.query(Task)
-    if status_filter:
-        query = query.filter(Task.status == status_filter)
-    if category_filter and category_filter.strip():
-        query = query.filter(Task.category == category_filter.strip())
-    if creator_agent_id is not None:
-        query = query.filter(Task.creator_agent_id == creator_agent_id)
-    if q and q.strip():
-        from sqlalchemy import or_
-        term = f"%{q.strip()}%"
-        query = query.filter(or_(Task.title.ilike(term), Task.description.ilike(term)))
-    if reward_min is not None:
-        query = query.filter(Task.reward_points >= reward_min)
-    if reward_max is not None:
-        query = query.filter(Task.reward_points <= reward_max)
-    if sort == "comments_desc":
-        query = db.query(Task, func.count(TaskComment.id).label("comment_count")).outerjoin(
-            TaskComment, Task.id == TaskComment.task_id
-        )
+    """任务大厅：公开列出所有任务（无需登录）；支持分类、关键词、奖励区间、排序；creator_agent_id 可筛选某 Agent 发布的任务。
+
+    若任务是「定向任务」（`input_data.visibility == invitees_only`），仅发布者与被邀请 Agent 的拥有者可见。
+    """
+    # 内部/握手/平台系统账号任务不进入公开大厅与计数。
+    system_owner_ids = [
+        int(u.id)
+        for u in db.query(User.id).filter(User.username == _CLAWJOB_SYSTEM_USERNAME).all()
+    ]
+
+    # 尝试在 SQL 层过滤 input_data.hidden_from_public（仅在 PostgreSQL 下生效，
+    # SQLite 测试环境继续依赖 Python 层的 _task_is_public_listing 过滤）。
+    def _apply_hidden_filter(qy):
+        try:
+            dialect = db.bind.dialect.name if db.bind is not None else ""
+        except Exception:
+            dialect = ""
+        if dialect != "postgresql":
+            return qy
+        try:
+            from sqlalchemy import or_ as _or
+            hidden_expr = Task.input_data.op("->>")("hidden_from_public")
+            # NULL (字段不存在) 视为未隐藏；仅当显式为 'true'/'1' 时才过滤。
+            return qy.filter(
+                _or(
+                    Task.input_data.is_(None),
+                    hidden_expr.is_(None),
+                    hidden_expr.notin_(("true", "True", "1")),
+                )
+            )
+        except Exception:
+            return qy
+
+    def _apply_public_filters(qy):
         if status_filter:
-            query = query.filter(Task.status == status_filter)
+            qy = qy.filter(Task.status == status_filter)
+        else:
+            qy = qy.filter(Task.status != "cancelled_refunded")
         if category_filter and category_filter.strip():
-            query = query.filter(Task.category == category_filter.strip())
+            qy = qy.filter(Task.category == category_filter.strip())
+        if creator_agent_id is not None:
+            qy = qy.filter(Task.creator_agent_id == creator_agent_id)
         if q and q.strip():
             from sqlalchemy import or_
             term = f"%{q.strip()}%"
-            query = query.filter(or_(Task.title.ilike(term), Task.description.ilike(term)))
+            qy = qy.filter(or_(Task.title.ilike(term), Task.description.ilike(term)))
         if reward_min is not None:
-            query = query.filter(Task.reward_points >= reward_min)
+            qy = qy.filter(Task.reward_points >= reward_min)
         if reward_max is not None:
-            query = query.filter(Task.reward_points <= reward_max)
-        if creator_agent_id is not None:
-            query = query.filter(Task.creator_agent_id == creator_agent_id)
+            qy = qy.filter(Task.reward_points <= reward_max)
+        if system_owner_ids:
+            qy = qy.filter(~Task.owner_id.in_(system_owner_ids))
+        qy = _apply_hidden_filter(qy)
+        return qy
+
+    query = _apply_public_filters(db.query(Task))
+    if sort == "comments_desc":
+        query = _apply_public_filters(
+            db.query(Task, func.count(TaskComment.id).label("comment_count")).outerjoin(
+                TaskComment, Task.id == TaskComment.task_id
+            )
+        )
         query = query.group_by(Task.id).order_by(func.count(TaskComment.id).desc().nullslast(), Task.created_at.desc())
         total = query.count()
         rows = query.offset(skip).limit(limit).all()
@@ -1837,11 +2599,25 @@ def list_tasks_public(
         total = query.count()
         tasks = query.offset(skip).limit(limit).all()
         tasks_with_count = [(t, db.query(TaskComment).filter(TaskComment.task_id == t.id).count()) for t in tasks]
+    viewer_uid: Optional[int] = None
+    viewer_agent_ids: List[int] = []
+    if current_user:
+        try:
+            viewer_uid = int(current_user.get("user_id")) if current_user.get("user_id") is not None else None
+        except (TypeError, ValueError):
+            viewer_uid = None
+        if viewer_uid is not None:
+            viewer_agent_ids = [int(a.id) for a in db.query(Agent.id).filter(Agent.owner_id == viewer_uid).all()]
+
     out = []
     for t, comment_count in tasks_with_count:
         _maybe_auto_confirm(t, db)
         db.refresh(t)
+        if not _task_is_visible_to(t, viewer_uid, viewer_agent_ids):
+            continue
         owner = db.query(User).filter(User.id == t.owner_id).first()
+        if not _task_is_public_listing(t, owner) and viewer_uid != t.owner_id:
+            continue
         sub_count = db.query(TaskSubscription).filter(TaskSubscription.task_id == t.id).count()
         invited = getattr(t, "invited_agent_ids", None)
         creator_agent = db.query(Agent).filter(Agent.id == t.creator_agent_id).first() if getattr(t, "creator_agent_id", None) else None
@@ -1925,10 +2701,36 @@ def publish_task(
 ):
     """发布任务（需登录）；若设置 reward_points 则从当前用户信用点扣减"""
     uid = int(current_user["user_id"])
-    user = db.query(User).filter(User.id == uid).first()
+    try:
+        safe_title = _safety.sanitize_text(
+            None, getattr(body, "title", None), source="publish_task", user_id=uid
+        )
+        safe_desc = _safety.sanitize_text(
+            None, getattr(body, "description", None), source="publish_task", user_id=uid
+        )
+        safe_requirements = _safety.sanitize_text(
+            None, getattr(body, "requirements", None), source="publish_task", user_id=uid
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"内容安全策略：{str(e)}")
+    if isinstance(safe_title, str) and safe_title:
+        body.title = safe_title
+    if safe_desc is not None:
+        body.description = safe_desc
+    if safe_requirements is not None:
+        body.requirements = safe_requirements
+    try:
+        user = db.query(User).filter(User.id == uid).with_for_update().first()
+    except Exception:
+        user = db.query(User).filter(User.id == uid).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
     reward_points = max(0, getattr(body, "reward_points", 0) or 0)
+    if reward_points > MAX_TASK_REWARD_POINTS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"单任务奖励点数不能超过 {MAX_TASK_REWARD_POINTS}",
+        )
     webhook_url = (getattr(body, "completion_webhook_url", None) or "").strip()
     if reward_points > 0:
         if not webhook_url or not webhook_url.startswith(("http://", "https://")):
@@ -1998,6 +2800,23 @@ def publish_task(
             extra["escrow"] = plan
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
+    auction_cfg = getattr(body, "auction", None)
+    if auction_cfg and getattr(auction_cfg, "enabled", False):
+        if em:
+            raise HTTPException(status_code=400, detail="反向竞标与里程碑托管不能同时开启")
+        if reward_points <= 0:
+            raise HTTPException(status_code=400, detail="开启反向竞标须同时设置 reward_points 作为上限预算")
+        if not webhook_url:
+            raise HTTPException(status_code=400, detail="开启反向竞标须填写 completion_webhook_url")
+        try:
+            extra["auction"] = _ra.build_auction_plan(
+                max_reward=reward_points,
+                min_reward=int(getattr(auction_cfg, "min_reward", 0) or 0),
+                deadline=(getattr(auction_cfg, "deadline", None) or None),
+                auto_pick=(getattr(auction_cfg, "auto_pick", "manual") or "manual"),
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
     if bool(getattr(body, "collaborative", False)):
         extra["collaborative"] = True
     task = Task(
@@ -2017,7 +2836,34 @@ def publish_task(
         input_data=extra if extra else None,
     )
     db.add(task)
-    db.commit()
+    try:
+        db.flush()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="发布任务失败")
+    if reward_points > 0:
+        current_credits = int(getattr(user, "credits", 0) or 0)
+        if current_credits < reward_points:
+            db.rollback()
+            raise HTTPException(
+                status_code=400,
+                detail=f"信用点不足：当前 {current_credits}，需要 {reward_points}",
+            )
+        user.credits = current_credits - reward_points
+        db.add(
+            CreditTransaction(
+                user_id=uid,
+                amount=-reward_points,
+                type="task_publish",
+                ref_id=task.id,
+                remark=f"发布任务 #{task.id} 扣除 {reward_points} 任务点",
+            )
+        )
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="发布任务扣款失败，请稍后重试")
     db.refresh(task)
     try:
         vh = _task_verification_hours(task)
@@ -2058,24 +2904,18 @@ def publish_task(
                 "result_summary": "首个任务由 ClawJob 引导 Agent 自动完成，便于体验流程。",
                 "auto_completed_by": CLAWJOB_SYSTEM_AGENT_NAME,
             }
-            db.commit()
-            db.refresh(task)
             if reward_points > 0:
                 _pay_task_reward(task, db)
-                db.commit()
+            try:
+                from app.services import community_task_hooks as _ct_hooks
+
+                _ct_hooks.on_task_completed_community_hooks(db, task)
+            except Exception:
+                pass
+            db.commit()
+            db.refresh(task)
         except Exception:
             db.rollback()
-    if reward_points > 0:
-        user.credits = (getattr(user, "credits", 0) or 0) - reward_points
-        tx = CreditTransaction(
-            user_id=uid,
-            amount=-reward_points,
-            type="task_publish",
-            ref_id=task.id,
-            remark=f"发布任务 #{task.id} 扣除 {reward_points} 任务点",
-        )
-        db.add(tx)
-        db.commit()
     discord_webhook = (getattr(body, "discord_webhook_url", None) or "").strip()
     if discord_webhook:
         _push_task_to_discord(task, discord_webhook, _FRONTEND_URL)
@@ -2141,6 +2981,655 @@ def get_task_workflow(
     return {"task_id": task_id, "workflow_dag": dag, "ready": len(blocked) == 0, "blocked_by": blocked}
 
 
+@app.get("/tasks/{task_id}/recommend-candidates")
+def recommend_task_candidates(
+    task_id: int,
+    k: int = 5,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """发布方视角的候选人智能推荐（Top-K）。
+
+    - 仅发布者可调用（避免竞品信息泄露）。
+    - 返回候选人信誉卡 + 综合匹配分 + 建议报价（基于相似任务中位价）。
+    """
+    from app.services.candidate_recommend import recommend_candidates_for_task
+
+    uid = int(current_user["user_id"])
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    if task.owner_id != uid:
+        raise HTTPException(status_code=403, detail="仅任务发布者可查看推荐候选人")
+    try:
+        result = recommend_candidates_for_task(db, task_id, k=k, exclude_owner_id=uid)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return result
+
+
+@app.post("/tasks/{task_id}/invite-agent")
+def invite_agent_to_task(
+    task_id: int,
+    body: dict = Body(...),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """发布方一键邀请 Agent 成为任务的候选接取人。
+
+    - 把 `agent_id` 加入 `invited_agent_ids`；一旦有至少一个邀请，任务默认变成定向任务
+      （`input_data.visibility = "invitees_only"`），非被邀请人在公开列表中看不到该任务。
+    - 仅在 `task.status in {open, pending}` 且尚未被接取时可调用，幂等（重复邀请不报错）。
+    """
+    uid = int(current_user["user_id"])
+    try:
+        agent_id = int(body.get("agent_id"))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="agent_id 必填")
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    if task.owner_id != uid:
+        raise HTTPException(status_code=403, detail="仅任务发布者可邀请候选人")
+    if task.status not in {"open", "pending"} or task.agent_id is not None:
+        raise HTTPException(status_code=400, detail="仅未被接取的任务可邀请候选人")
+    agent = db.query(Agent).filter(Agent.id == agent_id).first()
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent 不存在")
+    if agent.owner_id == uid:
+        raise HTTPException(status_code=400, detail="不可邀请自己的 Agent")
+
+    invited = list(task.invited_agent_ids or [])
+    invited_ints = [int(x) for x in invited if x is not None]
+    if agent.id not in invited_ints:
+        invited_ints.append(agent.id)
+    task.invited_agent_ids = invited_ints
+
+    extra = dict(task.input_data) if isinstance(task.input_data, dict) else {}
+    extra["visibility"] = "invitees_only"
+    task.input_data = extra
+
+    try:
+        _append_timeline_event(task, "agent_invited", f"邀请 Agent「{agent.name}」（#{agent.id}）作为候选接取人")
+    except Exception:
+        pass
+    # NOTE: 给被邀请 Agent 的拥有者写一条站内信
+    try:
+        recipient_id = int(agent.owner_id)
+        if recipient_id != uid:
+            db.add(InternalMessage(
+                sender_user_id=uid,
+                recipient_user_id=recipient_id,
+                title=f"你被邀请接取任务 #{task.id}",
+                content=f"发布者邀请你的 Agent「{agent.name}」接取任务「{task.title}」。",
+                related_task_id=task.id,
+            ))
+    except Exception:
+        pass
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="邀请失败，请稍后重试")
+    db.refresh(task)
+    return {
+        "ok": True,
+        "task_id": task.id,
+        "invited_agent_ids": [int(x) for x in (task.invited_agent_ids or [])],
+        "visibility": "invitees_only",
+    }
+
+
+@app.post("/tasks/{task_id}/cancel")
+def cancel_task(
+    task_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """发布方撤单退款：仅当任务尚未被接取（status=open 且无接取人、未提交）时可取消。
+
+    - 原子性：同一事务中把 `task.status` 置为 `cancelled_refunded`，回退已扣信用点，并写 `CreditTransaction(type=task_publish_refund)`。
+    - 幂等：若任务已经处于 `cancelled_refunded`，直接返回成功，不重复退款。
+    - 安全：对 Task 和 User 加行级锁 `with_for_update()`；异常自动回滚。
+    """
+    uid = int(current_user["user_id"])
+    try:
+        task = db.query(Task).filter(Task.id == task_id).with_for_update().first()
+    except Exception:
+        task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    if task.owner_id != uid:
+        raise HTTPException(status_code=403, detail="仅任务发布者可撤单")
+
+    if task.status == "cancelled_refunded":
+        return {
+            "ok": True,
+            "idempotent": True,
+            "task_id": task.id,
+            "status": task.status,
+            "refunded_points": 0,
+        }
+
+    cancellable_statuses = {"open", "pending"}
+    if task.status not in cancellable_statuses:
+        raise HTTPException(
+            status_code=400,
+            detail="任务状态不可撤单：仅未被接取且未提交的任务可撤单",
+        )
+    if task.agent_id is not None:
+        raise HTTPException(status_code=400, detail="任务已被接取，无法撤单；请通过协商或争议流程处理")
+    if getattr(task, "submitted_at", None) is not None:
+        raise HTTPException(status_code=400, detail="任务已提交待验收，无法撤单")
+
+    reward_points = int(getattr(task, "reward_points", 0) or 0)
+    refund_points = 0
+    if reward_points > 0:
+        already_refunded = (
+            db.query(CreditTransaction)
+            .filter(
+                CreditTransaction.ref_id == task.id,
+                CreditTransaction.type == "task_publish_refund",
+                CreditTransaction.user_id == uid,
+            )
+            .first()
+        )
+        if not already_refunded:
+            try:
+                user = db.query(User).filter(User.id == uid).with_for_update().first()
+            except Exception:
+                user = db.query(User).filter(User.id == uid).first()
+            if not user:
+                raise HTTPException(status_code=404, detail="用户不存在")
+            user.credits = int(getattr(user, "credits", 0) or 0) + reward_points
+            db.add(
+                CreditTransaction(
+                    user_id=uid,
+                    amount=reward_points,
+                    type="task_publish_refund",
+                    ref_id=task.id,
+                    remark=f"撤销任务 #{task.id}，退还 {reward_points} 任务点",
+                )
+            )
+            refund_points = reward_points
+
+    task.status = "cancelled_refunded"
+    try:
+        _append_timeline_event(
+            task,
+            "cancelled_refunded",
+            f"发布方撤单，退还 {refund_points} 任务点" if refund_points else "发布方撤单（无奖励点扣款）",
+        )
+    except Exception:
+        pass
+    try:
+        db.add(SystemLog(
+            level="info",
+            category="task",
+            message="task_cancelled_refunded",
+            user_id=uid,
+            extra={"task_id": task.id, "refund_points": refund_points},
+        ))
+    except Exception:
+        pass
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="撤单失败，请稍后重试")
+    db.refresh(task)
+    return {
+        "ok": True,
+        "idempotent": False,
+        "task_id": task.id,
+        "status": task.status,
+        "refunded_points": refund_points,
+    }
+
+
+# ========== D-5 邀请返点 Referral ==========
+
+@app.get("/account/referral")
+def get_my_referral(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """个人邀请中心：返回邀请码、邀请链接样本、累计邀请人数、累计发放返点。
+    第一次访问时会懒生成 `referral_code`。"""
+    from app.services import referrals as _rf
+    uid = int(current_user["user_id"])
+    try:
+        user = db.query(User).filter(User.id == uid).with_for_update().first()
+    except Exception:
+        user = db.query(User).filter(User.id == uid).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    code = _rf.ensure_user_code(db, user)
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+    rels = db.query(Referral).filter(Referral.referrer_user_id == uid).all()
+    total_invited = len(rels)
+    rewarded = [r for r in rels if r.first_task_reward_at is not None]
+    total_reward_points = int(sum(r.referrer_bonus_points or 0 for r in rewarded))
+    pending = total_invited - len(rewarded)
+    frontend_url = (os.getenv("FRONTEND_URL", "") or "").rstrip("/")
+    share_link = f"{frontend_url}/register?ref={code}" if frontend_url else f"/register?ref={code}"
+    return {
+        "user_id": uid,
+        "referral_code": code,
+        "share_link": share_link,
+        "total_invited": total_invited,
+        "completed_first_task": len(rewarded),
+        "pending_first_task": pending,
+        "total_reward_points": total_reward_points,
+        "bonus_policy": {
+            "referrer_points": _rf.referrer_bonus_points(),
+            "invitee_points": _rf.invitee_bonus_points(),
+            "trigger": "invitee_first_task_reward",
+        },
+    }
+
+
+@app.get("/account/referral/records")
+def list_my_referral_records(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """邀请明细：谁在什么时候被邀请，是否已触发首单返点。"""
+    uid = int(current_user["user_id"])
+    rels = (
+        db.query(Referral)
+        .filter(Referral.referrer_user_id == uid)
+        .order_by(Referral.signup_at.desc())
+        .limit(200)
+        .all()
+    )
+    out = []
+    for r in rels:
+        invitee = db.query(User).filter(User.id == r.invitee_user_id).first()
+        out.append({
+            "id": r.id,
+            "invitee_user_id": r.invitee_user_id,
+            "invitee_username": invitee.username if invitee else None,
+            "signup_at": r.signup_at.isoformat() + "Z" if r.signup_at else None,
+            "first_task_reward_at": r.first_task_reward_at.isoformat() + "Z" if r.first_task_reward_at else None,
+            "referrer_bonus_points": int(r.referrer_bonus_points or 0),
+            "invitee_bonus_points": int(r.invitee_bonus_points or 0),
+            "status": "rewarded" if r.first_task_reward_at else "pending",
+        })
+    return {"records": out, "total": len(out)}
+
+
+# ========== B-4 反向竞标 Reverse Auction ==========
+
+class PlaceBidBody(BaseModel):
+    agent_id: int
+    price: int
+    eta_hours: Optional[int] = None
+    proposal: str = ""
+
+
+def _require_auction_task(db: Session, task_id: int, *, lock: bool = False) -> Task:
+    q = db.query(Task).filter(Task.id == task_id)
+    try:
+        if lock:
+            q = q.with_for_update()
+    except Exception:
+        pass
+    task = q.first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    if not _ra.get_auction(task):
+        raise HTTPException(status_code=400, detail="该任务未开启反向竞标")
+    return task
+
+
+def _serialize_auction_state(task: Task) -> Dict[str, Any]:
+    a = _ra.get_auction(task) or {}
+    return {
+        "enabled": True,
+        "status": a.get("status"),
+        "min_reward": int(a.get("min_reward", 0) or 0),
+        "max_reward": int(a.get("max_reward", 0) or 0),
+        "deadline": a.get("deadline"),
+        "auto_pick": a.get("auto_pick", "manual"),
+        "selected_bid_id": a.get("selected_bid_id"),
+        "awarded_at": a.get("awarded_at"),
+        "bid_count": int(a.get("bid_count", 0) or 0),
+        "is_open": _ra.is_auction_open(a),
+    }
+
+
+@app.post("/tasks/{task_id}/bids")
+def place_bid(
+    task_id: int,
+    body: PlaceBidBody,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Agent 对任务提交/更新报价（owner 为当前用户的 Agent）。同一 Agent 再次提交会更新既有 active bid。"""
+    uid = int(current_user["user_id"])
+    task = _require_auction_task(db, task_id, lock=True)
+    auction = _ra.get_auction(task) or {}
+    if not _ra.is_auction_open(auction):
+        raise HTTPException(status_code=400, detail="竞标已关闭或已过期")
+    if task.owner_id == uid:
+        raise HTTPException(status_code=400, detail="发布方不可对自己的任务报价")
+    agent = db.query(Agent).filter(Agent.id == int(body.agent_id), Agent.owner_id == uid).first()
+    if not agent:
+        raise HTTPException(status_code=400, detail="Agent 不存在或不属于当前用户")
+    invited = getattr(task, "invited_agent_ids", None)
+    if invited and isinstance(invited, list) and len(invited) > 0:
+        if int(body.agent_id) not in [int(x) for x in invited]:
+            raise HTTPException(status_code=403, detail="该任务仅对指定接取者开放")
+    try:
+        _ra.validate_bid_price(auction, int(body.price))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    eta = None
+    if body.eta_hours is not None:
+        try:
+            eta = max(1, min(24 * 90, int(body.eta_hours)))
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="eta_hours 须为整数")
+    proposal = (body.proposal or "").strip()[:4000] or None
+
+    existing = (
+        db.query(TaskBid)
+        .filter(TaskBid.task_id == task_id, TaskBid.agent_id == int(body.agent_id))
+        .first()
+    )
+    created = False
+    if existing:
+        if existing.status in ("won", "lost"):
+            raise HTTPException(status_code=400, detail="该 Agent 已被判标，无法再提交报价")
+        existing.price = int(body.price)
+        existing.eta_hours = eta
+        existing.proposal = proposal
+        existing.status = "active"
+        bid = existing
+    else:
+        bid = TaskBid(
+            task_id=task_id,
+            agent_id=int(body.agent_id),
+            bidder_user_id=uid,
+            price=int(body.price),
+            eta_hours=eta,
+            proposal=proposal,
+            status="active",
+        )
+        db.add(bid)
+        created = True
+
+    if created:
+        auction["bid_count"] = int(auction.get("bid_count", 0) or 0) + 1
+        _ra.save_auction_to_task(task, auction)
+    try:
+        _append_timeline_event(
+            task,
+            "auction_bid",
+            f"Agent「{agent.name}」{'报价' if created else '更新报价'}：{body.price} 点"
+            + (f"，ETA {eta}h" if eta else ""),
+        )
+    except Exception:
+        pass
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="提交竞标失败，请稍后重试")
+    db.refresh(bid)
+    # 发站内信通知发布方
+    try:
+        msg = InternalMessage(
+            sender_user_id=uid,
+            recipient_user_id=task.owner_id,
+            title=f"您的任务 #{task.id} 收到新报价",
+            content=f"Agent「{agent.name}」出价 {body.price} 点，ETA {eta or '未指定'}。前往任务详情查看并选标。",
+            related_task_id=task.id,
+        )
+        db.add(msg)
+        db.commit()
+    except Exception:
+        db.rollback()
+    return {
+        "ok": True,
+        "created": created,
+        "bid": _ra.serialize_bid(bid),
+        "auction": _serialize_auction_state(task),
+    }
+
+
+@app.get("/tasks/{task_id}/bids")
+def list_bids(
+    task_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """发布方：看全部报价（含 proposal）；竞标者：仅看自己的报价。"""
+    uid = int(current_user["user_id"])
+    task = _require_auction_task(db, task_id)
+    is_owner = task.owner_id == uid
+    q = db.query(TaskBid).filter(TaskBid.task_id == task_id).order_by(TaskBid.price.asc(), TaskBid.created_at.asc())
+    if not is_owner:
+        q = q.filter(TaskBid.bidder_user_id == uid)
+    bids = q.all()
+    return {
+        "task_id": task_id,
+        "is_publisher": is_owner,
+        "auction": _serialize_auction_state(task),
+        "bids": [_ra.serialize_bid(b, hide_proposal=not is_owner and b.bidder_user_id != uid) for b in bids],
+    }
+
+
+@app.post("/tasks/{task_id}/bids/{bid_id}/withdraw")
+def withdraw_bid(
+    task_id: int,
+    bid_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """竞标者撤回自己的 active 报价。已判标则不可撤回。"""
+    uid = int(current_user["user_id"])
+    task = _require_auction_task(db, task_id, lock=True)
+    bid = db.query(TaskBid).filter(TaskBid.id == bid_id, TaskBid.task_id == task_id).first()
+    if not bid:
+        raise HTTPException(status_code=404, detail="报价不存在")
+    if bid.bidder_user_id != uid:
+        raise HTTPException(status_code=403, detail="仅本人可撤回该报价")
+    if bid.status == "won":
+        raise HTTPException(status_code=400, detail="该报价已中标，无法撤回")
+    if bid.status in ("withdrawn", "lost"):
+        return {"ok": True, "idempotent": True, "bid": _ra.serialize_bid(bid)}
+    bid.status = "withdrawn"
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="撤回失败，请稍后重试")
+    db.refresh(bid)
+    return {"ok": True, "idempotent": False, "bid": _ra.serialize_bid(bid)}
+
+
+def _award_bid_impl(task: Task, winning_bid: TaskBid, db: Session, *, auto: bool = False) -> Dict[str, Any]:
+    """在已持有 task 行锁的上下文中执行判标。退差额、设接取者、关竞拍、置对手 lost。
+    调用方负责 db.commit()。"""
+    auction = _ra.get_auction(task) or {}
+    original_reward = int(getattr(task, "reward_points", 0) or 0)
+    price = int(winning_bid.price or 0)
+    if price > original_reward:
+        raise HTTPException(status_code=500, detail="报价高于任务预算，状态异常")
+    refund = max(0, original_reward - price)
+    if refund > 0:
+        try:
+            publisher = db.query(User).filter(User.id == task.owner_id).with_for_update().first()
+        except Exception:
+            publisher = db.query(User).filter(User.id == task.owner_id).first()
+        if publisher:
+            publisher.credits = int(getattr(publisher, "credits", 0) or 0) + refund
+            db.add(
+                CreditTransaction(
+                    user_id=task.owner_id,
+                    amount=refund,
+                    type="task_publish_refund",
+                    ref_id=task.id,
+                    remark=f"任务 #{task.id} 竞标选标后退还差额 {refund} 点",
+                )
+            )
+    task.reward_points = price
+    task.agent_id = int(winning_bid.agent_id)
+    if task.status == "open":
+        task.status = "in_progress"
+    winning_bid.status = "won"
+    db.query(TaskBid).filter(
+        TaskBid.task_id == task.id,
+        TaskBid.id != winning_bid.id,
+        TaskBid.status == "active",
+    ).update({"status": "lost"}, synchronize_session=False)
+    _ra.save_auction_to_task(task, _ra.mark_auction_awarded(auction, selected_bid_id=winning_bid.id))
+    try:
+        _append_timeline_event(
+            task,
+            "auction_awarded",
+            f"中标价 {price} 点，接取 Agent ID={winning_bid.agent_id}"
+            + ("（系统自动选标）" if auto else ""),
+        )
+    except Exception:
+        pass
+    return {
+        "task_id": task.id,
+        "winning_bid_id": winning_bid.id,
+        "final_reward_points": price,
+        "refunded_points": refund,
+        "agent_id": winning_bid.agent_id,
+    }
+
+
+@app.post("/tasks/{task_id}/bids/{bid_id}/accept")
+def accept_bid(
+    task_id: int,
+    bid_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """发布方选标：对指定 active 报价判标，退差额，任务进入 in_progress。"""
+    uid = int(current_user["user_id"])
+    task = _require_auction_task(db, task_id, lock=True)
+    if task.owner_id != uid:
+        raise HTTPException(status_code=403, detail="仅发布方可选标")
+    auction = _ra.get_auction(task) or {}
+    if auction.get("status") != _ra.AUCTION_STATUS_OPEN:
+        raise HTTPException(status_code=400, detail="竞标已结束")
+    if task.agent_id is not None:
+        raise HTTPException(status_code=400, detail="任务已分配接取者")
+    bid = db.query(TaskBid).filter(TaskBid.id == bid_id, TaskBid.task_id == task_id).with_for_update().first()
+    if not bid:
+        raise HTTPException(status_code=404, detail="报价不存在")
+    if bid.status != "active":
+        raise HTTPException(status_code=400, detail="仅可对 active 报价选标")
+    result = _award_bid_impl(task, bid, db)
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="选标失败，请稍后重试")
+    db.refresh(task)
+    return {"ok": True, **result, "auction": _serialize_auction_state(task)}
+
+
+class CloseAuctionBody(BaseModel):
+    auto_pick_if_bids: bool = True  # 到期若仍有 active 报价且 auto_pick=lowest_price，则自动选最低价
+
+
+@app.post("/tasks/{task_id}/bids/close")
+def close_auction(
+    task_id: int,
+    body: CloseAuctionBody = Body(default=CloseAuctionBody()),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """发布方手动关闭竞标：可选自动按最低价判标；无有效报价则全额退款并取消任务。"""
+    uid = int(current_user["user_id"])
+    task = _require_auction_task(db, task_id, lock=True)
+    if task.owner_id != uid:
+        raise HTTPException(status_code=403, detail="仅发布方可关闭竞标")
+    auction = _ra.get_auction(task) or {}
+    if auction.get("status") != _ra.AUCTION_STATUS_OPEN:
+        return {"ok": True, "idempotent": True, "auction": _serialize_auction_state(task)}
+
+    active = db.query(TaskBid).filter(TaskBid.task_id == task_id, TaskBid.status == "active").all()
+    auto_pick_mode = (auction.get("auto_pick") or "manual") == "lowest_price"
+    winner = None
+    if active and body.auto_pick_if_bids and auto_pick_mode:
+        winner = _ra.pick_lowest_price(active)
+
+    if winner:
+        result = _award_bid_impl(task, winner, db, auto=True)
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise HTTPException(status_code=500, detail="自动选标失败，请稍后重试")
+        db.refresh(task)
+        return {"ok": True, "awarded": True, **result, "auction": _serialize_auction_state(task)}
+
+    # 无中标者：全额退款并取消任务（等同于撤单）
+    refund = 0
+    reward_points = int(getattr(task, "reward_points", 0) or 0)
+    if reward_points > 0:
+        already = (
+            db.query(CreditTransaction)
+            .filter(
+                CreditTransaction.ref_id == task.id,
+                CreditTransaction.type == "task_publish_refund",
+                CreditTransaction.user_id == uid,
+            )
+            .first()
+        )
+        if not already:
+            try:
+                user = db.query(User).filter(User.id == uid).with_for_update().first()
+            except Exception:
+                user = db.query(User).filter(User.id == uid).first()
+            if user:
+                user.credits = int(getattr(user, "credits", 0) or 0) + reward_points
+                db.add(
+                    CreditTransaction(
+                        user_id=uid,
+                        amount=reward_points,
+                        type="task_publish_refund",
+                        ref_id=task.id,
+                        remark=f"竞标关闭无成交，退还 {reward_points} 任务点",
+                    )
+                )
+                refund = reward_points
+    task.status = "cancelled_refunded"
+    db.query(TaskBid).filter(TaskBid.task_id == task_id, TaskBid.status == "active").update(
+        {"status": "lost"}, synchronize_session=False
+    )
+    _ra.save_auction_to_task(task, _ra.mark_auction_cancelled(auction))
+    try:
+        _append_timeline_event(task, "auction_cancelled", f"竞标关闭，无成交，退款 {refund} 点")
+    except Exception:
+        pass
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="关闭竞标失败，请稍后重试")
+    db.refresh(task)
+    return {
+        "ok": True,
+        "awarded": False,
+        "task_id": task.id,
+        "refunded_points": refund,
+        "status": task.status,
+        "auction": _serialize_auction_state(task),
+    }
+
+
 @app.post("/tasks/{task_id}/subscribe")
 def subscribe_task(
     task_id: int,
@@ -2153,6 +3642,12 @@ def subscribe_task(
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
+    auction = _ra.get_auction(task)
+    if auction and auction.get("status") == _ra.AUCTION_STATUS_OPEN:
+        raise HTTPException(
+            status_code=400,
+            detail="该任务处于反向竞标中，请通过 /tasks/{id}/bids 提交报价等待选标",
+        )
     # NOTE: translated comment in English.
     if task.agent_id is not None and task.agent_id != body.agent_id:
         raise HTTPException(
@@ -2216,6 +3711,18 @@ def submit_completion(
     if escrow and task.status not in ("open", "in_progress"):
         raise HTTPException(status_code=400, detail="当前任务状态不可提交里程碑交付")
     _validate_verification_submission(task, body)
+    try:
+        safe_summary = _safety.sanitize_text(
+            None,
+            getattr(body, "result_summary", None),
+            source="submit_completion",
+            user_id=uid,
+            related_task_id=int(task_id),
+        )
+        if safe_summary is not None:
+            body.result_summary = safe_summary
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"内容安全策略：{str(e)}")
     webhook_url = getattr(task, "completion_webhook_url", None) or ""
     reward_points = getattr(task, "reward_points", 0) or 0
     payload = None
@@ -2435,6 +3942,11 @@ def confirm_task(
             "托管里程碑已确认并放款" + ("（全部里程碑已完成）" if fin else ""),
         )
         db.commit()
+        if fin:
+            try:
+                _maybe_settle_skill_revenue(task, db)
+            except Exception:
+                db.rollback()
         _append_task_status_update_comment(
             db,
             task,
@@ -2464,6 +3976,12 @@ def confirm_task(
     elif task.status == "open" and reward_points == 0:
         task.status = "completed"
         task.completed_at = datetime.utcnow()
+        try:
+            from app.services import community_task_hooks as _ct_hooks
+
+            _ct_hooks.on_task_completed_community_hooks(db, task)
+        except Exception:
+            pass
     else:
         raise HTTPException(status_code=400, detail="任务尚未进入待验收状态，请等待接取者提交完成")
     db.commit()
@@ -2705,6 +4223,12 @@ def batch_confirm_tasks(
             if task.status == "open" and (getattr(task, "reward_points", 0) or 0) == 0:
                 task.status = "completed"
                 task.completed_at = datetime.utcnow()
+                try:
+                    from app.services import community_task_hooks as _ct_hooks
+
+                    _ct_hooks.on_task_completed_community_hooks(db, task)
+                except Exception:
+                    pass
             db.commit()
             results.append({"task_id": task_id, "ok": True})
         except Exception as e:
@@ -2726,10 +4250,28 @@ def batch_confirm_tasks(
 
 
 @app.get("/tasks/{task_id}")
-async def get_task_by_id(task_id: int, db: Session = Depends(get_db)):
-    """获取单条任务详情（公开）；若处于待验收且已超过截止时间则自动完成。"""
+async def get_task_by_id(
+    task_id: int,
+    db: Session = Depends(get_db),
+    current_user: Optional[dict] = Depends(get_current_user_optional),
+):
+    """获取单条任务详情（公开）；若处于待验收且已超过截止时间则自动完成。
+
+    对「定向任务」做可见性控制：仅发布者与被邀请 Agent 的拥有者可读，其他人返回 404。
+    """
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    viewer_uid: Optional[int] = None
+    viewer_agent_ids: List[int] = []
+    if current_user:
+        try:
+            viewer_uid = int(current_user.get("user_id")) if current_user.get("user_id") is not None else None
+        except (TypeError, ValueError):
+            viewer_uid = None
+        if viewer_uid is not None:
+            viewer_agent_ids = [int(a.id) for a in db.query(Agent.id).filter(Agent.owner_id == viewer_uid).all()]
+    if not _task_is_visible_to(task, viewer_uid, viewer_agent_ids):
         raise HTTPException(status_code=404, detail="任务不存在")
     _maybe_auto_confirm(task, db)
     db.refresh(task)
@@ -2851,6 +4393,13 @@ def send_internal_message(
         raise HTTPException(status_code=400, detail="标题不能为空")
     if not content:
         raise HTTPException(status_code=400, detail="内容不能为空")
+    try:
+        safe_title = _safety.sanitize_text(None, title, source="message", user_id=uid)
+        safe_content = _safety.sanitize_text(None, content, source="message", user_id=uid)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"内容安全策略：{str(e)}")
+    title = safe_title or title
+    content = safe_content or content
     recipient = None
     if body.recipient_user_id is not None:
         recipient = db.query(User).filter(User.id == int(body.recipient_user_id)).first()
@@ -3151,22 +4700,261 @@ def a2a_list_messages(
 
 
 @app.post("/tasks/{task_id}/execute")
-async def execute_task(task_id: str, retry_count: int = 0, current_user: str = Depends(get_current_user)):
-    """Execute a task using available agents（支持失败自动重试）。"""
+async def execute_task(
+    task_id: str,
+    retry_count: int = 0,
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user),
+):
+    """Execute a task using available agents（含执行沙箱 quota + 步骤级回放）。"""
     retries = max(0, min(3, int(retry_count or 0)))
     last_err: Optional[str] = None
+    task = db.query(Task).filter(Task.id == int(task_id)).first() if str(task_id).isdigit() else None
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+
+    uid = None
+    try:
+        uid = int((current_user or {}).get("user_id"))
+    except Exception:
+        uid = None
+
+    base_quota = _sandbox.ExecutionQuota.from_env()
+    task_quota_cfg = None
+    if isinstance(task.input_data, dict):
+        task_quota_cfg = task.input_data.get("execution_quota")
+    quota = base_quota.merge(_sandbox.ExecutionQuota.from_dict(task_quota_cfg))
+
     for attempt in range(retries + 1):
-        try:
+        recorder = _replay.RunRecorder(db, task_id=int(task.id), user_id=uid)
+        recorder.start(
+            meta={
+                "attempt": int(attempt),
+                "max_retries": int(retries),
+                "quota": quota.as_dict(),
+            }
+        )
+
+        async def _runner(meter: _sandbox.QuotaMeter):
+            recorder.step("tool", name="task_system.execute_task", input={"task_id": str(task_id)})
             result = await task_system.execute_task(task_id)
+            try:
+                meter.check()
+            except _sandbox.QuotaExceeded:
+                raise
+            recorder.step("output", name="task_result", output={"preview": str(result)[:800]})
+            return result
+
+        outcome = await _sandbox.run_with_quota(_runner, quota)
+
+        base = task.output_data if isinstance(task.output_data, dict) else {}
+        if outcome.ok:
+            task.output_data = {
+                **base,
+                "last_execute": {
+                    "retried": int(attempt),
+                    "at": datetime.utcnow().isoformat() + "Z",
+                    "ok": True,
+                    "run_id": recorder.run_id,
+                    "duration_ms": outcome.duration_ms,
+                    "tokens_used": outcome.tokens_used,
+                    "cost_credits": outcome.cost_credits,
+                },
+            }
+            try:
+                flag_modified(task, "output_data")
+            except Exception:
+                pass
+            db.commit()
+            recorder.finish(
+                ok=True,
+                tokens_used=outcome.tokens_used,
+                cost_credits=outcome.cost_credits,
+                summary={"duration_ms": outcome.duration_ms},
+            )
+            result = outcome.result
             if attempt > 0 and isinstance(result, dict):
                 result["retried"] = attempt
+            if isinstance(result, dict):
+                result["run_id"] = recorder.run_id
             return result
-        except Exception as e:
-            last_err = str(e)
-            if attempt < retries:
-                await asyncio.sleep(0.2 * (attempt + 1))
-                continue
-            raise HTTPException(status_code=500, detail=f"执行失败：{last_err}（已重试 {retries} 次）")
+
+        last_err = outcome.error or outcome.reason
+        if outcome.quota_exceeded:
+            recorder.step("quota", name=outcome.reason or "quota_exceeded", ok=False, error=last_err)
+            recorder.finish(
+                ok=False,
+                quota_exceeded=True,
+                error=last_err,
+                tokens_used=outcome.tokens_used,
+                cost_credits=outcome.cost_credits,
+                summary={"reason": outcome.reason},
+            )
+            task.output_data = {
+                **base,
+                "last_execute": {
+                    "retried": int(attempt),
+                    "at": datetime.utcnow().isoformat() + "Z",
+                    "ok": False,
+                    "quota_exceeded": True,
+                    "reason": outcome.reason,
+                    "run_id": recorder.run_id,
+                    "duration_ms": outcome.duration_ms,
+                },
+            }
+            try:
+                flag_modified(task, "output_data")
+            except Exception:
+                pass
+            db.commit()
+            raise HTTPException(
+                status_code=429,
+                detail=f"执行超出沙箱配额：{outcome.reason}（quota_exceeded）",
+            )
+
+        recorder.step("error", name="runner_error", ok=False, error=last_err)
+        recorder.finish(ok=False, error=last_err, summary={"attempt": attempt})
+        if attempt < retries:
+            await asyncio.sleep(0.2 * (attempt + 1))
+            continue
+        task.output_data = {
+            **base,
+            "last_execute": {
+                "retried": int(retries),
+                "at": datetime.utcnow().isoformat() + "Z",
+                "ok": False,
+                "error": (last_err or "")[:300],
+                "run_id": recorder.run_id,
+            },
+        }
+        try:
+            flag_modified(task, "output_data")
+        except Exception:
+            pass
+        db.commit()
+        raise HTTPException(status_code=500, detail=f"执行失败：{last_err}（已重试 {retries} 次）")
+
+
+# ---------------------------------------------------------------------------
+# C-11 步骤回放（Step Replay）：发布方 / 接取方可读，超管可读
+# ---------------------------------------------------------------------------
+
+
+def _can_view_task_runs(task: Task, uid: int, db: Session) -> bool:
+    if task.owner_id == uid:
+        return True
+    if task.agent_id:
+        a = db.query(Agent).filter(Agent.id == task.agent_id).first()
+        if a and a.owner_id == uid:
+            return True
+    u = db.query(User).filter(User.id == uid).first()
+    return bool(u and getattr(u, "is_superuser", False))
+
+
+@app.get("/tasks/{task_id}/runs")
+def list_task_runs(
+    task_id: int,
+    limit: int = 20,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    uid = int(current_user["user_id"])
+    task = db.query(Task).filter(Task.id == int(task_id)).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    if not _can_view_task_runs(task, uid, db):
+        raise HTTPException(status_code=403, detail="无权查看该任务运行记录")
+    rows = (
+        db.query(ExecutionRun)
+        .filter(ExecutionRun.task_id == int(task_id))
+        .order_by(ExecutionRun.started_at.desc())
+        .limit(max(1, min(200, int(limit or 20))))
+        .all()
+    )
+    return {"items": [_replay.serialize_run(r) for r in rows]}
+
+
+@app.get("/tasks/{task_id}/runs/{run_id}/steps")
+def list_task_run_steps(
+    task_id: int,
+    run_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    uid = int(current_user["user_id"])
+    task = db.query(Task).filter(Task.id == int(task_id)).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    if not _can_view_task_runs(task, uid, db):
+        raise HTTPException(status_code=403, detail="无权查看该任务运行记录")
+    run = (
+        db.query(ExecutionRun)
+        .filter(ExecutionRun.task_id == int(task_id), ExecutionRun.run_id == str(run_id))
+        .first()
+    )
+    if not run:
+        raise HTTPException(status_code=404, detail="运行记录不存在")
+    steps = (
+        db.query(ExecutionStep)
+        .filter(ExecutionStep.run_id == str(run_id))
+        .order_by(ExecutionStep.idx.asc())
+        .all()
+    )
+    return {
+        "run": _replay.serialize_run(run),
+        "steps": [_replay.serialize_step(s) for s in steps],
+    }
+
+
+@app.get("/tasks/{task_id}/runs/{run_id}/export")
+def export_task_run(
+    task_id: int,
+    run_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """将某次运行导出为 JSON 审计包。"""
+    uid = int(current_user["user_id"])
+    task = db.query(Task).filter(Task.id == int(task_id)).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    if not _can_view_task_runs(task, uid, db):
+        raise HTTPException(status_code=403, detail="无权导出该任务运行记录")
+    run = (
+        db.query(ExecutionRun)
+        .filter(ExecutionRun.task_id == int(task_id), ExecutionRun.run_id == str(run_id))
+        .first()
+    )
+    if not run:
+        raise HTTPException(status_code=404, detail="运行记录不存在")
+    steps = (
+        db.query(ExecutionStep)
+        .filter(ExecutionStep.run_id == str(run_id))
+        .order_by(ExecutionStep.idx.asc())
+        .all()
+    )
+    return {
+        "task_id": int(task_id),
+        "run": _replay.serialize_run(run),
+        "steps": [_replay.serialize_step(s) for s in steps],
+        "exported_at": datetime.utcnow().isoformat() + "Z",
+    }
+
+
+# ---------------------------------------------------------------------------
+# D-22 Insights：发布方报表（自服务）
+# ---------------------------------------------------------------------------
+
+
+@app.get("/account/insights")
+def my_insights(
+    days: int = 90,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """登录用户自己的发布方报表。"""
+    uid = int(current_user["user_id"])
+    return _insights.publisher_report(db, user_id=uid, days=int(days or 90))
 
 
 # NOTE: translated comment in English.

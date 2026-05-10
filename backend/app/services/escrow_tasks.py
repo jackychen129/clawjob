@@ -16,7 +16,19 @@ from sqlalchemy.orm.attributes import flag_modified
 from app.database.relational_db import Agent, CreditTransaction, Task, User, UserCommissionRecord
 
 
-PLATFORM_COMMISSION_RATE = 0.01  # 与 main.py 保持一致，分阶段按点数计提
+PLATFORM_COMMISSION_RATE = 0.01  # 与 main.py 保持一致，分阶段按点数计提（运行时请用 _current_rate()）
+
+
+def _current_rate() -> float:
+    """运行时读取最新的佣金比例，保持与 main.py 的环境变量配置对齐。"""
+    try:
+        import app.main as _m
+        rate = float(getattr(_m, "PLATFORM_COMMISSION_RATE", PLATFORM_COMMISSION_RATE))
+        if rate < 0 or rate > 0.5:
+            return PLATFORM_COMMISSION_RATE
+        return rate
+    except Exception:
+        return PLATFORM_COMMISSION_RATE
 
 
 def get_escrow(task: Task) -> Optional[Dict[str, Any]]:
@@ -108,11 +120,17 @@ def credit_executor_points(
     agent = db.query(Agent).filter(Agent.id == task.agent_id).first()
     if not agent:
         return 0, 0
-    receiver = db.query(User).filter(User.id == agent.owner_id).first()
+    try:
+        receiver = (
+            db.query(User).filter(User.id == agent.owner_id).with_for_update().first()
+        )
+    except Exception:
+        receiver = db.query(User).filter(User.id == agent.owner_id).first()
     if not receiver:
         return 0, 0
-    commission = int(points * PLATFORM_COMMISSION_RATE)
-    amount_to_receiver = points - commission
+    rate = _current_rate()
+    commission = int(points * rate)
+    amount_to_receiver = max(0, points - commission)
     receiver.credits = (getattr(receiver, "credits", 0) or 0) + amount_to_receiver
     db.add(
         CreditTransaction(
@@ -123,8 +141,22 @@ def credit_executor_points(
             remark=remark,
         )
     )
+    try:
+        from app.services import referrals as _rf
+        _rf.grant_first_task_reward(
+            db,
+            invitee_user_id=int(agent.owner_id),
+            trigger_task_id=task.id,
+        )
+    except Exception:
+        pass
     if commission > 0 and task.owner_id:
-        publisher = db.query(User).filter(User.id == task.owner_id).first()
+        try:
+            publisher = (
+                db.query(User).filter(User.id == task.owner_id).with_for_update().first()
+            )
+        except Exception:
+            publisher = db.query(User).filter(User.id == task.owner_id).first()
         if publisher:
             publisher.commission_balance = (getattr(publisher, "commission_balance", 0) or 0) + commission
             db.add(
@@ -185,9 +217,18 @@ def apply_escrow_milestone_confirm(
 
     save_escrow_to_task(task, escrow)
 
+    fin = idx >= len(ms) - 1
+    if fin:
+        try:
+            from app.services import community_task_hooks as _ct_hooks
+
+            _ct_hooks.on_task_completed_community_hooks(db, task)
+        except Exception:
+            pass
+
     return {
         "milestone_index": idx,
         "reward_paid": amount_ex,
         "commission": commission,
-        "escrow_finished": idx >= len(ms) - 1,
+        "escrow_finished": fin,
     }

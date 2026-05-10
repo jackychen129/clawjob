@@ -2,7 +2,7 @@
 Relational Database (PostgreSQL) integration for Agent Arena.
 Provides structured data storage for agents, tasks, and user management.
 """
-from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Boolean, ForeignKey, JSON, text
+from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Boolean, ForeignKey, JSON, Float, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy.sql import func
@@ -36,6 +36,16 @@ class User(Base):
     receiving_account_name = Column(String(64), nullable=True)  # 户名/实名
     receiving_account_number = Column(String(128), nullable=True)  # 账号/卡号（可脱敏）
     commission_balance = Column(Integer, default=0, nullable=False)  # 累计未提现佣金（任务点）
+    referral_code = Column(String(32), nullable=True, unique=True, index=True)  # 个人邀请码
+    # KYC / KYB（C-14）
+    kyc_status = Column(String(16), default="none", nullable=False, index=True)  # none | pending | approved | rejected
+    kyc_kind = Column(String(16), nullable=True)  # personal | business
+    kyc_approved_at = Column(DateTime, nullable=True)
+    # 当前活跃工作区（D-17，可空表示个人模式）
+    active_workspace_id = Column(Integer, nullable=True, index=True)
+    # 订阅档位（D-18）
+    subscription_tier = Column(String(16), default="free", nullable=False, index=True)  # free | pro | team | enterprise
+    subscription_renews_at = Column(DateTime, nullable=True)
     # Relationships
     agents = relationship("Agent", back_populates="owner")
     tasks = relationship("Task", back_populates="owner")
@@ -91,6 +101,11 @@ class PublishedSkill(Base):
     verified = Column(Boolean, default=False, nullable=False)  # 简化：根据该 token 下的完成任务数推导
     version_tag = Column(String(64), nullable=False, default="v1")  # 版本标签（如 v1, v1.1, prod-202603）
     download_skill_url = Column(Text, nullable=True)  # 可选：Skill 包下载链接
+    # D-19 付费分成
+    author_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    pricing_model = Column(String(16), default="free", nullable=False)  # free | per_invoke | per_download | subscription
+    price_per_unit = Column(Integer, default=0, nullable=False)  # 任务点
+    revenue_share_bp = Column(Integer, default=7000, nullable=False)  # 作者分成（基点，默认 70%）
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
@@ -204,6 +219,82 @@ class InternalMessage(Base):
     sender = relationship("User", foreign_keys=[sender_user_id], backref="sent_messages")
     recipient = relationship("User", foreign_keys=[recipient_user_id], backref="received_messages")
     related_task = relationship("Task")
+
+
+class ChatTopic(Base):
+    """社区聊天话题：按 Skill 聚合讨论。"""
+    __tablename__ = "chat_topics"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String(256), nullable=False)
+    description = Column(Text, nullable=True)
+    skill_tag = Column(String(64), nullable=False, index=True)
+    creator_agent_id = Column(Integer, ForeignKey("agents.id"), nullable=True, index=True)
+    visibility = Column(String(16), default="public", nullable=False)  # public | internal
+    status = Column(String(16), default="active", nullable=False, index=True)  # active | archived
+    heat_score = Column(Float, default=0.0, nullable=False, index=True)
+    auto_generated = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=func.now(), index=True)
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    creator_agent = relationship("Agent")
+
+
+class ChatMessage(Base):
+    """社区聊天消息（Markdown 存储 + 预清洗 HTML）。"""
+    __tablename__ = "chat_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    topic_id = Column(Integer, ForeignKey("chat_topics.id"), nullable=False, index=True)
+    author_agent_id = Column(Integer, ForeignKey("agents.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)  # 便于权限与通知复用
+    reply_to_id = Column(Integer, ForeignKey("chat_messages.id"), nullable=True, index=True)
+    content_md = Column(Text, nullable=False)
+    content_html_sanitized = Column(Text, nullable=True)
+    # 多模态附件（URL 引用）：[{kind,url,mime_type,name,size_bytes,meta}]
+    attachments = Column(JSON, nullable=True)
+    # 消息意图（学习/协作向，可选）：chat | tip | question | resource | recap
+    intent = Column(String(32), nullable=True, index=True)
+    comment_count = Column(Integer, default=0, nullable=False)
+    like_count = Column(Integer, default=0, nullable=False)
+    created_at = Column(DateTime, default=func.now(), index=True)
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    topic = relationship("ChatTopic", backref="messages")
+    author_agent = relationship("Agent")
+    user = relationship("User")
+    reply_to = relationship("ChatMessage", remote_side=[id], backref="replies")
+
+
+class ChatTopicMember(Base):
+    """话题成员（Agent 维度），用于未读与推荐分发过滤。"""
+    __tablename__ = "chat_topic_members"
+
+    id = Column(Integer, primary_key=True, index=True)
+    topic_id = Column(Integer, ForeignKey("chat_topics.id"), nullable=False, index=True)
+    agent_id = Column(Integer, ForeignKey("agents.id"), nullable=False, index=True)
+    role = Column(String(16), default="member", nullable=False)  # owner | member
+    last_read_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=func.now(), index=True)
+
+    topic = relationship("ChatTopic", backref="members")
+    agent = relationship("Agent")
+
+
+class ChatDispatchLog(Base):
+    """热门话题/回复分发记录（幂等 + 限频依据）。"""
+    __tablename__ = "chat_dispatch_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    topic_id = Column(Integer, ForeignKey("chat_topics.id"), nullable=False, index=True)
+    message_id = Column(Integer, ForeignKey("chat_messages.id"), nullable=True, index=True)
+    target_agent_id = Column(Integer, ForeignKey("agents.id"), nullable=False, index=True)
+    reason = Column(String(128), nullable=False, default="hot_topic")
+    sent_at = Column(DateTime, default=func.now(), index=True)
+
+    topic = relationship("ChatTopic")
+    message = relationship("ChatMessage")
+    target_agent = relationship("Agent")
 
 
 class PaymentMethod(Base):
@@ -325,6 +416,232 @@ class SystemLog(Base):
     status_code = Column(Integer, nullable=True)
 
 
+class TaskBid(Base):
+    """反向竞标：Agent 对某个已开启竞拍的任务提交报价。"""
+    __tablename__ = "task_bids"
+
+    id = Column(Integer, primary_key=True, index=True)
+    task_id = Column(Integer, ForeignKey("tasks.id"), nullable=False, index=True)
+    agent_id = Column(Integer, ForeignKey("agents.id"), nullable=False, index=True)
+    bidder_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    price = Column(Integer, nullable=False)  # 报价（任务点）
+    eta_hours = Column(Integer, nullable=True)  # 预计交付时长（小时）
+    proposal = Column(Text, nullable=True)  # 方案说明
+    status = Column(String(16), nullable=False, default="active", index=True)
+    # active | withdrawn | won | lost
+    created_at = Column(DateTime, default=func.now(), index=True)
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    task = relationship("Task", backref="bids")
+    agent = relationship("Agent")
+    bidder = relationship("User")
+
+
+class Referral(Base):
+    """邀请注册记录：新用户通过邀请码注册即写入一条；首单返点只发放一次。"""
+    __tablename__ = "referrals"
+
+    id = Column(Integer, primary_key=True, index=True)
+    referrer_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    invitee_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, unique=True, index=True)
+    code = Column(String(32), nullable=False, index=True)
+    signup_at = Column(DateTime, default=func.now())
+    first_task_reward_at = Column(DateTime, nullable=True)
+    referrer_bonus_points = Column(Integer, default=0, nullable=False)
+    invitee_bonus_points = Column(Integer, default=0, nullable=False)
+    referrer = relationship("User", foreign_keys=[referrer_user_id], backref="referrals_sent")
+    invitee = relationship("User", foreign_keys=[invitee_user_id])
+
+
+class SafetyEvent(Base):
+    """内容安全事件：发布/提交/留言等文本被敏感词或 PII 命中的审计记录。"""
+    __tablename__ = "safety_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    created_at = Column(DateTime, default=func.now(), index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    source = Column(String(32), nullable=False, index=True)
+    # publish_task | submit_completion | message | comment | intent | other
+    related_task_id = Column(Integer, ForeignKey("tasks.id"), nullable=True, index=True)
+    action = Column(String(16), nullable=False)  # block | redact | warn
+    reasons = Column(JSON, nullable=True)  # e.g. ["blacklist:word_xxx", "pii:email"]
+    snippet = Column(Text, nullable=True)  # 原文片段（可能包含已脱敏版本）
+    pii_types = Column(JSON, nullable=True)  # ["email", "phone", "id_card"]
+
+
+class ExecutionRun(Base):
+    """单次 /tasks/{id}/execute 的运行。"""
+    __tablename__ = "execution_runs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    run_id = Column(String(64), nullable=False, unique=True, index=True)  # uuid
+    task_id = Column(Integer, ForeignKey("tasks.id"), nullable=False, index=True)
+    started_at = Column(DateTime, default=func.now(), index=True)
+    ended_at = Column(DateTime, nullable=True)
+    ok = Column(Boolean, default=False, nullable=False)
+    quota_exceeded = Column(Boolean, default=False, nullable=False)
+    error = Column(Text, nullable=True)
+    tokens_used = Column(Integer, default=0, nullable=False)
+    cost_credits = Column(Integer, default=0, nullable=False)
+    duration_ms = Column(Integer, default=0, nullable=False)
+    triggered_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+
+
+class KycRecord(Base):
+    """KYC / KYB 提交记录（C-14）。每个用户最多保留多条历史记录，最新一条决定 user.kyc_status。"""
+    __tablename__ = "kyc_records"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    kind = Column(String(16), nullable=False)  # personal | business
+    status = Column(String(16), nullable=False, default="pending", index=True)  # pending | approved | rejected
+    legal_name = Column(String(128), nullable=True)
+    id_type = Column(String(32), nullable=True)  # id_card | passport | other
+    id_number_masked = Column(String(64), nullable=True)
+    id_number_cipher = Column(Text, nullable=True)
+    country = Column(String(64), nullable=True)
+    business_name = Column(String(256), nullable=True)
+    business_id = Column(String(128), nullable=True)  # 统一社会信用代码 / Tax ID
+    contact_email = Column(String(256), nullable=True)
+    contact_phone = Column(String(64), nullable=True)
+    attachments = Column(JSON, nullable=True)  # [{name, url, hash}]
+    submitted_at = Column(DateTime, default=func.now(), index=True)
+    reviewed_at = Column(DateTime, nullable=True)
+    reviewer_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    rejection_reason = Column(String(512), nullable=True)
+
+
+class Workspace(Base):
+    """企业 / 团队工作区（D-17）。共享余额、共享发布权限。"""
+    __tablename__ = "workspaces"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(128), nullable=False)
+    slug = Column(String(64), nullable=False, unique=True, index=True)
+    owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    kyb_record_id = Column(Integer, ForeignKey("kyc_records.id"), nullable=True)
+    plan = Column(String(16), default="free", nullable=False)  # free | team | enterprise
+    seats = Column(Integer, default=3, nullable=False)
+    credits = Column(Integer, default=0, nullable=False)  # 工作区余额（任务点）
+    billing_email = Column(String(256), nullable=True)
+    created_at = Column(DateTime, default=func.now(), index=True)
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+
+class WorkspaceMember(Base):
+    """工作区成员与角色。"""
+    __tablename__ = "workspace_members"
+
+    id = Column(Integer, primary_key=True, index=True)
+    workspace_id = Column(Integer, ForeignKey("workspaces.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    role = Column(String(16), nullable=False, default="publisher")  # owner | admin | publisher | accounting | auditor
+    invited_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    joined_at = Column(DateTime, default=func.now())
+
+
+class WorkspaceInvitation(Base):
+    """工作区邀请：通过 token 接受加入。"""
+    __tablename__ = "workspace_invitations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    workspace_id = Column(Integer, ForeignKey("workspaces.id"), nullable=False, index=True)
+    email = Column(String(256), nullable=False, index=True)
+    role = Column(String(16), nullable=False, default="publisher")
+    token = Column(String(64), nullable=False, unique=True, index=True)
+    status = Column(String(16), default="pending", nullable=False)  # pending | accepted | revoked | expired
+    invited_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=func.now())
+    accepted_at = Column(DateTime, nullable=True)
+    expires_at = Column(DateTime, nullable=True)
+
+
+class SubscriptionPlan(Base):
+    """订阅计划目录（D-18）。Free / Pro / Team / Enterprise。"""
+    __tablename__ = "subscription_plans"
+
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String(32), nullable=False, unique=True, index=True)  # free | pro | team | enterprise
+    name = Column(String(64), nullable=False)
+    monthly_price_cents = Column(Integer, default=0, nullable=False)
+    monthly_credits = Column(Integer, default=0, nullable=False)  # 每月赠送任务点
+    seat_quota = Column(Integer, default=1, nullable=False)
+    commission_discount_bp = Column(Integer, default=0, nullable=False)  # 佣金折扣（基点，1bp=0.01%）
+    features = Column(JSON, nullable=True)  # ["rfq", "priority_match", "sandbox_x", ...]
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=func.now())
+
+
+class Subscription(Base):
+    """订阅订单（D-18）。绑定 user 或 workspace 之一。"""
+    __tablename__ = "subscriptions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    workspace_id = Column(Integer, ForeignKey("workspaces.id"), nullable=True, index=True)
+    plan_code = Column(String(32), nullable=False, index=True)
+    status = Column(String(16), default="active", nullable=False)  # active | cancelled | expired
+    started_at = Column(DateTime, default=func.now())
+    renews_at = Column(DateTime, nullable=True)
+    cancelled_at = Column(DateTime, nullable=True)
+    seats = Column(Integer, default=1, nullable=False)
+    last_charge_amount = Column(Integer, default=0, nullable=False)
+
+
+class SkillRevenueShare(Base):
+    """Skill 付费分成（D-19）。每次 Skill 调用 / 下载结算的明细。"""
+    __tablename__ = "skill_revenue_shares"
+
+    id = Column(Integer, primary_key=True, index=True)
+    skill_token = Column(String(256), nullable=False, index=True)
+    author_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    consumer_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    related_task_id = Column(Integer, ForeignKey("tasks.id"), nullable=True, index=True)
+    event_kind = Column(String(16), nullable=False, default="invoke")  # invoke | download | subscribe
+    gross_amount = Column(Integer, nullable=False)  # 计费总额（任务点）
+    platform_fee = Column(Integer, default=0, nullable=False)
+    author_payout = Column(Integer, default=0, nullable=False)
+    created_at = Column(DateTime, default=func.now(), index=True)
+
+
+class WithdrawalRequest(Base):
+    """提现申请（C-14 提现闸门：approved 后才能创建并执行）。"""
+    __tablename__ = "withdrawal_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    amount = Column(Integer, nullable=False)  # 任务点
+    status = Column(String(16), nullable=False, default="pending", index=True)
+    # pending | approved | rejected | paid | cancelled
+    receiving_account_type = Column(String(32), nullable=True)
+    receiving_account_name = Column(String(64), nullable=True)
+    receiving_account_number = Column(String(128), nullable=True)
+    submitted_at = Column(DateTime, default=func.now(), index=True)
+    processed_at = Column(DateTime, nullable=True)
+    reviewer_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    remark = Column(String(512), nullable=True)
+
+
+class ExecutionStep(Base):
+    """执行过程的细粒度步骤：工具调用 / A2A 消息 / 阶段事件等。"""
+    __tablename__ = "execution_steps"
+
+    id = Column(Integer, primary_key=True, index=True)
+    run_id = Column(String(64), nullable=False, index=True)
+    task_id = Column(Integer, ForeignKey("tasks.id"), nullable=False, index=True)
+    idx = Column(Integer, nullable=False, default=0)
+    kind = Column(String(32), nullable=False)  # start | tool | a2a | output | error | quota | end
+    name = Column(String(128), nullable=True)
+    input = Column(JSON, nullable=True)
+    output = Column(JSON, nullable=True)
+    ok = Column(Boolean, default=True, nullable=False)
+    error = Column(Text, nullable=True)
+    started_at = Column(DateTime, default=func.now(), index=True)
+    duration_ms = Column(Integer, default=0, nullable=False)
+    tokens = Column(Integer, default=0, nullable=False)
+    cost_credits = Column(Integer, default=0, nullable=False)
+
+
 # Database initialization function
 def init_db():
     """Initialize the database tables"""
@@ -337,6 +654,13 @@ def init_db():
                 ("receiving_account_name", "VARCHAR(64)"),
                 ("receiving_account_number", "VARCHAR(128)"),
                 ("commission_balance", "INTEGER DEFAULT 0 NOT NULL"),
+                ("referral_code", "VARCHAR(32)"),
+                ("kyc_status", "VARCHAR(16) DEFAULT 'none' NOT NULL"),
+                ("kyc_kind", "VARCHAR(16)"),
+                ("kyc_approved_at", "TIMESTAMP"),
+                ("active_workspace_id", "INTEGER"),
+                ("subscription_tier", "VARCHAR(16) DEFAULT 'free' NOT NULL"),
+                ("subscription_renews_at", "TIMESTAMP"),
             ]:
                 try:
                     if engine.dialect.name == "postgresql":
@@ -368,6 +692,33 @@ def init_db():
                     else:
                         conn.execute(text(f"ALTER TABLE published_agent_templates ADD COLUMN {col} {typ}"))
                         conn.execute(text(f"ALTER TABLE published_skills ADD COLUMN {col} {typ}"))
+                    conn.commit()
+                except Exception:
+                    conn.rollback()
+            for col, typ in [
+                ("author_user_id", "INTEGER"),
+                ("pricing_model", "VARCHAR(16) DEFAULT 'free' NOT NULL"),
+                ("price_per_unit", "INTEGER DEFAULT 0 NOT NULL"),
+                ("revenue_share_bp", "INTEGER DEFAULT 7000 NOT NULL"),
+            ]:
+                try:
+                    if engine.dialect.name == "postgresql":
+                        conn.execute(text(f"ALTER TABLE published_skills ADD COLUMN IF NOT EXISTS {col} {typ}"))
+                    else:
+                        conn.execute(text(f"ALTER TABLE published_skills ADD COLUMN {col} {typ}"))
+                    conn.commit()
+                except Exception:
+                    conn.rollback()
+            # Community V1: chat_messages 多模态附件字段 + 消息意图
+            for col, typ in [
+                ("attachments", "JSON"),
+                ("intent", "VARCHAR(32)"),
+            ]:
+                try:
+                    if engine.dialect.name == "postgresql":
+                        conn.execute(text(f"ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS {col} {typ}"))
+                    else:
+                        conn.execute(text(f"ALTER TABLE chat_messages ADD COLUMN {col} {typ}"))
                     conn.commit()
                 except Exception:
                     conn.rollback()

@@ -336,6 +336,12 @@
                 <template v-if="selectedTaskDetail.verification_method"><dt>{{ t('task.verificationMethod') || '验收方式' }}</dt><dd class="mono">{{ selectedTaskDetail.verification_method }}</dd></template>
                 <template v-if="selectedTaskDetail.verification_requirements?.length"><dt>{{ t('task.verificationRequirements') || '验收清单' }}</dt><dd><span v-for="(r, idx) in selectedTaskDetail.verification_requirements" :key="idx" class="task-tag">{{ r }}</span></dd></template>
               </dl>
+              <div class="detail-community-cta">
+                <Button :as="RouterLink" :to="communityDiscussLink" size="sm" variant="secondary" class="detail-community-cta__btn">
+                  {{ t('task.openCommunityDiscuss') }}
+                </Button>
+                <p class="detail-community-cta__hint hint">{{ t('task.openCommunityDiscussHint') }}</p>
+              </div>
               <div v-if="skillProgress.length" class="detail-skill-progress">
                 <h4 class="section-subtitle">{{ t('task.skills') || '技能进度' }}</h4>
                 <div v-for="sp in skillProgress" :key="sp.name" class="detail-skill-progress__row">
@@ -432,6 +438,15 @@
                 <p class="hint">{{ t('task.publisherWebhookHint') }}</p>
                 <p class="mono task-publisher-webhook-mask">{{ maskWebhookUrl(selectedTaskDetail.completion_webhook_url!) }}</p>
               </div>
+              <TaskAuctionPanel
+                v-if="selectedTaskDetail.auction?.enabled"
+                :task-id="selectedTaskDetail.id"
+                :auction="selectedTaskDetail.auction"
+                :owner-id="selectedTaskDetail.owner_id"
+                :current-user-id="auth.userId"
+                :my-agents="myAgents.map(a => ({ id: a.id, name: a.name }))"
+                @updated="reloadSelectedTask"
+              />
               <TaskTimelinePanel :events="selectedTaskDetail.timeline ?? []" />
               <div v-if="selectedTaskDetail.rejection_history?.length" class="task-rejection-history">
                 <h4 class="task-comments-title">{{ t('task.rejectionHistoryTitle') }}</h4>
@@ -459,6 +474,16 @@
                     <dd class="mono">{{ selectedTaskDetail.output_data?.last_execute?.retried ?? '—' }}</dd>
                     <dt>{{ t('task.lastExecuteAt') }}</dt>
                     <dd class="mono">{{ selectedTaskDetail.output_data?.last_execute?.at ?? '—' }}</dd>
+                    <dt>{{ t('task.lastExecuteOk') }}</dt>
+                    <dd>
+                      <span :class="selectedTaskDetail.output_data?.last_execute?.ok === false ? 'text-red-300' : 'text-emerald-300'">
+                        {{ selectedTaskDetail.output_data?.last_execute?.ok === false ? t('common.no') : t('common.yes') }}
+                      </span>
+                    </dd>
+                    <template v-if="selectedTaskDetail.output_data?.last_execute?.ok === false && selectedTaskDetail.output_data?.last_execute?.error">
+                      <dt>{{ t('task.lastExecuteError') }}</dt>
+                      <dd class="mono">{{ selectedTaskDetail.output_data?.last_execute?.error }}</dd>
+                    </template>
                   </dl>
                 </div>
                 <p class="hint task-execute-obs-hint">{{ t('task.executeRetryApiHint') }}</p>
@@ -486,6 +511,16 @@
                   >{{ t('task.extendVerification') }}</Button>
                 </template>
                 <Button
+                  v-if="auth.isLoggedIn
+                    && selectedTaskDetail.owner_id === auth.userId
+                    && (selectedTaskDetail.status === 'open' || selectedTaskDetail.status === 'pending')
+                    && !selectedTaskDetail.agent_id"
+                  size="sm"
+                  variant="secondary"
+                  :disabled="cancelLoading === selectedTaskDetail.id"
+                  @click="runCancelTask(selectedTaskDetail)"
+                >{{ t('task.cancelAndRefund') || '撤单退款' }}</Button>
+                <Button
                   v-if="
                     auth.isLoggedIn
                     && selectedTaskDetail.escrow?.enabled
@@ -509,6 +544,50 @@
                   :disabled="escrowResolveLoading === selectedTaskDetail.id"
                   @click="openEscrowResolveModal(selectedTaskDetail)"
                 >{{ t('task.escrowResolve') || '管理员处理争议' }}</Button>
+              </div>
+              <div
+                v-if="auth.isLoggedIn
+                  && selectedTaskDetail.owner_id === auth.userId
+                  && (selectedTaskDetail.status === 'open' || selectedTaskDetail.status === 'pending')
+                  && !selectedTaskDetail.agent_id"
+                class="task-detail-recommend"
+              >
+                <div class="task-detail-recommend__head">
+                  <h4 class="task-comments-title">{{ t('task.recommendCandidatesTitle') || '推荐候选人' }}</h4>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    :disabled="recommendLoading"
+                    @click="loadRecommendCandidates(selectedTaskDetail.id)"
+                  >{{ recommendCandidates.length ? (t('common.refresh') || '刷新') : (t('task.recommendLoad') || '查看推荐') }}</Button>
+                </div>
+                <p class="hint">{{ t('task.recommendHint') || '基于技能匹配、信誉分、近期活跃度与相似任务中位价生成。' }}</p>
+                <div v-if="recommendLoading" class="loading"><div class="spinner"></div></div>
+                <ul v-else-if="recommendCandidates.length" class="task-detail-recommend__list">
+                  <li v-for="c in recommendCandidates" :key="c.agent.id" class="task-detail-recommend__item">
+                    <div class="task-detail-recommend__main">
+                      <router-link :to="{ name: 'AgentProfile', params: { id: c.agent.id } }" class="link">{{ c.agent.name }}</router-link>
+                      <span class="task-detail-recommend__score">{{ c.reputation_score }}{{ t('task.recommendScoreSuffix') || ' 分' }}</span>
+                      <span v-if="c.agent.owner.username" class="task-detail-recommend__owner">{{ t('agentProfile.owner') || '归属' }}：{{ c.agent.owner.username }}</span>
+                      <Button
+                        v-if="selectedTaskDetail"
+                        size="sm"
+                        :disabled="inviteLoading === c.agent.id || (selectedTaskDetail.invited_agent_ids || []).includes(c.agent.id)"
+                        @click="runInviteAgent(selectedTaskDetail.id, c.agent.id)"
+                      >
+                        {{ (selectedTaskDetail.invited_agent_ids || []).includes(c.agent.id)
+                            ? (t('task.recommendAlreadyInvited') || '已邀请')
+                            : (t('task.recommendInvite') || '邀请') }}
+                      </Button>
+                    </div>
+                    <div class="task-detail-recommend__meta">
+                      <span>{{ t('task.recommendFirstPass') || '首过' }}：{{ c.stats.first_pass_confirm_rate == null ? '-' : Math.round(c.stats.first_pass_confirm_rate * 100) + '%' }}</span>
+                      <span>{{ t('task.recommendCompleted') || '完成' }}：{{ c.stats.completed_task_count }}</span>
+                      <span>{{ t('task.recommendSuggestPrice') || '建议价' }}：{{ c.suggested_price }} {{ t('task.pointsUnit') || '点' }}</span>
+                    </div>
+                  </li>
+                </ul>
+                <p v-else-if="recommendLoaded" class="hint">{{ t('task.recommendEmpty') || '暂无推荐候选人。' }}</p>
               </div>
               <div v-if="selectedTaskDetail.status === 'pending_verification' && selectedTaskDetail.output_data && (selectedTaskDetail.output_data.result_summary || (selectedTaskDetail.output_data.evidence && selectedTaskDetail.output_data.evidence.link))" class="task-detail-completion-submission">
                 <h4 class="task-comments-title">{{ t('task.completionSubmissionTitle') }}</h4>
@@ -571,6 +650,9 @@
                   :edges-title="t('task.workflowPreviewEdges')"
                   :node-label-prefix="t('task.workflowPreviewNodePrefix')"
                 />
+                <p v-if="!workflowPreviewLoading && !workflowPreviewReady && workflowBlockedTaskHints.length" class="workflow-blocked-hint">
+                  {{ t('task.workflowPreviewBlockedHint') }}：{{ workflowBlockedTaskHints.join('；') }}
+                </p>
               </div>
               <div class="detail-verification-chain">
                 <h4 class="task-comments-title">{{ t('task.verificationChainTitle') }}</h4>
@@ -582,6 +664,16 @@
                   :disabled="verificationChainLoading"
                   @click="loadVerificationChain"
                 >{{ verificationChainLoading ? '…' : t('task.verificationChainLoad') }}</Button>
+                <div
+                  v-if="verificationChainData"
+                  class="verification-chain-summary"
+                  :class="{ 'verification-chain-summary--bad': verificationStats.blockers > 0 }"
+                >
+                  <span class="verification-chain-chip">{{ t('task.verificationChainTotalChecks', { n: verificationStats.total }) }}</span>
+                  <span class="verification-chain-chip verification-chain-chip--pass">{{ t('task.verificationChainPassed', { n: verificationStats.passed }) }}</span>
+                  <span class="verification-chain-chip verification-chain-chip--warn">{{ t('task.verificationChainWarn', { n: verificationStats.warn }) }}</span>
+                  <span class="verification-chain-chip verification-chain-chip--blocker">{{ t('task.verificationChainBlock', { n: verificationStats.blockers }) }}</span>
+                </div>
                 <div v-if="verificationChainData" class="verification-chain-cards">
                   <div class="verification-chain-card">
                     <p class="verification-chain-card__title">{{ t('task.verificationChainDeclaration') }}</p>
@@ -796,8 +888,30 @@
               <button v-for="a in myAgents" :key="a.id" type="button" class="identity-toggle" :class="{ active: publishForm.creator_agent_id === a.id }" @click="publishForm.creator_agent_id = a.id">{{ t('task.publishAsAgent', { name: a.name }) || `Agent：${a.name}` }}</button>
             </div>
           </div>
+          <div class="create-task-step intent-step">
+            <span class="create-task-step-label">{{ t('taskManage.stepIntent') || '2. 一句话描述需求（可选）' }}</span>
+          </div>
+          <div class="intent-banner">
+            <Textarea
+              v-model="intentInput"
+              rows="2"
+              :placeholder="t('intent.placeholder') || '例如：紧急修复登录接口的 bug，3 天内完成，预算 20 点'"
+              :disabled="intentLoading"
+            />
+            <div class="intent-actions">
+              <Button type="button" size="sm" :disabled="intentLoading || !intentInput.trim()" @click="runIntentDraft">
+                {{ intentLoading ? (t('intent.loading') || '解析中…') : (t('intent.draftBtn') || '一键生成草稿') }}
+              </Button>
+              <label class="intent-llm-toggle">
+                <input v-model="intentUseLlm" type="checkbox" />
+                {{ t('intent.useLlm') || '使用 AI 润色（需后端配置）' }}
+              </label>
+              <span v-if="intentHint" class="intent-hint">{{ intentHint }}</span>
+            </div>
+            <p v-if="intentError" class="error-msg" role="alert">{{ intentError }}</p>
+          </div>
           <div class="create-task-step">
-            <span class="create-task-step-label">{{ t('taskManage.stepTaskInfo') || '2. 任务信息' }}</span>
+            <span class="create-task-step-label">{{ t('taskManage.stepTaskInfo') || '3. 任务信息' }}</span>
           </div>
           <div class="form-group">
             <label class="form-label" for="publish-title">{{ t('agentGuide.fieldTitle') }} <span class="required">*</span></label>
@@ -875,6 +989,45 @@
           <div class="form-group form-inline">
             <label class="form-label" for="publish-reward">{{ t('agentGuide.fieldRewardPoints') }}</label>
             <input id="publish-reward" v-model.number="publishForm.reward_points" type="number" min="0" class="input input-num" />
+            <Button
+              v-if="publishForm.category"
+              type="button"
+              size="sm"
+              variant="ghost"
+              :disabled="estimateLoading"
+              @click="loadEstimate(true)"
+            >
+              {{ estimateLoading ? (t('estimate.loading') || '估价中…') : (t('estimate.btn') || '市场估价') }}
+            </Button>
+          </div>
+          <div v-if="estimate" class="estimate-panel">
+            <div class="estimate-head">
+              <span class="estimate-title">{{ t('estimate.title') || '市场参考（近 500 单）' }}</span>
+              <span class="estimate-conf" :class="'conf-' + estimate.confidence">{{ confidenceLabel(estimate.confidence) }}</span>
+              <span v-if="estimate.heuristic_used" class="estimate-tag">{{ t('estimate.heuristic') || '启发式' }}</span>
+              <span v-else class="estimate-tag sample">{{ t('estimate.samples', { n: estimate.sample_size }) || `${estimate.sample_size} 条样本` }}</span>
+            </div>
+            <div class="estimate-rows">
+              <div class="estimate-cell main">
+                <span>{{ t('estimate.suggested') || '建议点数' }}</span>
+                <b>{{ estimate.reward_points.suggested }}</b>
+                <Button type="button" size="sm" variant="secondary" @click="publishForm.reward_points = estimate.reward_points.suggested">
+                  {{ t('estimate.apply') || '采用' }}
+                </Button>
+              </div>
+              <div class="estimate-cell">
+                <span>p25 / p50 / p75 / p90</span>
+                <b class="mono">{{ estimate.reward_points.p25 }} / {{ estimate.reward_points.p50 }} / {{ estimate.reward_points.p75 }} / {{ estimate.reward_points.p90 }}</b>
+              </div>
+              <div v-if="estimate.completion_hours.p50 != null" class="estimate-cell">
+                <span>{{ t('estimate.duration') || '预估时长 p50/p75' }}</span>
+                <b class="mono">{{ estimate.completion_hours.p50 }}h / {{ estimate.completion_hours.p75 ?? '-' }}h</b>
+              </div>
+              <div v-if="estimate.accept_wait_hours.p50 != null" class="estimate-cell">
+                <span>{{ t('estimate.wait') || '预估接单 p50/p75' }}</span>
+                <b class="mono">{{ estimate.accept_wait_hours.p50 }}h / {{ estimate.accept_wait_hours.p75 ?? '-' }}h</b>
+              </div>
+            </div>
           </div>
           <template v-if="publishForm.reward_points > 0">
             <div class="form-group">
@@ -915,6 +1068,36 @@
                 </div>
                 <Button type="button" size="sm" variant="secondary" @click="addEscrowRow">{{ t('task.escrowAdd') || '添加里程碑' }}</Button>
                 <p class="form-hint escrow-sum">{{ t('task.escrowWeightSum') || '权重合计' }}：{{ escrowWeightSum.toFixed(4) }}</p>
+              </div>
+            </div>
+            <div class="form-group auction-block">
+              <label class="form-label flex items-center gap-2">
+                <input v-model="publishForm.auction_enabled" type="checkbox" class="rounded border-input" :disabled="publishForm.escrow_enabled" />
+                {{ t('auction.enablePublish') || '启用反向竞标（Agent 报价抢单）' }}
+              </label>
+              <p class="form-hint">{{ t('auction.enableHint') || '启用后任务进入竞标期；你将在报价中选择中标方，若最终成交价低于预算，余额将退还给你。' }}</p>
+              <div v-if="publishForm.auction_enabled" class="auction-form">
+                <div class="auction-form__row">
+                  <label class="form-label">
+                    {{ t('auction.minReward') || '最低可接受（pts）' }}
+                    <input v-model.number="publishForm.auction_min_reward" type="number" min="1" class="input input-num" />
+                  </label>
+                  <label class="form-label">
+                    {{ t('auction.maxReward') || '最高预算（pts）' }}
+                    <input v-model.number="publishForm.auction_max_reward" type="number" min="1" class="input input-num" />
+                  </label>
+                  <label class="form-label">
+                    {{ t('auction.deadline') || '截止时间' }}
+                    <input v-model="publishForm.auction_deadline" type="datetime-local" class="input" />
+                  </label>
+                  <label class="form-label">
+                    {{ t('auction.autoPick') || '自动选标' }}
+                    <select v-model="publishForm.auction_auto_pick" class="input select-input">
+                      <option value="none">{{ t('auction.autoPickNone') || '到期不自动选（退款）' }}</option>
+                      <option value="lowest_price">{{ t('auction.autoPickLowest') || '到期选最低价' }}</option>
+                    </select>
+                  </label>
+                </div>
               </div>
             </div>
           </template>
@@ -1098,6 +1281,7 @@ import EmptyState from '../components/EmptyState.vue'
 import MarkdownHtml from '../components/MarkdownHtml.vue'
 import WorkflowDagPreview from '../components/WorkflowDagPreview.vue'
 import TaskTimelinePanel from '../components/TaskTimelinePanel.vue'
+import TaskAuctionPanel from '../components/TaskAuctionPanel.vue'
 import { cn } from '../lib/utils'
 import { safeT } from '../i18n'
 import { useAuthStore } from '../stores/auth'
@@ -1126,6 +1310,10 @@ function showSuccessLocal(msg: string) {
   successToast.value = msg
   setTimeout(() => { successToast.value = '' }, 2200)
   emit('success', msg)
+}
+function showErrorLocal(msg: string) {
+  // NOTE: 当前视图未接入全局错误 toast；暂用浏览器原生提示，避免静默失败。
+  try { window.alert(msg) } catch { /* noop */ }
 }
 
 const tab = ref<'available' | 'mine' | 'published' | 'disputes'>('available')
@@ -1165,6 +1353,11 @@ const publishForm = reactive<{
   escrow_rows: EscrowRow[]
   verification_hours: number
   collaborative: boolean
+  auction_enabled: boolean
+  auction_min_reward: number | null
+  auction_max_reward: number | null
+  auction_deadline: string
+  auction_auto_pick: 'none' | 'lowest_price'
 }>({
   title: '',
   description: '',
@@ -1185,6 +1378,11 @@ const publishForm = reactive<{
   escrow_rows: defaultEscrowRows(),
   verification_hours: 6,
   collaborative: false,
+  auction_enabled: false,
+  auction_min_reward: null,
+  auction_max_reward: null,
+  auction_deadline: '',
+  auction_auto_pick: 'lowest_price',
 })
 const escrowWeightSum = computed(() =>
   publishForm.escrow_rows.reduce((s, r) => s + (Number(r.weight) || 0), 0)
@@ -1203,6 +1401,80 @@ watch(
 )
 const publishLoading = ref(false)
 const publishError = ref('')
+
+const intentInput = ref('')
+const intentUseLlm = ref(false)
+const intentLoading = ref(false)
+const intentError = ref('')
+const intentHint = ref('')
+
+async function runIntentDraft() {
+  const raw = intentInput.value.trim()
+  if (!raw) return
+  intentLoading.value = true
+  intentError.value = ''
+  intentHint.value = ''
+  try {
+    const r = await api.draftTaskFromIntent(raw, { use_llm: intentUseLlm.value })
+    const d = r.data
+    if (!publishForm.title || publishForm.title.length < 2) publishForm.title = d.title || ''
+    if (!publishForm.description) publishForm.description = d.description || ''
+    if (!publishForm.category && d.category) publishForm.category = d.category
+    if (d.acceptance_criteria?.length && !publishForm.requirements) {
+      publishForm.requirements = d.acceptance_criteria.map((c, i) => `${i + 1}. ${c}`).join('\n')
+    }
+    if (publishForm.reward_points <= 0 && d.reward_hint && d.reward_hint > 0) {
+      publishForm.reward_points = d.reward_hint
+    }
+    if (d.skill && !publishForm.skills_text) {
+      publishForm.skills_text = d.skill
+    }
+    intentHint.value = t('intent.filled', { source: d.source === 'llm' ? 'AI' : 'Heuristic' }) || `已填充 (${d.source})`
+    // NOTE: 自动拉一次估价
+    if (publishForm.category) loadEstimate(false)
+  } catch (e: any) {
+    const code = e?.response?.status
+    const detail = e?.response?.data?.detail
+    if (code === 429) {
+      intentError.value = t('intent.rateLimited', { detail }) || `调用过于频繁：${detail || ''}`
+    } else {
+      intentError.value = detail || e?.message || (t('intent.errorGeneric') as string) || '解析失败'
+    }
+  } finally {
+    intentLoading.value = false
+  }
+}
+
+const estimate = ref<import('../api').TaskEstimateResponse | null>(null)
+const estimateLoading = ref(false)
+
+async function loadEstimate(manual: boolean) {
+  const category = publishForm.category
+  if (!category && !publishForm.skills_text) return
+  estimateLoading.value = true
+  try {
+    const r = await api.getTaskEstimate({
+      skill: (publishForm.skills_text || '').split(',')[0]?.trim() || undefined,
+      category: category || undefined,
+    })
+    estimate.value = r.data
+  } catch {
+    if (manual) estimate.value = null
+  } finally {
+    estimateLoading.value = false
+  }
+}
+
+watch(
+  () => publishForm.category,
+  (v) => { if (v) loadEstimate(false) }
+)
+
+function confidenceLabel(c: string): string {
+  if (c === 'high') return (t('estimate.confHigh') as string) || '置信度高'
+  if (c === 'medium') return (t('estimate.confMedium') as string) || '置信度中'
+  return (t('estimate.confLow') as string) || '置信度低'
+}
 const candidates = ref<Array<{ id: number; name: string; owner_name: string; points?: number }>>([])
 const myAgents = ref<Array<{ id: number; name: string; agent_type: string }>>([])
 const myPublishedSkills = ref<Array<{ id: number; name: string; skill_token: string }>>([])
@@ -1232,6 +1504,11 @@ const isAdmin = ref(false)
 const confirmLoading = ref<number | null>(null)
 const extendVerificationLoading = ref<number | null>(null)
 const rejectLoading = ref<number | null>(null)
+const cancelLoading = ref<number | null>(null)
+const recommendCandidates = ref<api.RecommendedCandidate[]>([])
+const recommendLoading = ref(false)
+const recommendLoaded = ref(false)
+const inviteLoading = ref<number | null>(null)
 const rejectTaskId = ref<number | null>(null)
 const rejectReason = ref('')
 const rejectReasonTemplates = [
@@ -1616,6 +1893,24 @@ function taskCategoryLabel(cat: string) {
   return t(categoryLabels[cat] || cat)
 }
 
+/** 任务分类 → 社区话题 skill_tag（与后端 normalize_skill_tag 对齐） */
+function taskCategoryToCommunitySkillTag(cat: string | undefined | null): string | undefined {
+  if (!cat) return undefined
+  if (cat === 'other') return 'general'
+  const allowed = new Set(['development', 'design', 'research', 'writing', 'data', 'general'])
+  if (allowed.has(cat)) return cat
+  return 'general'
+}
+
+const communityDiscussLink = computed(() => {
+  const task = selectedTaskDetail.value
+  if (!task) return '/community'
+  const q: Record<string, string> = { task_id: String(task.id) }
+  const skill = taskCategoryToCommunitySkillTag(task.category)
+  if (skill) q.skill_tag = skill
+  return { path: '/community', query: q }
+})
+
 function taskStatusPillClass(status: string): string {
   const s = (status || '').replace(/-/g, '_')
   if (['open', 'completed', 'pending_verification', 'rejected', 'in_progress', 'disputed'].includes(s)) {
@@ -1634,6 +1929,21 @@ function verificationCheckClass(c: unknown): string {
   if (st === 'fail' || st === 'warn') return 'verification-chain-li verification-chain-li--warn'
   return 'verification-chain-li'
 }
+
+const verificationStats = computed(() => {
+  const checks = (verificationChainData.value?.sandbox?.checks || []) as PreflightCheckRow[]
+  const total = checks.length
+  let blockers = 0
+  let warn = 0
+  for (const c of checks) {
+    const st = String(c?.status || '').toLowerCase()
+    const sev = String(c?.severity || '').toLowerCase()
+    if (st === 'fail' && sev === 'blocker') blockers += 1
+    else if (st === 'fail' || st === 'warn') warn += 1
+  }
+  const passed = Math.max(0, total - blockers - warn)
+  return { total, blockers, warn, passed }
+})
 
 function crossVerificationRecordLines(rec: unknown): string[] {
   if (rec == null || typeof rec !== 'object') return []
@@ -1735,6 +2045,13 @@ const commentKind = ref<'message' | 'status_update'>('message')
 const commentAgentId = ref('')
 const skillProgress = ref<api.SkillNode[]>([])
 
+function reloadSelectedTask() {
+  if (!selectedTaskDetail.value) return
+  api.getTaskDetail(selectedTaskDetail.value.id).then((res) => {
+    selectedTaskDetail.value = res.data as TaskListItem
+  }).catch(() => {})
+}
+
 function openTaskDetail(task: TaskListItem) {
   selectedTaskDetail.value = { ...task }
   detailLoading.value = true
@@ -1748,6 +2065,8 @@ function openTaskDetail(task: TaskListItem) {
   workflowEdges.value = []
   commentKind.value = 'message'
   commentAgentId.value = ''
+  recommendCandidates.value = []
+  recommendLoaded.value = false
   api.getTaskDetail(task.id).then((res) => {
     selectedTaskDetail.value = res.data as TaskListItem
     const detail = res.data as TaskListItem
@@ -1805,6 +2124,30 @@ function applyWorkflowPayload(data: {
     }
   }
 }
+
+const workflowBlockedTaskHints = computed(() => {
+  if (workflowPreviewReady.value || !workflowPreviewBlocked.value.length) return []
+  const all = [
+    ...tasks.value,
+    ...myTasks.value,
+    ...publishedTasks.value,
+    ...disputeMineTasks.value,
+    ...disputePublishedTasks.value,
+  ]
+  const map = new Map<number, TaskListItem>()
+  for (const t of all) {
+    if (t && typeof t.id === 'number' && !map.has(t.id)) map.set(t.id, t)
+  }
+  if (selectedTaskDetail.value && !map.has(selectedTaskDetail.value.id)) {
+    map.set(selectedTaskDetail.value.id, selectedTaskDetail.value)
+  }
+  return workflowPreviewBlocked.value.map((id) => {
+    const hit = map.get(id)
+    const title = hit?.title ? `${hit.title}` : `#${id}`
+    const status = hit?.status ? ` (${t('status.' + hit.status) || hit.status})` : ''
+    return `${title}${status}`
+  })
+})
 
 function loadWorkflowPreview(taskId: number) {
   if (!auth.isLoggedIn) return
@@ -2189,6 +2532,38 @@ function doPublish() {
     }
     escrow_milestones = rows
   }
+  let auctionPayload: { enabled: boolean; min_reward?: number; max_reward?: number; deadline?: string | null; auto_pick?: 'none' | 'lowest_price' } | undefined
+  if (reward > 0 && publishForm.auction_enabled) {
+    if (publishForm.escrow_enabled) {
+      publishError.value = t('auction.errorEscrowConflict') || '竞标模式与里程碑托管不可同时启用'
+      publishLoading.value = false
+      return
+    }
+    const minR = Number(publishForm.auction_min_reward) || 0
+    const maxR = Number(publishForm.auction_max_reward) || reward
+    if (!(minR > 0) || !(maxR > 0) || minR > maxR || maxR > reward) {
+      publishError.value = t('auction.errorRange') || '竞标区间无效：要求 0 < 最低 ≤ 最高 ≤ 预算'
+      publishLoading.value = false
+      return
+    }
+    let dl: string | undefined
+    if (publishForm.auction_deadline) {
+      const d = new Date(publishForm.auction_deadline)
+      if (Number.isNaN(d.getTime()) || d.getTime() <= Date.now()) {
+        publishError.value = t('auction.errorDeadline') || '截止时间必须在未来'
+        publishLoading.value = false
+        return
+      }
+      dl = d.toISOString()
+    }
+    auctionPayload = {
+      enabled: true,
+      min_reward: minR,
+      max_reward: maxR,
+      deadline: dl,
+      auto_pick: publishForm.auction_auto_pick,
+    }
+  }
   const skills = publishForm.skills_text ? publishForm.skills_text.split(/[,，]/).map((s) => s.trim()).filter(Boolean) : undefined
   api.publishTask({
     title: publishForm.title.trim(),
@@ -2212,6 +2587,7 @@ function doPublish() {
     escrow_milestones: escrow_milestones,
     verification_hours: reward > 0 ? Math.min(168, Math.max(1, Number(publishForm.verification_hours) || 6)) : undefined,
     collaborative: publishForm.collaborative || undefined,
+    auction: auctionPayload,
   }).then(() => {
     try { localStorage.removeItem(TASK_DRAFT_KEY) } catch {}
     hasTaskDraft.value = false
@@ -2234,6 +2610,11 @@ function doPublish() {
     publishForm.escrow_rows = defaultEscrowRows()
     publishForm.verification_hours = 6
     publishForm.collaborative = false
+    publishForm.auction_enabled = false
+    publishForm.auction_min_reward = null
+    publishForm.auction_max_reward = null
+    publishForm.auction_deadline = ''
+    publishForm.auction_auto_pick = 'lowest_price'
     showSuccessLocal(t('task.publishSuccess'))
     showCreateModal.value = false
     if (auth.isGuestUser || !myAgents.value.length) emit('register-hint')
@@ -2425,6 +2806,60 @@ function doRejectWithReason() {
     loadAccountMe()
     if (selectedTaskDetail.value?.id === taskId) openTaskDetail(selectedTaskDetail.value)
   }).catch(() => {}).finally(() => { rejectLoading.value = null })
+}
+
+async function runInviteAgent(taskId: number, agentId: number) {
+  inviteLoading.value = agentId
+  try {
+    const r = await api.inviteAgentToTask(taskId, agentId)
+    if (selectedTaskDetail.value && selectedTaskDetail.value.id === taskId) {
+      selectedTaskDetail.value.invited_agent_ids = r.data.invited_agent_ids || []
+    }
+    showSuccessLocal(t('task.recommendInviteOk') || '已邀请')
+  } catch (err: any) {
+    const detail = err?.response?.data?.detail || (t('task.recommendInviteFailed') || '邀请失败')
+    showErrorLocal(detail)
+  } finally {
+    inviteLoading.value = null
+  }
+}
+
+async function loadRecommendCandidates(taskId: number) {
+  recommendLoading.value = true
+  try {
+    const r = await api.getRecommendCandidates(taskId, 5)
+    recommendCandidates.value = r.data?.candidates || []
+    recommendLoaded.value = true
+  } catch {
+    recommendCandidates.value = []
+    recommendLoaded.value = true
+  } finally {
+    recommendLoading.value = false
+  }
+}
+
+function runCancelTask(task: TaskListItem) {
+  const confirmMsg = task.reward_points && task.reward_points > 0
+    ? t('task.cancelAndRefundConfirm', { n: task.reward_points }) || `撤单将退还 ${task.reward_points} 任务点，确认撤销？`
+    : t('task.cancelAndRefundConfirmZero') || '确认撤销该任务？'
+  if (!window.confirm(String(confirmMsg))) return
+  cancelLoading.value = task.id
+  api.cancelTask(task.id).then((res) => {
+    const refunded = res.data?.refunded_points ?? 0
+    showSuccessLocal(
+      refunded > 0
+        ? (t('task.cancelAndRefundOk', { n: refunded }) || `已撤单，退还 ${refunded} 任务点`)
+        : (t('task.cancelAndRefundOkZero') || '已撤单'),
+    )
+    loadTasks()
+    loadMyTasks()
+    loadPublishedTasks()
+    loadAccountMe()
+    if (selectedTaskDetail.value?.id === task.id) openTaskDetail(selectedTaskDetail.value)
+  }).catch((err: any) => {
+    const detail = err?.response?.data?.detail || (t('task.cancelAndRefundFailed') || '撤单失败')
+    showErrorLocal(detail)
+  }).finally(() => { cancelLoading.value = null })
 }
 
 function applyPublishAsFromQuery() {
@@ -2702,6 +3137,26 @@ watch(tab, (newTab) => {
 .verification-chain-li--blocker { color: rgba(248, 113, 113, 0.95); }
 .verification-chain-li--warn { color: rgba(251, 191, 36, 0.95); }
 .verification-chain-sev { font-size: 0.75em; opacity: 0.9; }
+.verification-chain-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+.verification-chain-summary--bad {
+  border-left: 3px solid rgba(248, 113, 113, 0.55);
+  padding-left: var(--space-2);
+}
+.verification-chain-chip {
+  font-size: 0.72rem;
+  padding: 0.12rem 0.5rem;
+  border-radius: var(--radius-sm);
+  border: var(--border-hairline);
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.04);
+}
+.verification-chain-chip--pass { color: rgba(134, 239, 172, 0.95); }
+.verification-chain-chip--warn { color: rgba(251, 191, 36, 0.95); }
+.verification-chain-chip--blocker { color: rgba(248, 113, 113, 0.95); }
 .verification-chain-alert {
   margin: var(--space-2) 0 0;
   padding: var(--space-2) var(--space-3);
@@ -2742,6 +3197,11 @@ watch(tab, (newTab) => {
   border-top: var(--border-hairline);
   display: grid;
   gap: var(--space-3);
+}
+.workflow-blocked-hint {
+  margin: 0;
+  font-size: var(--font-caption);
+  color: rgba(251, 191, 36, 0.95);
 }
 .detail-workflow-dag {
   margin-top: var(--space-5);
@@ -3068,6 +3528,14 @@ watch(tab, (newTab) => {
 .completion-links-title { margin: 0 0 0.35rem; font-size: 0.85rem; color: var(--text-secondary); }
 .completion-links ul { margin: 0; padding-left: 1rem; }
 .task-detail-verification-record { margin-top: var(--space-4); padding: var(--space-4); border: var(--border-hairline); border-radius: var(--radius-sm); background: rgba(255,255,255,0.02); }
+.task-detail-recommend { margin-top: var(--space-4); padding: var(--space-4); border: var(--border-hairline); border-radius: var(--radius-md); background: rgba(255,255,255,0.02); }
+.task-detail-recommend__head { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.task-detail-recommend__list { list-style: none; padding: 0; margin: 0.75rem 0 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.task-detail-recommend__item { padding: 0.6rem 0.75rem; border: var(--border-hairline); border-radius: var(--radius-sm); background: rgba(255,255,255,0.01); }
+.task-detail-recommend__main { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; font-weight: 600; }
+.task-detail-recommend__score { font-size: 12px; color: var(--text-secondary); padding: 2px 8px; background: rgba(var(--primary-rgb),0.1); border-radius: 10px; font-weight: 500; }
+.task-detail-recommend__owner { font-size: 12px; color: var(--text-secondary); font-weight: 400; }
+.task-detail-recommend__meta { display: flex; gap: 0.75rem 1rem; flex-wrap: wrap; margin-top: 0.35rem; font-size: 12px; color: var(--text-secondary); }
 .pulse-filter-banner {
   display: flex;
   flex-wrap: wrap;
@@ -3200,6 +3668,15 @@ watch(tab, (newTab) => {
 .task-right-more { padding: 0.25rem 0; margin-top: 0.25rem; }
 
 .detail-section { margin-bottom: var(--space-6); }
+.detail-community-cta {
+  margin-bottom: var(--space-5);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg, 12px);
+  border: 1px solid rgba(167, 139, 250, 0.28);
+  background: rgba(79, 70, 229, 0.08);
+}
+.detail-community-cta__hint { margin: var(--space-2) 0 0; max-width: 42rem; line-height: 1.5; }
+.detail-community-cta__btn { flex-shrink: 0; }
 .detail-desc {
   white-space: pre-wrap;
   word-break: break-word;
@@ -3351,6 +3828,53 @@ watch(tab, (newTab) => {
 .identity-toggle { padding: 0.5rem 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--background-dark); color: var(--text-secondary); font-size: 0.9rem; cursor: pointer; transition: border-color var(--duration-m) var(--ease-apple), background var(--duration-m) var(--ease-apple), color var(--duration-m) var(--ease-apple); }
 .identity-toggle:hover { border-color: var(--primary-color); color: var(--primary-color); }
 .identity-toggle.active { background: rgba(var(--primary-rgb), 0.15); border-color: var(--primary-color); color: var(--primary-color); }
+.intent-step { margin-bottom: 0.5rem; }
+.intent-banner {
+  margin-bottom: 1rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: var(--radius-md);
+  border: 1px dashed rgba(59, 130, 246, 0.4);
+  background: rgba(59, 130, 246, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.intent-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+.intent-llm-toggle { display: flex; align-items: center; gap: 0.35rem; cursor: pointer; }
+.intent-hint { color: #10b981; font-size: 0.8rem; }
+
+.estimate-panel {
+  margin: -0.3rem 0 1rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  background: rgba(16, 185, 129, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.estimate-head { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; flex-wrap: wrap; }
+.estimate-title { font-weight: 600; color: var(--text-primary); }
+.estimate-conf { padding: 1px 6px; border-radius: 6px; font-size: 0.7rem; font-weight: 700; }
+.estimate-conf.conf-high { background: #d1fae5; color: #065f46; }
+.estimate-conf.conf-medium { background: #dbeafe; color: #1e3a8a; }
+.estimate-conf.conf-low { background: #fef3c7; color: #92400e; }
+.estimate-tag { padding: 1px 6px; border-radius: 6px; font-size: 0.7rem; background: rgba(0,0,0,0.08); color: var(--text-secondary); }
+.estimate-tag.sample { background: rgba(16,185,129,0.12); color: #047857; }
+.estimate-rows { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.35rem 0.6rem; font-size: 0.8rem; }
+.estimate-cell { display: flex; align-items: center; gap: 0.4rem; color: var(--text-secondary); }
+.estimate-cell b { color: var(--text-primary); font-size: 0.9rem; }
+.estimate-cell.main b { color: #047857; font-size: 1rem; }
+.estimate-cell.main { grid-column: span 2; }
+.mono { font-family: ui-monospace, Menlo, Consolas, monospace; }
+
 .form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem 1rem; }
 .form-row-2 .form-group { margin-bottom: 0; }
 @media (max-width: 480px) { .form-row-2 { grid-template-columns: 1fr; } }

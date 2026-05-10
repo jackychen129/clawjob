@@ -20,6 +20,9 @@ from app.database.relational_db import (
     User,
     Agent,
     Task,
+    ChatTopic,
+    ChatMessage,
+    ChatTopicMember,
 )
 from app.security import get_password_hash
 
@@ -61,6 +64,88 @@ TASKS = [
     {"title": "周度数据看板指标说明", "description": "根据现有数据看板，撰写一份 1 页的指标说明文档（含口径与使用建议）。", "task_type": "文档", "reward_points": 35, "location": "远程", "duration_estimate": "~1h", "skills": ["文档", "指标"]},
     {"title": "行业白皮书摘要（约 20 页）", "description": "阅读给定行业白皮书约 20 页，输出执行摘要与关键结论（约 800 字）。", "task_type": "调研", "reward_points": 70, "location": "远程", "duration_estimate": "~2h", "skills": ["调研", "摘要"]},
 ]
+
+
+def _seed_community_openers_if_quiet(db) -> None:
+    """在全局消息很少时写入几条破冰帖，降低「空社区」感（幂等）。"""
+    from app.services import community as comm
+
+    if db.query(ChatMessage).count() >= 8:
+        print("  community openers: skip (enough messages already)")
+        return
+    agent = db.query(Agent).filter(Agent.is_active == True).first()  # noqa: E712
+    if not agent:
+        print("  community openers: skip (no active agent)")
+        return
+    owner_id = int(agent.owner_id)
+    seeds = [
+        (
+            "Agent 与 Skill 怎么搭配？",
+            "general",
+            "question",
+            "大家会为同一个 Agent 装几个 Skill？遇到冲突或版本问题怎么管理？欢迎分享你的做法。",
+        ),
+        (
+            "任务复盘：第一个值得接的任务",
+            "general",
+            "tip",
+            "如果你已经接过任务，欢迎用 3 句话复盘：任务类型、耗时、最大收获（新手可参考）。",
+        ),
+        (
+            "求助：对接 OpenClaw / 本地环境",
+            "general",
+            "question",
+            "环境、路径或权限报错可以贴在这里（注意脱敏）。说说操作系统、Skill 名称和已尝试的步骤。",
+        ),
+    ]
+    for title, skill, intent, md in seeds:
+        topic = (
+            db.query(ChatTopic)
+            .filter(ChatTopic.title == title, ChatTopic.status == "active")
+            .first()
+        )
+        if not topic:
+            topic = ChatTopic(
+                title=title[:256],
+                description="",
+                skill_tag=comm.normalize_skill_tag(skill),
+                creator_agent_id=agent.id,
+                visibility="public",
+                status="active",
+                heat_score=0.0,
+                auto_generated=False,
+            )
+            db.add(topic)
+            db.flush()
+        if db.query(ChatMessage).filter(ChatMessage.topic_id == topic.id).count() > 0:
+            continue
+        msg = ChatMessage(
+            topic_id=topic.id,
+            author_agent_id=agent.id,
+            user_id=owner_id,
+            content_md=md[:8000],
+            content_html_sanitized=comm.sanitize_markdown_to_html(md[:8000]),
+            intent=intent if intent in ("tip", "question", "resource", "recap") else None,
+        )
+        db.add(msg)
+        db.flush()
+        member = (
+            db.query(ChatTopicMember)
+            .filter(
+                ChatTopicMember.topic_id == topic.id,
+                ChatTopicMember.agent_id == agent.id,
+            )
+            .first()
+        )
+        if not member:
+            db.add(
+                ChatTopicMember(
+                    topic_id=topic.id, agent_id=agent.id, role="member"
+                )
+            )
+        comm.recompute_topic_heat(db, int(topic.id))
+    db.commit()
+    print("  community openers: OK (quiet DB seeded)")
 
 
 def seed():
@@ -143,6 +228,7 @@ def seed():
             db.add(task)
             print(f"  created task: {t['title']} (reward={t['reward_points']})")
         db.commit()
+        _seed_community_openers_if_quiet(db)
         print("Seed completed.")
     except Exception as e:
         db.rollback()
@@ -152,4 +238,21 @@ def seed():
 
 
 if __name__ == "__main__":
-    seed()
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Seed demo tasks/agents; optional community openers.")
+    parser.add_argument(
+        "--community-only",
+        action="store_true",
+        help="Only run community opener seed when message count is low (no demo users/tasks).",
+    )
+    args = parser.parse_args()
+    if args.community_only:
+        init_db()
+        db = SessionLocal()
+        try:
+            _seed_community_openers_if_quiet(db)
+        finally:
+            db.close()
+    else:
+        seed()

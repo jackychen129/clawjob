@@ -64,10 +64,27 @@
       <div class="card admin-card">
         <div class="admin-logs-head">
           <h3 class="admin-logs-title">{{ t('admin.circuitBreakersTitle') }}</h3>
-          <Button size="sm" variant="secondary" type="button" :disabled="cbLoading" @click="reloadCircuitBreakers">
-            {{ cbLoading ? '…' : t('admin.circuitRefresh') }}
-          </Button>
+          <div class="admin-cb-actions">
+            <input
+              v-model.trim="cbHostFilter"
+              class="input admin-cb-filter"
+              type="text"
+              :placeholder="t('admin.circuitFilterHost')"
+            />
+            <select v-model="cbStateFilter" class="input select-input admin-cb-filter">
+              <option value="">{{ t('admin.circuitFilterAll') }}</option>
+              <option value="open">open</option>
+              <option value="half_open">half_open</option>
+              <option value="closed">closed</option>
+            </select>
+            <Button size="sm" variant="secondary" type="button" :disabled="cbLoading" @click="reloadCircuitBreakers">
+              {{ cbLoading ? '…' : t('admin.circuitRefresh') }}
+            </Button>
+          </div>
         </div>
+        <p class="hint admin-cb-hint">
+          {{ t('admin.circuitRuntimeHint', { n: cbThreshold, s: cbOpenSeconds }) }}
+        </p>
         <div class="admin-log-table">
           <div class="admin-log-row admin-log-row--head">
             <div>Host</div>
@@ -75,7 +92,7 @@
             <div>Failures</div>
             <div>Open Until</div>
           </div>
-          <div v-for="row in cbRows" :key="row.host" class="admin-log-row">
+          <div v-for="row in filteredCbRows" :key="row.host" class="admin-log-row">
             <div class="admin-log-cat">{{ row.host }}</div>
             <div class="admin-log-level">{{ row.state }}</div>
             <div class="admin-log-level">{{ row.consecutive_failures }}</div>
@@ -89,7 +106,72 @@
               </div>
             </div>
           </div>
-          <p v-if="!cbRows.length && !cbLoading" class="empty">暂无熔断记录</p>
+          <p v-if="!filteredCbRows.length && !cbLoading" class="empty">暂无熔断记录</p>
+        </div>
+        <div class="admin-cb-history">
+          <div class="admin-cb-history__head">
+            <h4 class="admin-cb-history__title">{{ t('admin.circuitOpsHistory') }}</h4>
+            <Button size="sm" variant="ghost" type="button" @click="clearCircuitOpHistory">{{ t('admin.circuitClearHistory') }}</Button>
+          </div>
+          <ul v-if="circuitOpHistory.length" class="admin-cb-history__list">
+            <li v-for="(it, i) in circuitOpHistory" :key="`${it.host}-${it.action}-${i}`" class="admin-cb-history__item mono">
+              {{ it.at }} · {{ it.host }} · {{ it.action }}
+            </li>
+          </ul>
+          <p v-else class="hint">{{ t('admin.circuitHistoryEmpty') }}</p>
+        </div>
+      </div>
+
+      <div class="card admin-card">
+        <div class="admin-logs-head">
+          <h3 class="admin-logs-title">{{ t('admin.communityOpsTitle') }}</h3>
+          <Button
+            size="sm"
+            type="button"
+            variant="secondary"
+            :disabled="communityDispatchLoading"
+            @click="runCommunityDispatch"
+          >
+            {{ communityDispatchLoading ? '…' : t('admin.communityDispatchBtn') }}
+          </Button>
+        </div>
+        <p class="hint">{{ t('admin.communityDispatchHint') }}</p>
+        <p v-if="communityDispatchResult" class="mono admin-dispatch-result">{{ communityDispatchResult }}</p>
+        <p v-if="communityDispatchError" class="error-msg">{{ communityDispatchError }}</p>
+      </div>
+
+      <div class="card admin-card">
+        <div class="admin-logs-head">
+          <h3 class="admin-logs-title">{{ t('admin.clearingTitle') }}</h3>
+          <div class="admin-cb-actions">
+            <Button size="sm" variant="secondary" type="button" :disabled="clearingLoading" @click="reloadClearing">
+              {{ clearingLoading ? '…' : (t('admin.clearingLoad') || '加载中转账户') }}
+            </Button>
+            <Button size="sm" type="button" :disabled="clearingSaving" @click="saveClearing">
+              {{ clearingSaving ? '…' : (t('admin.clearingSave') || '保存中转账户') }}
+            </Button>
+          </div>
+        </div>
+        <p class="hint">{{ t('admin.clearingHint') }}</p>
+        <div class="memory-search-row">
+          <input v-model="platformAdminKey" class="input" type="password" :placeholder="t('admin.clearingAdminKey')" />
+        </div>
+        <div class="memory-search-row">
+          <input v-model="clearingForm.alipay_account" class="input" type="text" :placeholder="t('admin.clearingAlipayAccount')" />
+          <input v-model="clearingForm.alipay_name" class="input" type="text" :placeholder="t('admin.clearingAlipayName')" />
+        </div>
+        <p class="hint">{{ t('admin.clearingBalance') }}：<span class="mono">{{ clearingAccount?.balance ?? 0 }}</span></p>
+        <p v-if="clearingError" class="error-msg">{{ clearingError }}</p>
+        <div class="admin-cb-history">
+          <div class="admin-cb-history__head">
+            <h4 class="admin-cb-history__title">{{ t('admin.clearingRecordsTitle') }}</h4>
+          </div>
+          <ul v-if="clearingRecords.length" class="admin-cb-history__list">
+            <li v-for="r in clearingRecords" :key="r.id" class="admin-cb-history__item mono">
+              {{ r.created_at || '-' }} · +{{ r.amount }} · task#{{ r.task_id ?? '-' }} · {{ r.remark || '-' }}
+            </li>
+          </ul>
+          <p v-else class="hint">{{ t('admin.clearingNoRecords') }}</p>
         </div>
       </div>
 
@@ -197,7 +279,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Button } from '../components/ui/button'
 import { safeT } from '../i18n'
@@ -223,6 +305,34 @@ const resolveLoading = ref<number | null>(null)
 const cbLoading = ref(false)
 const cbRows = ref<Array<{ host: string; state: string; consecutive_failures: number; open_until?: string | null }>>([])
 const cbControlLoading = ref<string | null>(null)
+const cbThreshold = ref(0)
+const cbOpenSeconds = ref(0)
+const cbHostFilter = ref('')
+const cbStateFilter = ref('')
+type CircuitOp = { host: string; action: 'reset' | 'open' | 'half_open' | 'close'; at: string }
+const circuitOpHistory = ref<CircuitOp[]>([])
+const CIRCUIT_OPS_KEY = 'clawjob_admin_circuit_ops'
+const PLATFORM_ADMIN_KEY_SESSION = 'clawjob_platform_admin_key'
+const platformAdminKey = ref('')
+const clearingLoading = ref(false)
+const clearingSaving = ref(false)
+const clearingError = ref('')
+const clearingAccount = ref<api.PlatformClearingAccount | null>(null)
+const clearingForm = ref({ alipay_account: '', alipay_name: '' })
+const clearingRecords = ref<api.PlatformClearingRecord[]>([])
+const communityDispatchLoading = ref(false)
+const communityDispatchResult = ref('')
+const communityDispatchError = ref('')
+
+const filteredCbRows = computed(() => {
+  const hostQ = cbHostFilter.value.toLowerCase()
+  const stateQ = cbStateFilter.value
+  return cbRows.value.filter((r) => {
+    if (hostQ && !String(r.host || '').toLowerCase().includes(hostQ)) return false
+    if (stateQ && String(r.state || '') !== stateQ) return false
+    return true
+  })
+})
 
 function reloadAll() {
   denied.value = false
@@ -237,6 +347,7 @@ function reloadAll() {
   reloadLogs(true)
   reloadDisputes()
   reloadCircuitBreakers()
+  reloadClearing()
 }
 
 function reloadLogs(reset = false) {
@@ -277,22 +388,154 @@ function quickResolve(taskId: number, resolutionType: 'resume' | 'force_confirm'
     .finally(() => { resolveLoading.value = null })
 }
 
+function runCommunityDispatch() {
+  communityDispatchLoading.value = true
+  communityDispatchError.value = ''
+  communityDispatchResult.value = ''
+  api
+    .dispatchCommunityHot(5)
+    .then((res) => {
+      const d = res.data
+      communityDispatchResult.value = `topics=${d.topics} dispatched=${d.dispatched}`
+    })
+    .catch((e: unknown) => {
+      const ax = e as { response?: { data?: { detail?: string } }; message?: string }
+      const detail = ax.response?.data?.detail
+      communityDispatchError.value =
+        typeof detail === 'string' ? detail : ax.message || String(e)
+    })
+    .finally(() => {
+      communityDispatchLoading.value = false
+    })
+}
+
 function reloadCircuitBreakers() {
   cbLoading.value = true
   api.getRuntimeCircuitBreakers()
-    .then((res) => { cbRows.value = res.data.items || [] })
-    .catch(() => { cbRows.value = [] })
+    .then((res) => {
+      cbRows.value = res.data.items || []
+      cbThreshold.value = Number(res.data.threshold || 0)
+      cbOpenSeconds.value = Number(res.data.open_seconds || 0)
+    })
+    .catch(() => {
+      cbRows.value = []
+      cbThreshold.value = 0
+      cbOpenSeconds.value = 0
+    })
     .finally(() => { cbLoading.value = false })
 }
 
+function loadCircuitOpHistory() {
+  try {
+    const raw = localStorage.getItem(CIRCUIT_OPS_KEY)
+    if (!raw) {
+      circuitOpHistory.value = []
+      return
+    }
+    const arr = JSON.parse(raw) as CircuitOp[]
+    circuitOpHistory.value = Array.isArray(arr) ? arr.slice(0, 20) : []
+  } catch {
+    circuitOpHistory.value = []
+  }
+}
+
+function pushCircuitOp(host: string, action: CircuitOp['action']) {
+  const item: CircuitOp = { host, action, at: new Date().toISOString().slice(0, 19).replace('T', ' ') }
+  const next = [item, ...circuitOpHistory.value].slice(0, 20)
+  circuitOpHistory.value = next
+  try {
+    localStorage.setItem(CIRCUIT_OPS_KEY, JSON.stringify(next))
+  } catch {}
+}
+
+function clearCircuitOpHistory() {
+  circuitOpHistory.value = []
+  try { localStorage.removeItem(CIRCUIT_OPS_KEY) } catch {}
+}
+
+function loadPlatformAdminKey() {
+  try {
+    platformAdminKey.value = sessionStorage.getItem(PLATFORM_ADMIN_KEY_SESSION) || ''
+    try { localStorage.removeItem(PLATFORM_ADMIN_KEY_SESSION) } catch {}
+  } catch {
+    platformAdminKey.value = ''
+  }
+}
+
+function persistPlatformAdminKey() {
+  try {
+    const key = platformAdminKey.value.trim()
+    if (key) sessionStorage.setItem(PLATFORM_ADMIN_KEY_SESSION, key)
+  } catch {}
+}
+
+function reloadClearing() {
+  const k = platformAdminKey.value.trim()
+  if (!k) {
+    clearingError.value = t('admin.clearingNeedKey') || '请先填写 X-Platform-Admin-Key'
+    return
+  }
+  persistPlatformAdminKey()
+  clearingLoading.value = true
+  clearingError.value = ''
+  Promise.all([
+    api.getPlatformClearingAccount(k),
+    api.getPlatformClearingRecords(k, { skip: 0, limit: 20 }),
+  ])
+    .then(([accRes, recRes]) => {
+      clearingAccount.value = accRes.data
+      clearingForm.value.alipay_account = accRes.data.alipay_account || ''
+      clearingForm.value.alipay_name = accRes.data.alipay_name || ''
+      clearingRecords.value = recRes.data.records || []
+    })
+    .catch((e: any) => {
+      const detail = e?.response?.data?.detail
+      clearingError.value = detail || String(e)
+    })
+    .finally(() => { clearingLoading.value = false })
+}
+
+function saveClearing() {
+  const k = platformAdminKey.value.trim()
+  if (!k) {
+    clearingError.value = t('admin.clearingNeedKey') || '请先填写 X-Platform-Admin-Key'
+    return
+  }
+  persistPlatformAdminKey()
+  clearingSaving.value = true
+  clearingError.value = ''
+  api.updatePlatformClearingAccount(k, {
+    alipay_account: clearingForm.value.alipay_account,
+    alipay_name: clearingForm.value.alipay_name,
+  })
+    .then((res) => {
+      clearingAccount.value = res.data
+      reloadClearing()
+    })
+    .catch((e: any) => {
+      const detail = e?.response?.data?.detail
+      clearingError.value = detail || String(e)
+    })
+    .finally(() => { clearingSaving.value = false })
+}
+
 function controlBreaker(host: string, action: 'reset' | 'open' | 'half_open' | 'close') {
+  if (action === 'open') {
+    const ok = window.confirm(t('admin.circuitOpenConfirm') || '确认强制打开熔断？')
+    if (!ok) return
+  }
   cbControlLoading.value = host
   api.controlRuntimeCircuitBreaker({ host, action })
-    .then(() => { reloadCircuitBreakers() })
+    .then(() => {
+      pushCircuitOp(host, action)
+      reloadCircuitBreakers()
+    })
     .finally(() => { cbControlLoading.value = null })
 }
 
 onMounted(() => {
+  loadPlatformAdminKey()
+  loadCircuitOpHistory()
   reloadAll()
 })
 </script>
@@ -333,6 +576,9 @@ onMounted(() => {
 .admin-logs-title { margin: 0; font-size: var(--font-section-title); font-weight: 650; letter-spacing: var(--tracking-normal); color: var(--text-primary); }
 .admin-logs-filters { display: flex; gap: var(--space-2); flex-wrap: wrap; }
 .admin-filter { min-width: 10rem; }
+.admin-cb-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; }
+.admin-cb-filter { min-width: 10rem; }
+.admin-cb-hint { margin: 0 0 var(--space-2); font-size: var(--font-caption); color: var(--text-secondary); }
 
 .admin-log-table { width: 100%; }
 .admin-log-row { display: grid; grid-template-columns: 11rem 5rem 7rem 1fr; gap: var(--space-3); padding: var(--space-3) 0; border-bottom: var(--border-hairline); }
@@ -352,6 +598,11 @@ onMounted(() => {
 .admin-page-meta { color: var(--text-secondary); font-size: var(--font-caption); }
 .admin-dispute-row { grid-template-columns: 1.2fr 6rem 1.2fr 14rem; }
 .admin-dispute-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.admin-cb-history { margin-top: var(--space-4); border-top: var(--border-hairline); padding-top: var(--space-3); }
+.admin-cb-history__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.admin-cb-history__title { margin: 0; font-size: var(--font-caption); color: var(--text-secondary); }
+.admin-cb-history__list { margin: var(--space-2) 0 0; padding-left: 1rem; color: var(--text-secondary); }
+.admin-cb-history__item { font-size: 0.75rem; margin-bottom: 0.2rem; }
 
 @media (max-width: 900px) {
   .admin-log-row { grid-template-columns: 9rem 4.5rem 6rem 1fr; }

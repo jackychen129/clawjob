@@ -21,6 +21,14 @@ from app.database.relational_db import (
     UserApiCredential,
 )
 from app.security import get_current_user, SECRET_KEY
+from app.services.payment_methods import (
+    PAYMENT_METHOD_SPECS,
+    build_order_instrument,
+    instructions_from_order,
+    is_supported,
+    list_public_catalog,
+    validate_amount,
+)
 import base64
 
 router = APIRouter(prefix="/account", tags=["account"])
@@ -297,6 +305,37 @@ def get_me(
 
 
 # NOTE: translated comment in English.
+@router.get("/publish-fee-estimate")
+def estimate_publish_fee(
+    reward_points: int = 0,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """发布任务前的费用预估：奖励点、平台佣金、执行方到手、发布方余额剩余。
+
+    用于前端发布页在用户输入奖励点时实时预估，保持前后端算法一致（运行时读取平台佣金比例）。
+    """
+    from app.main import _compute_publish_fee, MAX_TASK_REWARD_POINTS
+
+    rp = max(0, int(reward_points or 0))
+    if rp > MAX_TASK_REWARD_POINTS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"单任务奖励点数不能超过 {MAX_TASK_REWARD_POINTS}",
+        )
+    fee = _compute_publish_fee(rp)
+    uid = int(current_user["user_id"])
+    user = db.query(User).filter(User.id == uid).first()
+    credits = int(getattr(user, "credits", 0) or 0) if user else 0
+    remaining = credits - rp
+    return {
+        **fee,
+        "publisher_credits": credits,
+        "publisher_credits_after": remaining,
+        "sufficient": remaining >= 0,
+    }
+
+
 @router.get("/balance")
 def get_balance(
     db: Session = Depends(get_db),
@@ -352,21 +391,34 @@ def recharge(
     if body.amount <= 0 or body.amount > 1000000:
         raise HTTPException(status_code=400, detail="充值数量需在 1～1000000 之间")
     uid = int(current_user["user_id"])
-    user = db.query(User).filter(User.id == uid).first()
+    try:
+        user = db.query(User).filter(User.id == uid).with_for_update().first()
+    except Exception:
+        user = db.query(User).filter(User.id == uid).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
-    credits = getattr(user, "credits", 0) or 0
-    user.credits = credits + body.amount
+    credits = int(getattr(user, "credits", 0) or 0)
+    user.credits = credits + int(body.amount)
     tx = CreditTransaction(
         user_id=uid,
-        amount=body.amount,
+        amount=int(body.amount),
         type="recharge",
         remark=f"充值 +{body.amount} 任务点",
     )
     db.add(tx)
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="充值失败，请稍后重试")
     db.refresh(user)
     return {"credits": user.credits, "message": f"充值成功，当前余额 {user.credits}"}
+
+
+@router.get("/recharge/methods")
+def recharge_methods_catalog():
+    """支付渠道目录：供前端渲染充值面板 / 绑卡页面。"""
+    return {"methods": list_public_catalog()}
 
 
 # NOTE: translated comment in English.
@@ -376,38 +428,38 @@ def create_recharge_order(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    """创建充值订单，按支付方式返回支付链接/二维码/比特币地址（生产环境对接真实网关）"""
+    """创建充值订单，按支付渠道返回支付指引（URL / 二维码 / 银行账号 / 加密地址等）。"""
     t = (body.payment_method_type or "").strip().lower()
-    if t not in ("alipay", "credit_card", "bitcoin"):
-        raise HTTPException(status_code=400, detail="payment_method_type 须为 alipay / credit_card / bitcoin")
-    if body.amount <= 0 or body.amount > 1000000:
-        raise HTTPException(status_code=400, detail="充值数量需在 1～1000000 之间")
+    if not is_supported(t):
+        supported = ", ".join(sorted(PAYMENT_METHOD_SPECS.keys()))
+        raise HTTPException(status_code=400, detail=f"payment_method_type 须为 {supported}")
+    amount = int(body.amount)
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="充值数量需大于 0")
+    err = validate_amount(t, amount)
+    if err:
+        raise HTTPException(status_code=400, detail=err)
     uid = int(current_user["user_id"])
     user = db.query(User).filter(User.id == uid).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
-    # NOTE: translated comment in English.
-    import uuid
-    gateway_order_id = f"ord_{uuid.uuid4().hex[:16]}"
-    payment_url = payment_qr = btc_address = None
-    if t == "credit_card":
-        payment_url = f"https://pay.example.com/card?order={gateway_order_id}&amount={body.amount}"
-    elif t == "alipay":
-        payment_qr = f"https://qr.alipay.com/demo_{gateway_order_id}_{body.amount}"
-    else:  # bitcoin
-        btc_address = f"bc1q{gateway_order_id[:34]}"
+    inst = build_order_instrument(t, amount)
     order = RechargeOrder(
         user_id=uid,
-        amount=body.amount,
+        amount=amount,
         payment_method_type=t,
         status="pending",
-        gateway_order_id=gateway_order_id,
-        payment_url=payment_url,
-        payment_qr=payment_qr,
-        btc_address=btc_address,
+        gateway_order_id=inst["gateway_order_id"],
+        payment_url=inst["payment_url"],
+        payment_qr=inst["payment_qr"],
+        btc_address=inst["btc_address"],
     )
     db.add(order)
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="创建充值订单失败，请稍后重试")
     db.refresh(order)
     return {
         "order_id": order.id,
@@ -417,7 +469,8 @@ def create_recharge_order(
         "payment_url": order.payment_url,
         "payment_qr": order.payment_qr,
         "btc_address": order.btc_address,
-        "message": "订单已创建，请完成支付后点击「确认到账」或等待网关回调",
+        "instructions": inst["instructions"],
+        "message": "订单已创建，请按指引完成支付后确认到账或等待网关回调",
     }
 
 
@@ -427,32 +480,60 @@ def confirm_recharge(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    """确认充值到账（用户点击「已支付」或支付网关 webhook 回调）；仅待支付订单可确认"""
+    """确认充值到账（用户点击「已支付」或支付网关 webhook 回调）。
+
+    幂等与并发安全：
+    - 对订单与用户行加 FOR UPDATE，避免并发确认双倍加款；
+    - 若订单已是 paid，直接返回当前状态（不再加款）。
+    """
     uid = int(current_user["user_id"])
-    order = db.query(RechargeOrder).filter(
-        RechargeOrder.id == body.order_id,
-        RechargeOrder.user_id == uid,
-    ).first()
+    try:
+        order = (
+            db.query(RechargeOrder)
+            .filter(RechargeOrder.id == body.order_id, RechargeOrder.user_id == uid)
+            .with_for_update()
+            .first()
+        )
+    except Exception:
+        order = (
+            db.query(RechargeOrder)
+            .filter(RechargeOrder.id == body.order_id, RechargeOrder.user_id == uid)
+            .first()
+        )
     if not order:
         raise HTTPException(status_code=404, detail="订单不存在")
-    if order.status != "pending":
-        raise HTTPException(status_code=400, detail=f"订单状态为 {order.status}，无法确认")
-    user = db.query(User).filter(User.id == uid).first()
+    try:
+        user = db.query(User).filter(User.id == uid).with_for_update().first()
+    except Exception:
+        user = db.query(User).filter(User.id == uid).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
+    if order.status == "paid":
+        return {
+            "credits": getattr(user, "credits", 0) or 0,
+            "message": "订单已到账（幂等）",
+            "order_id": order.id,
+            "idempotent": True,
+        }
+    if order.status != "pending":
+        raise HTTPException(status_code=400, detail=f"订单状态为 {order.status}，无法确认")
     order.status = "paid"
     order.paid_at = datetime.utcnow()
-    credits = getattr(user, "credits", 0) or 0
-    user.credits = credits + order.amount
+    credits = int(getattr(user, "credits", 0) or 0)
+    user.credits = credits + int(order.amount or 0)
     tx = CreditTransaction(
         user_id=uid,
-        amount=order.amount,
+        amount=int(order.amount or 0),
         type="recharge",
         ref_id=order.id,
         remark=f"充值订单 #{order.id}（{order.payment_method_type}）到账 +{order.amount} 任务点",
     )
     db.add(tx)
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="充值到账失败，请稍后重试")
     db.refresh(user)
     return {"credits": user.credits, "message": "充值已到账", "order_id": order.id}
 
@@ -484,6 +565,7 @@ def list_recharge_orders(
                 "payment_url": r.payment_url,
                 "payment_qr": r.payment_qr,
                 "btc_address": r.btc_address,
+                "instructions": instructions_from_order(r),
                 "created_at": r.created_at.isoformat() if r.created_at else None,
                 "paid_at": r.paid_at.isoformat() if r.paid_at else None,
             }
@@ -525,19 +607,26 @@ def bind_payment_method(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    """绑定支付方式（仅保存脱敏展示信息，不存储真实卡号/账号）"""
-    t = body.type.strip().lower()
-    if t not in ("alipay", "credit_card", "bitcoin"):
-        raise HTTPException(status_code=400, detail="type 须为 alipay / credit_card / bitcoin")
+    """绑定支付方式（仅保存脱敏展示信息，不存储真实卡号/账号）。"""
+    t = (body.type or "").strip().lower()
+    if not is_supported(t):
+        supported = ", ".join(sorted(PAYMENT_METHOD_SPECS.keys()))
+        raise HTTPException(status_code=400, detail=f"type 须为 {supported}")
     uid = int(current_user["user_id"])
+    spec = PAYMENT_METHOD_SPECS[t]
+    masked = (body.masked_info or "").strip() or f"{spec.display_name} ***"
     pm = PaymentMethod(
         user_id=uid,
         type=t,
-        masked_info=body.masked_info.strip() or f"{t} ***",
+        masked_info=masked[:200],
         is_default=False,
     )
     db.add(pm)
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="绑定支付方式失败，请稍后重试")
     db.refresh(pm)
     return {"id": pm.id, "type": pm.type, "masked_info": pm.masked_info}
 

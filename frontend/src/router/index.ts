@@ -1,22 +1,5 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import { defineComponent, h } from 'vue'
-import SkillPage from '../views/SkillPage.vue'
-import DocsPage from '../views/DocsPage.vue'
-import ManualPage from '../views/ManualPage.vue'
-import TaskManageView from '../views/TaskManageView.vue'
-import AgentManageView from '../views/AgentManageView.vue'
-import AccountPage from '../views/AccountPage.vue'
-import OpenClawQuickstartPage from '../views/OpenClawQuickstartPage.vue'
-import DashboardView from '../views/DashboardView.vue'
-import LeaderboardView from '../views/LeaderboardView.vue'
-import CandidatesView from '../views/CandidatesView.vue'
-import MarketplaceView from '../views/MarketplaceView.vue'
-import PlaybookView from '../views/PlaybookView.vue'
-import InboxView from '../views/InboxView.vue'
-import ForumView from '../views/ForumView.vue'
-import AdminView from '../views/AdminView.vue'
-import AgentLabView from '../views/AgentLabView.vue'
-import A2aConsoleView from '../views/A2aConsoleView.vue'
 
 const Home = defineComponent({
   render: () => h('div', { class: 'home' }, 'Agent Arena'),
@@ -35,27 +18,32 @@ const router = createRouter({
   },
   routes: [
     { path: '/', name: 'Home', component: Home },
-    { path: '/dashboard', name: 'Dashboard', component: DashboardView },
-    { path: '/leaderboard', name: 'Leaderboard', component: LeaderboardView },
-    { path: '/candidates', name: 'Candidates', component: CandidatesView },
-    { path: '/marketplace', name: 'Marketplace', component: MarketplaceView },
-    { path: '/playbook', name: 'Playbook', component: PlaybookView },
+    { path: '/dashboard', name: 'Dashboard', component: () => import('../views/DashboardView.vue') },
+    { path: '/leaderboard', name: 'Leaderboard', component: () => import('../views/LeaderboardView.vue') },
+    { path: '/candidates', name: 'Candidates', component: () => import('../views/CandidatesView.vue') },
+    { path: '/marketplace', name: 'Marketplace', component: () => import('../views/MarketplaceView.vue') },
+    { path: '/playbook', name: 'Playbook', component: () => import('../views/PlaybookView.vue') },
     { path: '/rental', name: 'AgentRental', redirect: '/marketplace' },
-    { path: '/tasks', name: 'TaskManage', component: TaskManageView },
-    { path: '/forum', name: 'Forum', component: ForumView },
-    { path: '/agents', name: 'AgentManage', component: AgentManageView },
-    { path: '/skill', name: 'Skill', component: SkillPage },
+    { path: '/tasks', name: 'TaskManage', component: () => import('../views/TaskManageView.vue') },
+    { path: '/forum', name: 'Forum', component: () => import('../views/ForumView.vue') },
+    { path: '/community', name: 'Community', component: () => import('../views/CommunityChatView.vue') },
+    { path: '/agents', name: 'AgentManage', component: () => import('../views/AgentManageView.vue') },
+    { path: '/agents/:id', name: 'AgentProfile', component: () => import('../views/AgentProfileView.vue') },
+    { path: '/u/:username', name: 'PublicUser', component: () => import('../views/PublicUserView.vue') },
+    { path: '/@:username', name: 'PublicUserAt', component: () => import('../views/PublicUserView.vue') },
+    { path: '/studio', name: 'AgentStudio', component: () => import('../views/AgentStudioView.vue') },
+    { path: '/skill', name: 'Skill', component: () => import('../views/SkillPage.vue') },
     // NOTE: translated comment in English.
-    { path: '/docs/manual', name: 'DocsManual', component: ManualPage },
-    { path: '/docs/openclaw-quickstart', name: 'DocsOpenClawQuickstart', component: OpenClawQuickstartPage },
-    { path: '/docs', name: 'Docs', component: DocsPage },
+    { path: '/docs/manual', name: 'DocsManual', component: () => import('../views/ManualPage.vue') },
+    { path: '/docs/openclaw-quickstart', name: 'DocsOpenClawQuickstart', component: () => import('../views/OpenClawQuickstartPage.vue') },
+    { path: '/docs', name: 'Docs', component: () => import('../views/DocsPage.vue') },
     // NOTE: translated comment in English.
     { path: '/docs/', name: 'DocsSlash', redirect: { name: 'Docs' } },
-    { path: '/inbox', name: 'Inbox', component: InboxView },
-    { path: '/account', name: 'Account', component: AccountPage },
-    { path: '/admin', name: 'Admin', component: AdminView },
-    { path: '/agent-lab', name: 'AgentLab', component: AgentLabView },
-    { path: '/a2a-console', name: 'A2aConsole', component: A2aConsoleView },
+    { path: '/inbox', name: 'Inbox', component: () => import('../views/InboxView.vue') },
+    { path: '/account', name: 'Account', component: () => import('../views/AccountPage.vue') },
+    { path: '/admin', name: 'Admin', component: () => import('../views/AdminView.vue') },
+    { path: '/agent-lab', name: 'AgentLab', component: () => import('../views/AgentLabView.vue') },
+    { path: '/a2a-console', name: 'A2aConsole', component: () => import('../views/A2aConsoleView.vue') },
     { path: '/auth/callback', name: 'AuthCallback', component: AuthCallback },
   ],
 })

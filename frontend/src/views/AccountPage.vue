@@ -18,6 +18,117 @@
         <h3>{{ t('account.balance') }}</h3>
         <p><strong>{{ credits }}</strong> {{ t('account.points') }}</p>
       </section>
+
+      <section class="card card-content referral-panel">
+        <h3>{{ t('account.referralTitle') }}</h3>
+        <p class="hint">{{ t('account.referralHint') }}</p>
+        <div v-if="referralLoading" class="account-skel">{{ t('common.loading') }}</div>
+        <template v-else-if="referral">
+          <div class="referral-code-row">
+            <span class="referral-code mono">{{ referral.referral_code }}</span>
+            <Button type="button" size="sm" variant="secondary" @click="copyReferralCode">
+              {{ referralCopyDone === 'code' ? t('account.tokenCopied') : t('account.referralCopyCode') }}
+            </Button>
+            <Button type="button" size="sm" variant="secondary" @click="copyReferralLink">
+              {{ referralCopyDone === 'link' ? t('account.tokenCopied') : t('account.referralCopyLink') }}
+            </Button>
+          </div>
+          <div class="referral-stats">
+            <div><span class="hint">{{ t('account.referralInvited') }}</span><strong>{{ referral.invited_count }}</strong></div>
+            <div><span class="hint">{{ t('account.referralRewarded') }}</span><strong>{{ referral.rewarded_count }}</strong></div>
+            <div><span class="hint">{{ t('account.referralBonusEarned') }}</span><strong>{{ referral.total_bonus_earned }}</strong></div>
+            <div><span class="hint">{{ t('account.referralBonusSpec', { r: referral.referrer_bonus_points, i: referral.invitee_bonus_points }) }}</span></div>
+          </div>
+          <div v-if="referralRecords.length" class="referral-records">
+            <div v-for="rec in referralRecords" :key="rec.invitee_user_id" class="referral-record-row">
+              <div class="referral-record-main">
+                <strong>@{{ rec.invitee_username || ('#' + rec.invitee_user_id) }}</strong>
+                <span v-if="rec.signup_at" class="hint mono">· {{ formatDateTimeLocal(rec.signup_at) }}</span>
+              </div>
+              <span :class="['referral-record-state', rec.rewarded ? 'is-ok' : 'is-pending']">
+                {{ rec.rewarded ? t('account.referralStateRewarded') : t('account.referralStatePending') }}
+              </span>
+            </div>
+          </div>
+          <p v-else class="hint">{{ t('account.referralRecordsEmpty') }}</p>
+        </template>
+        <p v-else class="hint">{{ t('common.loadFailed') || t('common.retry') }}</p>
+      </section>
+
+      <section class="card card-content recharge-panel">
+        <h3>{{ t('account.rechargeTitle') }}</h3>
+        <p class="hint">{{ t('account.rechargeHint') }}</p>
+        <div class="recharge-form">
+          <label class="form-label" for="recharge-amount">{{ t('account.rechargeAmount') }}</label>
+          <input id="recharge-amount" v-model.number="rechargeAmount" class="input" type="number" min="1" />
+        </div>
+        <div class="recharge-methods" role="radiogroup">
+          <button
+            v-for="m in rechargeMethods"
+            :key="m.key"
+            type="button"
+            class="recharge-method"
+            :class="{ 'recharge-method--active': selectedMethod === m.key, 'recharge-method--disabled': rechargeAmount > 0 && (rechargeAmount < m.min_amount || rechargeAmount > m.max_amount) }"
+            :aria-pressed="selectedMethod === m.key"
+            @click="selectedMethod = m.key"
+          >
+            <span class="recharge-method__name">{{ m.display_name }}</span>
+            <span class="recharge-method__meta mono">
+              {{ t('account.rechargeMethodFee', { p: (m.fee_rate * 100).toFixed(2) }) }}
+              · {{ m.min_amount }}–{{ m.max_amount }}
+            </span>
+            <span v-if="m.description" class="recharge-method__desc">{{ m.description }}</span>
+            <span v-if="m.tags?.length" class="recharge-method__tags">
+              <span v-for="tag in m.tags" :key="tag" class="recharge-method__tag">{{ tag }}</span>
+            </span>
+          </button>
+        </div>
+        <div class="account-actions">
+          <Button type="button" :disabled="rechargeBusy || !rechargeAmount || !selectedMethod" @click="createRechargeOrderNow">
+            {{ rechargeBusy ? '…' : t('account.rechargeCreateOrder') }}
+          </Button>
+          <Button v-if="latestOrder" type="button" variant="secondary" :disabled="rechargeBusy" @click="confirmRechargeOrderNow">
+            {{ t('account.rechargeConfirm') }}
+          </Button>
+        </div>
+        <p v-if="rechargeError" class="error-msg">{{ rechargeError }}</p>
+        <div v-if="latestOrder" class="recharge-result">
+          <p class="hint">
+            {{ t('account.rechargeOrderId') }}：<span class="mono">#{{ latestOrder.order_id }}</span>
+            · {{ latestOrder.status }}
+            · {{ t('account.rechargeOrderAmount') }}: <strong>{{ latestOrder.amount }}</strong>
+          </p>
+          <div v-if="latestOrder.instructions" class="recharge-instructions">
+            <template v-if="latestOrder.instructions.kind === 'url' && latestOrder.instructions.url">
+              <a :href="latestOrder.instructions.url" target="_blank" rel="noopener" class="recharge-link">
+                {{ t('account.rechargeOpenPayPage') }} ↗
+              </a>
+            </template>
+            <template v-else-if="latestOrder.instructions.kind === 'qr' && latestOrder.instructions.qr_payload">
+              <p class="hint">{{ latestOrder.instructions.note || t('account.rechargeScanQr') }}</p>
+              <pre class="mono recharge-code">{{ latestOrder.instructions.qr_payload }}</pre>
+            </template>
+            <template v-else-if="latestOrder.instructions.kind === 'bank' && latestOrder.instructions.bank">
+              <p class="hint">{{ latestOrder.instructions.note }}</p>
+              <div class="recharge-bank mono">
+                <div>{{ latestOrder.instructions.bank.bank_name }}</div>
+                <div>{{ latestOrder.instructions.bank.account_name }}</div>
+                <div>{{ latestOrder.instructions.bank.account_number }}</div>
+                <div v-if="latestOrder.instructions.bank.swift_code">SWIFT: {{ latestOrder.instructions.bank.swift_code }}</div>
+                <div>{{ t('account.rechargeBankMemo') }}: <strong>{{ latestOrder.instructions.bank.memo }}</strong></div>
+              </div>
+            </template>
+            <template v-else-if="latestOrder.instructions.kind === 'crypto' && latestOrder.instructions.crypto">
+              <p class="hint">{{ latestOrder.instructions.note }}</p>
+              <div class="recharge-crypto mono">
+                <div v-if="latestOrder.instructions.crypto.network">{{ t('account.rechargeCryptoNetwork') }}: {{ latestOrder.instructions.crypto.network }}</div>
+                <div>{{ t('account.rechargeCryptoAddress') }}: {{ latestOrder.instructions.crypto.address }}</div>
+                <div v-if="latestOrder.instructions.crypto.memo">{{ t('account.rechargeBankMemo') }}: {{ latestOrder.instructions.crypto.memo }}</div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </section>
       <section class="card card-content">
         <h3>{{ t('account.apiKeysTitle') || 'API 密钥托管' }}</h3>
         <p class="hint">{{ t('account.apiKeysHint') || '用于托管第三方模型/服务 API Key，仅展示脱敏值。' }}</p>
@@ -53,6 +164,13 @@
         </ul>
         <p v-else class="hint">{{ t('account.skillTreeEmpty') || '暂无技能数据；多接取并完成带技能标签的任务后会在此累计。' }}</p>
         <p v-if="skillTreeTotal > 0" class="hint">{{ t('account.skillTreeTotal', { n: skillTreeTotal }) || `共 ${skillTreeTotal} 项技能` }}</p>
+        <p v-if="skillTreeDecayMaxRatio > 0" class="hint">
+          {{ t('account.skillTreeDecayHint', { p: Math.round(skillTreeDecayMaxRatio * 100) }) || `检测到技能折旧约 ${Math.round(skillTreeDecayMaxRatio * 100)}%` }}
+          <span v-if="skillTreeLastActiveAt" class="mono"> · {{ formatDateTimeLocal(skillTreeLastActiveAt) }}</span>
+        </p>
+        <p v-if="skillTreeDecayIdleDays > 0" class="hint">
+          {{ t('account.skillTreeDecayPolicy', { d: skillTreeDecayIdleDays, w: Math.round(skillTreeDecayWeeklyRatio * 100), m: Math.round(skillTreeDecayPolicyMaxRatio * 100) }) || `折旧策略：空闲 ${skillTreeDecayIdleDays} 天后每周 -${Math.round(skillTreeDecayWeeklyRatio * 100)}%，上限 ${Math.round(skillTreeDecayPolicyMaxRatio * 100)}%` }}
+        </p>
       </section>
 
       <section class="card card-content account-dev">
@@ -96,11 +214,34 @@
               </label>
             </div>
             <div class="memory-search-row">
+              <label class="dev-agent-tool-label">
+                <span class="dev-agent-tool-label-text">{{ t('account.devAgentToolPick') }}</span>
+                <select v-model="useToolPresetName" class="input dev-agent-select" @change="applyToolPreset">
+                  <option value="">{{ t('account.devAgentToolPickPlaceholder') }}</option>
+                  <option v-for="n in availableToolNames" :key="n" :value="n">{{ n }}</option>
+                </select>
+              </label>
+            </div>
+            <div class="memory-search-row">
               <input v-model="useToolName" class="input" type="text" :placeholder="t('account.devAgentToolName')" />
             </div>
             <textarea v-model="useToolParamsRaw" class="input memory-store-textarea" rows="4" :placeholder="t('account.devAgentToolParams')" />
             <div class="memory-search-row">
               <Button type="button" size="sm" :disabled="useToolLoading" @click="callAgentUseToolNow">{{ t('account.devAgentToolSubmit') }}</Button>
+            </div>
+            <div v-if="useToolHistory.length" class="dev-tool-history">
+              <p class="hint dev-tool-history__title">{{ t('account.devAgentToolHistory') }}</p>
+              <div class="dev-tool-history__list">
+                <button
+                  v-for="(h, hi) in useToolHistory"
+                  :key="`${h.agent_id}-${h.tool_name}-${hi}`"
+                  type="button"
+                  class="dev-tool-history__item mono"
+                  @click="restoreUseToolHistory(h)"
+                >
+                  #{{ h.agent_id }} · {{ h.tool_name }}
+                </button>
+              </div>
             </div>
             <details v-if="useToolJson" class="dev-json-details" open>
               <summary>{{ t('account.devAgentToolResponse') }}</summary>
@@ -170,6 +311,11 @@ const apiKeyForm = ref({ provider: 'openai', label: '', secret: '' })
 const skillNodes = ref<SkillNode[]>([])
 const skillTreeTotal = ref(0)
 const skillTreeLoading = ref(false)
+const skillTreeDecayMaxRatio = ref(0)
+const skillTreeLastActiveAt = ref('')
+const skillTreeDecayIdleDays = ref(0)
+const skillTreeDecayWeeklyRatio = ref(0)
+const skillTreeDecayPolicyMaxRatio = ref(0)
 
 const toolsLoading = ref(false)
 const toolsJson = ref('')
@@ -186,14 +332,129 @@ const memoryIdInput = ref('')
 const memoryByIdLoading = ref(false)
 const memoryByIdJson = ref('')
 
+const referral = ref<api.ReferralSummary | null>(null)
+const referralRecords = ref<api.ReferralRecord[]>([])
+const referralLoading = ref(false)
+const referralCopyDone = ref<'none' | 'code' | 'link'>('none')
+
+function loadReferral() {
+  if (!auth.token) return
+  referralLoading.value = true
+  api.fetchMyReferral().then((res) => {
+    referral.value = res.data
+  }).catch(() => {
+    referral.value = null
+  }).finally(() => {
+    referralLoading.value = false
+  })
+  api.fetchMyReferralRecords({ limit: 20 }).then((res) => {
+    referralRecords.value = res.data.items || []
+  }).catch(() => {
+    referralRecords.value = []
+  })
+}
+
+function copyReferralCode() {
+  if (!referral.value) return
+  navigator.clipboard.writeText(referral.value.referral_code).then(() => {
+    referralCopyDone.value = 'code'
+    setTimeout(() => { referralCopyDone.value = 'none' }, 1500)
+  }).catch(() => {})
+}
+
+function copyReferralLink() {
+  if (!referral.value) return
+  const base = window.location.origin + window.location.pathname
+  const link = referral.value.referral_link || `${base}?ref=${encodeURIComponent(referral.value.referral_code)}`
+  navigator.clipboard.writeText(link).then(() => {
+    referralCopyDone.value = 'link'
+    setTimeout(() => { referralCopyDone.value = 'none' }, 1500)
+  }).catch(() => {})
+}
+
+const rechargeAmount = ref<number>(100)
+const rechargeMethods = ref<api.PaymentMethodSpec[]>([])
+const selectedMethod = ref<string>('')
+const rechargeBusy = ref(false)
+const rechargeError = ref('')
+const latestOrder = ref<api.RechargeOrderResponse | null>(null)
+
+function loadRechargeMethods() {
+  api
+    .getRechargeMethods()
+    .then((res) => {
+      rechargeMethods.value = res.data.methods || []
+      if (!selectedMethod.value && rechargeMethods.value.length) {
+        selectedMethod.value = rechargeMethods.value[0].key
+      }
+    })
+    .catch(() => {
+      rechargeMethods.value = []
+    })
+}
+
+function createRechargeOrderNow() {
+  rechargeError.value = ''
+  const amt = Math.max(1, Math.floor(Number(rechargeAmount.value) || 0))
+  if (!amt || !selectedMethod.value) return
+  const spec = rechargeMethods.value.find((m) => m.key === selectedMethod.value)
+  if (spec && (amt < spec.min_amount || amt > spec.max_amount)) {
+    rechargeError.value = t('account.rechargeOutOfRange', { min: spec.min_amount, max: spec.max_amount })
+    return
+  }
+  rechargeBusy.value = true
+  api
+    .createRechargeOrder({ amount: amt, payment_method_type: selectedMethod.value })
+    .then((res) => {
+      latestOrder.value = res.data
+    })
+    .catch((e: any) => {
+      rechargeError.value = e?.response?.data?.detail || t('account.rechargeCreateFailed')
+    })
+    .finally(() => {
+      rechargeBusy.value = false
+    })
+}
+
+function confirmRechargeOrderNow() {
+  if (!latestOrder.value) return
+  rechargeBusy.value = true
+  rechargeError.value = ''
+  api
+    .confirmRecharge({ order_id: latestOrder.value.order_id })
+    .then((res: any) => {
+      credits.value = res.data?.credits ?? credits.value
+      if (latestOrder.value) latestOrder.value.status = 'paid'
+      emit('credits-updated')
+    })
+    .catch((e: any) => {
+      rechargeError.value = e?.response?.data?.detail || t('account.rechargeConfirmFailed')
+    })
+    .finally(() => {
+      rechargeBusy.value = false
+    })
+}
+
 const myAgents = ref<Array<{ id: number; name: string }>>([])
 const useToolAgentId = ref<number | null>(null)
 const useToolName = ref('search_knowledge_base')
+const useToolPresetName = ref('')
 const useToolParamsRaw = ref('{\n  "query": "test",\n  "top_k": 3\n}')
 const useToolLoading = ref(false)
 const useToolJson = ref('')
+const availableToolNames = ref<string[]>([])
+type UseToolHistoryItem = { agent_id: number; tool_name: string; params: Record<string, unknown> }
+const USE_TOOL_HISTORY_KEY = 'clawjob_use_tool_history'
+const useToolHistory = ref<UseToolHistoryItem[]>([])
 
 const emit = defineEmits<{ (e: 'credits-updated'): void }>()
+
+function formatDateTimeLocal(isoLike: string): string {
+  if (!isoLike) return ''
+  const d = new Date(isoLike)
+  if (Number.isNaN(d.getTime())) return isoLike
+  return d.toLocaleString()
+}
 
 function loadMe() {
   if (!auth.token) return
@@ -250,6 +511,41 @@ function loadMyAgentsForTools() {
     })
 }
 
+function loadUseToolHistory() {
+  try {
+    const raw = localStorage.getItem(USE_TOOL_HISTORY_KEY)
+    if (!raw) {
+      useToolHistory.value = []
+      return
+    }
+    const arr = JSON.parse(raw) as UseToolHistoryItem[]
+    useToolHistory.value = Array.isArray(arr) ? arr.slice(0, 6) : []
+  } catch {
+    useToolHistory.value = []
+  }
+}
+
+function saveUseToolHistory(item: UseToolHistoryItem) {
+  const next = [item, ...useToolHistory.value.filter((h) => !(h.agent_id === item.agent_id && h.tool_name === item.tool_name))]
+  useToolHistory.value = next.slice(0, 6)
+  try {
+    localStorage.setItem(USE_TOOL_HISTORY_KEY, JSON.stringify(useToolHistory.value))
+  } catch {}
+}
+
+function applyToolPreset() {
+  const picked = useToolPresetName.value.trim()
+  if (!picked) return
+  useToolName.value = picked
+}
+
+function restoreUseToolHistory(h: UseToolHistoryItem) {
+  useToolAgentId.value = h.agent_id
+  useToolName.value = h.tool_name
+  useToolPresetName.value = ''
+  useToolParamsRaw.value = JSON.stringify(h.params || {}, null, 2)
+}
+
 function callAgentUseToolNow() {
   const agentId = useToolAgentId.value
   const name = useToolName.value.trim()
@@ -278,6 +574,7 @@ function callAgentUseToolNow() {
   api.postAgentUseTool(agentId, { tool_name: name, params })
     .then((res) => {
       useToolJson.value = JSON.stringify(res.data, null, 2)
+      saveUseToolHistory({ agent_id: agentId, tool_name: name, params })
     })
     .catch((e: unknown) => {
       useToolJson.value = JSON.stringify({ error: String(e) }, null, 2)
@@ -294,10 +591,20 @@ function loadSkillTree() {
     .then((res) => {
       skillNodes.value = res.data?.nodes ?? []
       skillTreeTotal.value = res.data?.total_skills ?? 0
+      skillTreeDecayMaxRatio.value = Number(res.data?.decay?.max_ratio || 0)
+      skillTreeLastActiveAt.value = String(res.data?.decay?.last_active_at || '')
+      skillTreeDecayIdleDays.value = Number(res.data?.decay?.policy?.idle_days || 0)
+      skillTreeDecayWeeklyRatio.value = Number(res.data?.decay?.policy?.weekly_ratio || 0)
+      skillTreeDecayPolicyMaxRatio.value = Number(res.data?.decay?.policy?.max_ratio || 0)
     })
     .catch(() => {
       skillNodes.value = []
       skillTreeTotal.value = 0
+      skillTreeDecayMaxRatio.value = 0
+      skillTreeLastActiveAt.value = ''
+      skillTreeDecayIdleDays.value = 0
+      skillTreeDecayWeeklyRatio.value = 0
+      skillTreeDecayPolicyMaxRatio.value = 0
     })
     .finally(() => {
       skillTreeLoading.value = false
@@ -335,6 +642,12 @@ function loadTools() {
   api.listAgentTools()
     .then((res) => {
       toolsJson.value = JSON.stringify(res.data, null, 2)
+      const data = res.data as any
+      const items = Array.isArray(data) ? data : (Array.isArray(data?.items) ? data.items : [])
+      availableToolNames.value = items
+        .map((x: any) => (x && typeof x.name === 'string' ? x.name : ''))
+        .filter((x: string) => !!x)
+        .slice(0, 100)
     })
     .catch((e: unknown) => {
       toolsJson.value = JSON.stringify({ error: String(e) }, null, 2)
@@ -432,6 +745,10 @@ onMounted(() => {
   loadApiKeys()
   loadSkillTree()
   loadMyAgentsForTools()
+  loadUseToolHistory()
+  loadTools()
+  loadRechargeMethods()
+  loadReferral()
 })
 </script>
 
@@ -440,6 +757,59 @@ onMounted(() => {
 .page-desc { margin: 0 0 var(--space-6); font-size: var(--font-body); color: var(--text-secondary); line-height: var(--line-normal); }
 .card { margin-bottom: var(--space-5); }
 .account-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-3); }
+.recharge-panel { display: grid; gap: var(--space-3); }
+.referral-panel { display: grid; gap: var(--space-3); }
+.referral-code-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.referral-code { padding: 0.25rem 0.6rem; background: rgba(0,0,0,0.25); border-radius: var(--radius-sm); font-size: var(--font-body); letter-spacing: 0.08em; }
+.referral-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--space-2); }
+.referral-stats > div { display: grid; gap: 2px; padding: var(--space-2) var(--space-3); border: var(--border-hairline); border-radius: var(--radius-md); }
+.referral-records { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-2); }
+.referral-record-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); border: var(--border-hairline); border-radius: var(--radius-md); padding: var(--space-2) var(--space-3); font-size: var(--font-caption); }
+.referral-record-state.is-ok { color: rgb(34,197,94); font-weight: 600; }
+.referral-record-state.is-pending { color: var(--text-secondary); }
+.recharge-form { display: grid; gap: var(--space-2); max-width: 18rem; }
+.recharge-methods {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-2);
+}
+.recharge-method {
+  text-align: left;
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.6rem 0.8rem;
+  border: var(--border-hairline);
+  border-radius: var(--radius-md);
+  background: rgba(255,255,255,0.02);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.recharge-method:hover { border-color: var(--primary-color); }
+.recharge-method--active { border-color: var(--primary-color); background: rgba(59,130,246,0.08); }
+.recharge-method--disabled { opacity: 0.5; cursor: not-allowed; }
+.recharge-method__name { font-weight: 600; }
+.recharge-method__meta { font-size: var(--font-caption); color: var(--text-secondary); }
+.recharge-method__desc { font-size: var(--font-caption); color: var(--text-secondary); }
+.recharge-method__tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.recharge-method__tag {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: rgba(34,197,94,0.12);
+  color: rgb(34,197,94);
+}
+.recharge-result { display: grid; gap: var(--space-2); padding: var(--space-3); border: var(--border-hairline); border-radius: var(--radius-md); background: rgba(255,255,255,0.02); }
+.recharge-code, .recharge-bank, .recharge-crypto {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: rgba(0,0,0,0.25);
+  word-break: break-all;
+  white-space: pre-wrap;
+  font-size: var(--font-caption);
+}
+.recharge-link { color: var(--primary-color); font-weight: 500; }
 .hint { color: var(--text-secondary); font-size: var(--font-body); margin: 0; }
 .account-footer-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-2); }
 .api-key-form { display: grid; grid-template-columns: 1fr; gap: var(--space-2); margin-top: var(--space-3); }
@@ -468,6 +838,17 @@ onMounted(() => {
 .dev-agent-tool-label { display: flex; flex-direction: column; gap: var(--space-1); flex: 1; min-width: 200px; }
 .dev-agent-tool-label-text { font-size: var(--font-caption); color: var(--text-secondary); }
 .dev-agent-select { width: 100%; }
+.dev-tool-history { margin-top: var(--space-2); }
+.dev-tool-history__title { margin: 0 0 var(--space-1); font-size: var(--font-caption); }
+.dev-tool-history__list { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.dev-tool-history__item {
+  border: var(--border-hairline);
+  border-radius: var(--radius-sm);
+  padding: 0.15rem 0.45rem;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+}
 .dev-memory-get-hint { margin-top: var(--space-1); font-size: var(--font-caption); }
 .account-json-pre {
   margin-top: var(--space-3); padding: var(--space-3); border-radius: var(--radius-md);

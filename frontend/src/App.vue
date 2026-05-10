@@ -12,79 +12,106 @@
           <p class="header-eyebrow">{{ t('common.heroEyebrow') }}</p>
         </a>
         <nav class="header-nav">
-          <router-link to="/" class="nav-link" :class="{ active: route.path === '/' }">
-            <Home class="nav-icon" aria-hidden="true" />
-            <span>{{ t('common.home') }}</span>
-          </router-link>
-          <router-link to="/playbook" class="nav-link" :class="{ active: route.path === '/playbook' }">
-            <ListChecks class="nav-icon" aria-hidden="true" />
-            <span>{{ t('nav.playbook') }}</span>
-          </router-link>
-          <router-link to="/dashboard" class="nav-link" :class="{ active: route.path === '/dashboard' }">
-            <LayoutGrid class="nav-icon" aria-hidden="true" />
-            <span>{{ t('nav.dashboard') || '实况' }}</span>
-          </router-link>
-          <router-link to="/leaderboard" class="nav-link" :class="{ active: route.path === '/leaderboard' }">
-            <Trophy class="nav-icon" aria-hidden="true" />
-            <span>{{ t('nav.leaderboard') || '排行榜' }}</span>
-          </router-link>
-          <router-link to="/candidates" class="nav-link" :class="{ active: route.path === '/candidates' }">
-            <Users class="nav-icon" aria-hidden="true" />
-            <span>{{ t('nav.candidates') || '候选人' }}</span>
-          </router-link>
-          <router-link
-            to="/tasks"
-            class="nav-link nav-link--tasks"
-            :class="{ active: route.path === '/tasks' }"
-            :aria-label="navTasksLinkAriaLabel"
-          >
-            <ListTodo class="nav-icon" aria-hidden="true" />
-            <span>{{ t('nav.taskManage') || '任务管理' }}</span>
-            <span
-              v-if="auth.isLoggedIn && taskPulse.disputes > 0"
-              class="nav-task-dispute-dot"
-              :title="String(t('marketing.navDisputeBadgeTitle', { n: taskPulse.disputes }))"
-              aria-hidden="true"
-            />
-            <span
-              v-else-if="auth.isLoggedIn && taskPulseTotal > 0"
-              class="nav-task-pulse-dot"
-              :title="String(t('marketing.navTaskPulseBadgeTitle', { n: taskPulseTotal }))"
-              aria-hidden="true"
-            />
-          </router-link>
-          <router-link to="/forum" class="nav-link" :class="{ active: route.path === '/forum' }">
-            <MessagesSquare class="nav-icon" aria-hidden="true" />
-            <span>{{ t('nav.forum') || '论坛' }}</span>
-          </router-link>
-          <router-link to="/agents" class="nav-link" :class="{ active: route.path === '/agents' }">
-            <Bot class="nav-icon" aria-hidden="true" />
-            <span>{{ t('nav.agentManage') || 'Agent 管理' }}</span>
-          </router-link>
-          <router-link to="/marketplace" class="nav-link" :class="{ active: route.path === '/marketplace' || route.path === '/marketplace/' }">
-            <BookOpen class="nav-icon" aria-hidden="true" />
-            <span>{{ t('nav.marketplace') || 'Marketplace' }}</span>
-          </router-link>
-          <router-link to="/inbox" class="nav-link" :class="{ active: route.path === '/inbox' }">
-            <Mail class="nav-icon" aria-hidden="true" />
-            <span>{{ t('nav.inbox') || '站内信' }}</span>
-          </router-link>
-          <router-link to="/skill" class="nav-link" :class="{ active: route.path === '/skill' }">
-            <Sparkles class="nav-icon" aria-hidden="true" />
-            <span>{{ t('common.skill') }}</span>
-          </router-link>
-          <router-link to="/a2a-console" class="nav-link" :class="{ active: route.path === '/a2a-console' }">
-            <Mail class="nav-icon" aria-hidden="true" />
-            <span>A2A Console</span>
-          </router-link>
-          <router-link to="/agent-lab" class="nav-link" :class="{ active: route.path === '/agent-lab' }">
-            <Bot class="nav-icon" aria-hidden="true" />
-            <span>{{ t('nav.agentLab') }}</span>
-          </router-link>
-          <router-link v-if="isAdmin" to="/admin" class="nav-link" :class="{ active: route.path === '/admin' }">
-            <Shield class="nav-icon" aria-hidden="true" />
-            <span>{{ t('admin.title') || '管理后台' }}</span>
-          </router-link>
+          <section class="nav-group">
+            <p class="nav-group-title">{{ t('nav.navGroupCore') }}</p>
+            <div class="nav-group-links">
+              <router-link to="/" class="nav-link nav-link--community" :class="{ active: route.path === '/' || route.path === '/community' }">
+                <MessagesSquare class="nav-icon" aria-hidden="true" />
+                <span>{{ t('nav.community') || '社区聊天' }}</span>
+                <span
+                  v-if="route.path !== '/community' && route.path !== '/' && communityHotDeltaCount > 0"
+                  class="nav-community-dot"
+                  :title="String(t('marketing.communityHotDotTitle', { n: communityHotDeltaCount }))"
+                  aria-hidden="true"
+                />
+              </router-link>
+              <router-link
+                to="/tasks"
+                class="nav-link nav-link--tasks"
+                :class="{ active: route.path === '/tasks' }"
+                :aria-label="navTasksLinkAriaLabel"
+              >
+                <ListTodo class="nav-icon" aria-hidden="true" />
+                <span>{{ t('nav.taskManage') || '任务管理' }}</span>
+                <span
+                  v-if="auth.isLoggedIn && taskPulse.disputes > 0"
+                  class="nav-task-dispute-dot"
+                  :title="String(t('marketing.navDisputeBadgeTitle', { n: taskPulse.disputes }))"
+                  aria-hidden="true"
+                />
+                <span
+                  v-else-if="auth.isLoggedIn && taskPulseTotal > 0"
+                  class="nav-task-pulse-dot"
+                  :title="String(t('marketing.navTaskPulseBadgeTitle', { n: taskPulseTotal }))"
+                  aria-hidden="true"
+                />
+              </router-link>
+              <router-link to="/dashboard" class="nav-link" :class="{ active: route.path === '/dashboard' }">
+                <LayoutGrid class="nav-icon" aria-hidden="true" />
+                <span>{{ t('nav.dashboard') || '实况' }}</span>
+              </router-link>
+              <router-link to="/inbox" class="nav-link" :class="{ active: route.path === '/inbox' }">
+                <Mail class="nav-icon" aria-hidden="true" />
+                <span>{{ t('nav.inbox') || '站内信' }}</span>
+              </router-link>
+            </div>
+          </section>
+
+          <section class="nav-group">
+            <p class="nav-group-title">{{ t('nav.navGroupDiscover') }}</p>
+            <div class="nav-group-links">
+              <router-link to="/marketplace" class="nav-link" :class="{ active: route.path === '/marketplace' || route.path === '/marketplace/' }">
+                <BookOpen class="nav-icon" aria-hidden="true" />
+                <span>{{ t('nav.skillMarket') || 'Skill 市场' }}</span>
+              </router-link>
+              <router-link to="/leaderboard" class="nav-link" :class="{ active: route.path === '/leaderboard' }">
+                <Trophy class="nav-icon" aria-hidden="true" />
+                <span>{{ t('nav.leaderboard') || '排行榜' }}</span>
+              </router-link>
+              <router-link to="/candidates" class="nav-link" :class="{ active: route.path === '/candidates' }">
+                <Users class="nav-icon" aria-hidden="true" />
+                <span>{{ t('nav.candidates') || '候选人' }}</span>
+              </router-link>
+              <router-link to="/forum" class="nav-link" :class="{ active: route.path === '/forum' }">
+                <MessagesSquare class="nav-icon" aria-hidden="true" />
+                <span>{{ t('nav.forum') }}</span>
+              </router-link>
+            </div>
+          </section>
+
+          <section class="nav-group">
+            <p class="nav-group-title">{{ t('nav.navGroupCreate') }}</p>
+            <div class="nav-group-links">
+              <router-link to="/agents" class="nav-link" :class="{ active: route.path === '/agents' }">
+                <Bot class="nav-icon" aria-hidden="true" />
+                <span>{{ t('nav.agentManage') || 'Agent 管理' }}</span>
+              </router-link>
+              <router-link to="/studio" class="nav-link" :class="{ active: route.path === '/studio' }">
+                <Sparkles class="nav-icon" aria-hidden="true" />
+                <span>{{ t('nav.agentStudio') || 'Studio' }}</span>
+              </router-link>
+              <router-link to="/playbook" class="nav-link" :class="{ active: route.path === '/playbook' }">
+                <ListChecks class="nav-icon" aria-hidden="true" />
+                <span>{{ t('nav.playbook') }}</span>
+              </router-link>
+              <router-link to="/skill" class="nav-link" :class="{ active: route.path === '/skill' }">
+                <Sparkles class="nav-icon" aria-hidden="true" />
+                <span>{{ t('common.skill') }}</span>
+              </router-link>
+              <router-link to="/a2a-console" class="nav-link" :class="{ active: route.path === '/a2a-console' }">
+                <Mail class="nav-icon" aria-hidden="true" />
+                <span>{{ t('nav.a2aConsole') }}</span>
+              </router-link>
+              <router-link to="/agent-lab" class="nav-link" :class="{ active: route.path === '/agent-lab' }">
+                <Bot class="nav-icon" aria-hidden="true" />
+                <span>{{ t('nav.agentLab') }}</span>
+              </router-link>
+              <router-link v-if="isAdmin" to="/admin" class="nav-link" :class="{ active: route.path === '/admin' }">
+                <Shield class="nav-icon" aria-hidden="true" />
+                <span>{{ t('nav.adminNav') }}</span>
+              </router-link>
+            </div>
+          </section>
         </nav>
         <div class="header-actions">
           <select v-model="locale" class="locale-select" @change="onLocaleChange">
@@ -167,15 +194,18 @@
       <CandidatesView v-else-if="route.path === '/candidates'" />
       <MarketplaceView v-else-if="route.path === '/marketplace' || route.path === '/marketplace/'" />
       <PlaybookView v-else-if="route.path === '/playbook'" />
+      <CommunityChatView v-else-if="route.path === '/community' || route.path === '/'" />
       <ForumView v-else-if="route.path === '/forum'" />
       <TaskManageView v-else-if="route.path === '/tasks'" @success="showSuccess" @register-hint="postPublishRegisterHint = true" />
       <AgentManageView v-else-if="route.path === '/agents'" />
+      <AgentStudioView v-else-if="route.path === '/studio'" />
+      <AgentProfileView v-else-if="route.name === 'AgentProfile'" />
       <A2aConsoleView v-else-if="route.path === '/a2a-console'" />
       <AgentLabView v-else-if="route.path === '/agent-lab'" />
       <InboxView v-else-if="route.path === '/inbox' || route.path === '/inbox/'" @show-auth="showAuthModal = true" />
       <AccountPage v-else-if="route.path === '/account'" @credits-updated="loadAccountMe" />
       <AdminView v-else-if="route.path === '/admin'" />
-      <template v-else>
+      <template v-else-if="route.path !== '/'">
       <div class="home-wrap apple-layout">
         <!-- NOTE: translated comment in English. -->
         <section class="home-playbook-cta apple-section" aria-label="Onboarding">
@@ -407,6 +437,23 @@
               <Button :as="RouterLink" to="/dashboard" size="sm" variant="ghost" class="mt-2 home-view-feed-btn">{{ t('home.viewFullFeed') || '查看完整实况 →' }}</Button>
             </CardContent>
           </Card>
+          <Card class="home-sidebar-feed">
+            <CardHeader class="pb-2">
+              <CardTitle class="home-dash-feed-title text-base">{{ t('community.hotDigest') || '社区热议' }}</CardTitle>
+            </CardHeader>
+            <CardContent class="pt-0">
+              <ul v-if="homeCommunityHot.length" class="home-activity-list">
+                <li v-for="it in homeCommunityHot.slice(0, 6)" :key="it.topic_id" class="home-activity-item">
+                  <span class="home-activity-text">{{ it.title }}</span>
+                  <router-link :to="'/community'" class="home-activity-link">#{{ it.skill_tag }}</router-link>
+                </li>
+              </ul>
+              <p v-else class="hint">{{ t('forum.emptyHot') || '暂无数据' }}</p>
+              <Button :as="RouterLink" to="/community" size="sm" variant="ghost" class="mt-2 home-view-feed-btn">
+                {{ t('community.enter') || '进入社区聊天 →' }}
+              </Button>
+            </CardContent>
+          </Card>
         </aside>
       </div>
       </div>
@@ -545,6 +592,28 @@
               <label class="form-label">{{ t('agentGuide.fieldRewardPoints') }}</label>
               <input v-model.number="publishForm.reward_points" type="number" min="0" class="input input-num" />
             </div>
+            <div
+              v-if="publishForm.reward_points > 0 && publishFeeEstimate"
+              class="publish-fee-card mono text-sm"
+              :class="{ 'publish-fee-card--insufficient': !publishFeeEstimate.sufficient }"
+              role="status"
+            >
+              <div class="publish-fee-row">
+                <span>{{ t('task.feeEstimateExecutorNet') }}</span>
+                <strong>{{ publishFeeEstimate.executor_net_points }}</strong>
+              </div>
+              <div class="publish-fee-row">
+                <span>{{ t('task.feeEstimateCommission') }}（{{ (publishFeeEstimate.commission_rate * 100).toFixed(2) }}%）</span>
+                <strong>{{ publishFeeEstimate.commission_points }}</strong>
+              </div>
+              <div class="publish-fee-row">
+                <span>{{ t('task.feeEstimateBalanceAfter') }}</span>
+                <strong>{{ publishFeeEstimate.publisher_credits_after }}</strong>
+              </div>
+              <div v-if="!publishFeeEstimate.sufficient" class="publish-fee-warn">
+                {{ t('task.feeEstimateInsufficient', { n: publishForm.reward_points - publishFeeEstimate.publisher_credits }) }}
+              </div>
+            </div>
             <template v-if="publishForm.reward_points > 0">
               <p class="hint">{{ t('task.webhookHint') }}</p>
               <div class="form-group">
@@ -670,6 +739,7 @@
             </Button>
           </div>
           <Input v-model="registerForm.password" type="password" :placeholder="t('auth.password')" />
+          <Input v-model="registerForm.referral_code" maxlength="12" :placeholder="t('auth.referralCodePlaceholder')" />
           <Button :disabled="authLoading" @click="doRegister">{{ t('auth.register') }}</Button>
           <div class="oauth-divider">{{ t('auth.or') }}</div>
           <Button
@@ -839,7 +909,7 @@
 
     <footer class="app-footer">
       <div class="app-footer-inner">
-        <nav class="app-footer-links" aria-label="Footer">
+        <nav class="app-footer-links" :aria-label="t('common.footerNavAria')">
           <router-link to="/docs">{{ t('common.docs') }}</router-link>
           <router-link to="/skill">{{ t('common.skill') }}</router-link>
           <a href="https://github.com" target="_blank" rel="noopener noreferrer">GitHub</a>
@@ -852,7 +922,7 @@
 
 <script setup lang="ts">
 declare const __BUILD_ID__: string | undefined
-import { ref, reactive, onMounted, onUnmounted, computed, watch } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, computed, watch, defineAsyncComponent } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { i18n, setLocale, safeT, type LocaleKey } from './i18n'
@@ -860,23 +930,26 @@ import { useAuthStore } from './stores/auth'
 import * as api from './api'
 import { taskPulseRelevantNav } from './utils/taskPulseHub'
 import { formatTaskRelativeTime } from './utils/taskTimeline'
-import SkillPage from './views/SkillPage.vue'
-import DocsPage from './views/DocsPage.vue'
-import ManualPage from './views/ManualPage.vue'
-import TaskManageView from './views/TaskManageView.vue'
-import AgentManageView from './views/AgentManageView.vue'
-import InboxView from './views/InboxView.vue'
-import AccountPage from './views/AccountPage.vue'
-import OpenClawQuickstartPage from './views/OpenClawQuickstartPage.vue'
-import DashboardView from './views/DashboardView.vue'
-import LeaderboardView from './views/LeaderboardView.vue'
-import CandidatesView from './views/CandidatesView.vue'
-import MarketplaceView from './views/MarketplaceView.vue'
-import PlaybookView from './views/PlaybookView.vue'
-import ForumView from './views/ForumView.vue'
-import AdminView from './views/AdminView.vue'
-import A2aConsoleView from './views/A2aConsoleView.vue'
-import AgentLabView from './views/AgentLabView.vue'
+const SkillPage = defineAsyncComponent(() => import('./views/SkillPage.vue'))
+const DocsPage = defineAsyncComponent(() => import('./views/DocsPage.vue'))
+const ManualPage = defineAsyncComponent(() => import('./views/ManualPage.vue'))
+const TaskManageView = defineAsyncComponent(() => import('./views/TaskManageView.vue'))
+const AgentManageView = defineAsyncComponent(() => import('./views/AgentManageView.vue'))
+const AgentStudioView = defineAsyncComponent(() => import('./views/AgentStudioView.vue'))
+const AgentProfileView = defineAsyncComponent(() => import('./views/AgentProfileView.vue'))
+const InboxView = defineAsyncComponent(() => import('./views/InboxView.vue'))
+const AccountPage = defineAsyncComponent(() => import('./views/AccountPage.vue'))
+const OpenClawQuickstartPage = defineAsyncComponent(() => import('./views/OpenClawQuickstartPage.vue'))
+const DashboardView = defineAsyncComponent(() => import('./views/DashboardView.vue'))
+const LeaderboardView = defineAsyncComponent(() => import('./views/LeaderboardView.vue'))
+const CandidatesView = defineAsyncComponent(() => import('./views/CandidatesView.vue'))
+const MarketplaceView = defineAsyncComponent(() => import('./views/MarketplaceView.vue'))
+const PlaybookView = defineAsyncComponent(() => import('./views/PlaybookView.vue'))
+const CommunityChatView = defineAsyncComponent(() => import('./views/CommunityChatView.vue'))
+const ForumView = defineAsyncComponent(() => import('./views/ForumView.vue'))
+const AdminView = defineAsyncComponent(() => import('./views/AdminView.vue'))
+const A2aConsoleView = defineAsyncComponent(() => import('./views/A2aConsoleView.vue'))
+const AgentLabView = defineAsyncComponent(() => import('./views/AgentLabView.vue'))
 import { Button } from './components/ui/button'
 import { Input } from './components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from './components/ui/card'
@@ -909,7 +982,7 @@ const guestTokenLoading = ref(false)
 const authError = ref('')
 const oauthError = ref('')
 const loginForm = reactive({ username: '', password: '' })
-const registerForm = reactive({ username: '', email: '', password: '', verification_code: '' })
+const registerForm = reactive({ username: '', email: '', password: '', verification_code: '', referral_code: '' })
 const sendCodeLoading = ref(false)
 const sendCodeCountdown = ref(0)
 let sendCodeTimer: ReturnType<typeof setInterval> | null = null
@@ -965,6 +1038,10 @@ const homeActivity = ref<api.ActivityEvent[]>([])
 const homeActivityLoading = ref(true)
 const homeLeaderboard = ref<api.LeaderboardItem[]>([])
 const homeLeaderboardLoading = ref(true)
+const homeCommunityHot = ref<api.CommunityHotFeedItem[]>([])
+const communityHotDeltaCount = ref(0)
+let communityRefreshTimer: ReturnType<typeof setInterval> | null = null
+const COMMUNITY_REFRESH_MS = 25000
 const showCreateTaskModal = ref(false)
 const createStep = ref(1)
 const myCreatedTasks = ref<typeof tasks.value>([])
@@ -1009,6 +1086,36 @@ const publishForm = reactive({
 })
 const escrowWeightSumHome = computed(() =>
   publishForm.escrow_rows.reduce((s, r) => s + (Number(r.weight) || 0), 0),
+)
+
+const publishFeeEstimate = ref<api.PublishFeeEstimate | null>(null)
+const publishFeeLoading = ref(false)
+let publishFeeTimer: ReturnType<typeof setTimeout> | null = null
+function refreshPublishFeeEstimate() {
+  const rp = Math.max(0, Number(publishForm.reward_points) || 0)
+  if (publishFeeTimer) clearTimeout(publishFeeTimer)
+  if (!auth.isLoggedIn) {
+    publishFeeEstimate.value = null
+    return
+  }
+  publishFeeTimer = setTimeout(() => {
+    publishFeeLoading.value = true
+    api
+      .getPublishFeeEstimate(rp)
+      .then((res) => {
+        publishFeeEstimate.value = res.data
+      })
+      .catch(() => {
+        publishFeeEstimate.value = null
+      })
+      .finally(() => {
+        publishFeeLoading.value = false
+      })
+  }, 250)
+}
+watch(
+  () => publishForm.reward_points,
+  () => refreshPublishFeeEstimate(),
 )
 function addEscrowRowHome() {
   publishForm.escrow_rows.push({ title: '', weight: 0, acceptance_criteria: '' })
@@ -1286,6 +1393,19 @@ function loadHomeDashboard() {
   api.fetchActivity(10).then((res) => {
     homeActivity.value = res.data.events ?? []
   }).catch(() => { homeActivity.value = [] }).finally(() => { homeActivityLoading.value = false })
+  api.fetchCommunityHotFeed(8).then((res) => {
+    const next = res.data.items || []
+    const prevMap = new Map<number, number>()
+    for (const it of homeCommunityHot.value) prevMap.set(Number(it.topic_id), Number(it.heat_score || 0))
+    let delta = 0
+    for (const it of next) {
+      const prevHeat = prevMap.get(Number(it.topic_id))
+      if (prevHeat == null || Number(it.heat_score || 0) > prevHeat) delta += 1
+    }
+    homeCommunityHot.value = next
+    if (route.path !== '/community') communityHotDeltaCount.value = delta
+    else communityHotDeltaCount.value = 0
+  }).catch(() => { homeCommunityHot.value = [] })
 }
 
 function formatTimeAgoHome(iso: string) {
@@ -1500,11 +1620,13 @@ function doRegister() {
     return
   }
   authLoading.value = true
+  const refCode = (registerForm.referral_code || '').trim()
   api.register({
     username: registerForm.username,
     email: registerForm.email,
     password: registerForm.password,
     verification_code: registerForm.verification_code,
+    ...(refCode ? { referral_code: refCode } : {}),
   }).then((res) => {
     auth.setUser(res.data.access_token, res.data.username, res.data.user_id)
     refreshAdminFlag()
@@ -1754,6 +1876,20 @@ onMounted(() => {
   document.addEventListener('keydown', onEscapeKey)
   locale.value = i18n.global.locale.value as LocaleKey
   try { showSkillBanner.value = false } catch (_) {}
+  try {
+    const search0 = window.location.search
+    if (search0) {
+      const refFromUrl = new URLSearchParams(search0.slice(1)).get('ref')
+      if (refFromUrl && !registerForm.referral_code) {
+        registerForm.referral_code = refFromUrl.trim()
+        try { localStorage.setItem('clawjob_ref_code', refFromUrl.trim()) } catch {}
+      }
+    }
+    if (!registerForm.referral_code) {
+      const stored = localStorage.getItem('clawjob_ref_code')
+      if (stored) registerForm.referral_code = stored
+    }
+  } catch {}
   // NOTE: translated comment in English.
   const hash = window.location.hash
   const search = window.location.search
@@ -1819,8 +1955,13 @@ onMounted(() => {
 
   removeRouterAfterEach = router.afterEach((to, from) => {
     if (taskPulseRelevantNav(to.path, from.path)) refreshTaskPulseThrottled()
+    if (to.path === '/community') communityHotDeltaCount.value = 0
   })
   document.addEventListener('visibilitychange', onDocumentVisibilityForPulse)
+  communityRefreshTimer = setInterval(() => {
+    if (document.visibilityState !== 'visible') return
+    loadHomeDashboard()
+  }, COMMUNITY_REFRESH_MS)
 })
 
 onUnmounted(() => {
@@ -1828,6 +1969,10 @@ onUnmounted(() => {
   document.removeEventListener('visibilitychange', onDocumentVisibilityForPulse)
   removeRouterAfterEach?.()
   removeRouterAfterEach = null
+  if (communityRefreshTimer) {
+    clearInterval(communityRefreshTimer)
+    communityRefreshTimer = null
+  }
 })
 </script>
 
@@ -1889,6 +2034,32 @@ onUnmounted(() => {
 .escrow-weight { max-width: 100%; }
 .escrow-criteria { width: 100%; }
 .escrow-sum { margin-top: 0.35rem; font-weight: 500; color: var(--primary-color); }
+
+.publish-fee-card {
+  margin: 0.25rem 0 0.75rem;
+  padding: 0.6rem 0.8rem;
+  border: var(--border-hairline);
+  border-radius: var(--radius-md);
+  background: rgba(34, 197, 94, 0.06);
+  display: grid;
+  gap: 0.3rem;
+}
+.publish-fee-card--insufficient {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.35);
+}
+.publish-fee-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  color: var(--text-secondary);
+}
+.publish-fee-row strong { color: var(--text-primary); }
+.publish-fee-warn {
+  margin-top: 0.2rem;
+  color: rgb(220, 38, 38);
+  font-weight: 500;
+}
 
 /* NOTE: translated comment in English. */
 .home-playbook-cta {
@@ -2237,7 +2408,35 @@ onUnmounted(() => {
 }
 
 /* 顶栏「任务管理」：争议优先强提示，其余待办弱提示 */
+.header-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  align-items: flex-start;
+}
+.nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 12rem;
+}
+.nav-group-title {
+  margin: 0;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-tertiary, rgba(255, 255, 255, 0.5));
+}
+.nav-group-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
 .nav-link--tasks {
+  position: relative;
+  padding-inline-end: 0.45rem;
+}
+.nav-link--community {
   position: relative;
   padding-inline-end: 0.45rem;
 }
@@ -2262,5 +2461,24 @@ onUnmounted(() => {
   background: rgba(var(--primary-rgb), 0.92);
   box-shadow: 0 0 0 2px #0a0a0b;
   pointer-events: none;
+}
+.nav-community-dot {
+  position: absolute;
+  top: 0.18rem;
+  right: 0.05rem;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(168, 85, 247, 0.95);
+  box-shadow: 0 0 0 2px #0a0a0b;
+  pointer-events: none;
+}
+@media (max-width: 1200px) {
+  .nav-group { min-width: 10rem; }
+}
+@media (max-width: 900px) {
+  .nav-group {
+    min-width: 100%;
+  }
 }
 </style>
