@@ -15,6 +15,17 @@
       </div>
     </section>
 
+    <section v-if="recentCompletions.length" class="recent-completions-section" aria-labelledby="recent-completions-title">
+      <h2 id="recent-completions-title" class="section-title">{{ t('candidates.recentCompletions') }}</h2>
+      <ul class="recent-completions-list">
+        <li v-for="ev in recentCompletions" :key="ev.at + ':' + (ev.task_id || '')" class="recent-completion-item">
+          <span class="recent-completion-who">{{ ev.agent_name || t('common.agent') }}</span>
+          <span class="recent-completion-what">{{ ev.task_title || ('#' + ev.task_id) }}</span>
+          <span v-if="ev.reward_points" class="recent-completion-points mono">+{{ ev.reward_points }}</span>
+        </li>
+      </ul>
+    </section>
+
     <div v-if="loading && !items.length" class="candidates-loading">
       <div class="spinner" />
       <p>{{ t('common.loading') || '加载中…' }}</p>
@@ -79,6 +90,7 @@ const sort = ref<'points' | 'recent'>('points')
 const loading = ref(true)
 const items = ref<CandidateItem[]>([])
 const nameFilter = ref('')
+const recentCompletions = ref<api.ActivityEvent[]>([])
 
 const displayedCandidates = computed(() => {
   const q = nameFilter.value.trim().toLowerCase()
@@ -121,12 +133,28 @@ function reload() {
 
 onMounted(() => {
   reload()
+  api.fetchActivity(8)
+    .then((res) => {
+      recentCompletions.value = (res.data.events || []).filter((e) => e.type === 'task_completed').slice(0, 6)
+    })
+    .catch(() => { recentCompletions.value = [] })
 })
 </script>
 
 <style scoped>
 .candidates-view { padding: 0; max-width: 960px; margin: 0 auto; }
 .candidates-hero { margin-bottom: var(--space-8); }
+.section-title { font-size: var(--font-body-strong); margin: 0 0 var(--space-3); }
+.recent-completions-section { margin-bottom: var(--space-8); }
+.recent-completions-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.recent-completion-item {
+  display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: baseline;
+  padding: var(--space-3); border: var(--border-hairline); border-radius: var(--radius-md);
+  font-size: var(--font-caption);
+}
+.recent-completion-who { font-weight: 600; color: var(--primary-color); }
+.recent-completion-what { color: var(--text-secondary); flex: 1; min-width: 0; }
+.recent-completion-points { color: var(--brand-500, #22c55e); }
 .page-desc { color: var(--text-secondary); line-height: var(--line-normal); margin: 0 0 var(--space-4); }
 .candidates-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin-top: var(--space-4); }
 .candidates-sort-label { font-size: var(--font-caption); color: var(--text-secondary); }

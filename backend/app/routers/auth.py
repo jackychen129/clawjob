@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 logger = logging.getLogger(__name__)
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from typing import List, Optional
 
@@ -21,7 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from app.database.relational_db import User, VerificationCode, Agent, Task, TaskSubscription, SystemLog, CreditTransaction, get_db
-from app.security import get_password_hash, create_access_token, verify_password
+from app.security import get_password_hash, create_access_token, verify_password, limiter
 from app.services import referrals as _rf
 from app.services import community as _community
 
@@ -80,17 +80,29 @@ class RegisterViaSkillBody(BaseModel):
     description: str = ""
     agent_type: str = "general"
     second_task: RegisterViaSkillSecondTaskBody
+    referral_code: Optional[str] = None
     # 部署探活 / 集成测试专用：携带正确的 `internal_probe_token` 时，
     # 第二条任务会写入 hidden_from_public=True，不进入公开大厅。
     # 服务端通过环境变量 CLAWJOB_INTERNAL_PROBE_TOKEN 启用；未配置时此字段被忽略。
     internal_probe_token: Optional[str] = None
 
 
+class RegisterAgentMinimalBody(BaseModel):
+    """最低摩擦 Agent 注册：无需 second_task，自动完成握手。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    agent_name: str
+    description: str = ""
+    agent_type: str = "general"
+    referral_code: Optional[str] = None
+
+
 CLAWJOB_SYSTEM_USERNAME = "clawjob_system"
 CLAWJOB_SYSTEM_AGENT_NAME = "clawjob-agent"
 SKILL_REGISTER_BONUS_CREDITS = 500
 # 第二条任务 description 的最短长度（按 SKILL.md 模板计算过后的合理下限）。
-SKILL_SECOND_TASK_MIN_DESCRIPTION_LEN = 120
+SKILL_SECOND_TASK_MIN_DESCRIPTION_LEN = 80
 
 # SKILL.md 要求的正文小节；缺任一则视为非真实 Skill 任务。
 _SKILL_REQUIRED_SECTIONS: tuple = (
@@ -139,6 +151,100 @@ def _second_task_looks_real(title: str, description: str) -> Optional[str]:
             f"{'、'.join(missing)}"
         )
     return None
+
+
+def _resolve_agent_display_name(db: Session, raw_name: str) -> str:
+    """Agent 展示名允许重复；若全局重名则追加短后缀以保证可读区分。"""
+    base = (raw_name or "").strip() or "SkillAgent"
+    base = base[:255]
+    if not db.query(Agent).filter(Agent.name == base).first():
+        return base
+    suffix = secrets.token_hex(3)
+    trimmed = base[:248] if len(base) > 248 else base
+    return f"{trimmed}-{suffix}"
+
+
+def _bind_referral_safe(db: Session, user: User, raw_code: Optional[str]) -> bool:
+    try:
+        rel = _rf.bind_referral(db, invitee=user, raw_code=raw_code)
+        return rel is not None
+    except Exception:
+        return False
+
+
+def _create_skill_user_agent_handshake(
+    db: Session,
+    *,
+    agent_name: str,
+    description: str,
+    agent_type: str,
+    referral_code: Optional[str] = None,
+) -> tuple:
+    """创建 Skill 用户、Agent、注册赠点与已完成握手任务。调用方负责 commit。"""
+    display_name = _resolve_agent_display_name(db, agent_name)
+    for _ in range(10):
+        short_id = secrets.token_hex(6)
+        username = f"skill_{short_id}"
+        email = f"skill_{short_id}@clawjob.local"
+        if db.query(User).filter(User.username == username).first():
+            continue
+        if db.query(User).filter(User.email == email).first():
+            continue
+        user = User(
+            username=username,
+            email=email,
+            hashed_password="",
+            credits=SKILL_REGISTER_BONUS_CREDITS,
+        )
+        db.add(user)
+        db.flush()
+        agent = Agent(
+            name=display_name[:255],
+            description=(description or "")[:2000] or "",
+            agent_type=(agent_type or "general")[:64],
+            owner_id=user.id,
+            capabilities=[],
+            config={},
+        )
+        db.add(agent)
+        db.flush()
+        db.add(CreditTransaction(
+            user_id=user.id,
+            amount=SKILL_REGISTER_BONUS_CREDITS,
+            type="signup_bonus",
+            ref_id=None,
+            remark=f"通过 ClawJob Skill 注册赠送 {SKILL_REGISTER_BONUS_CREDITS} 点",
+        ))
+        referral_bound = _bind_referral_safe(db, user, referral_code)
+        _, system_agent = _get_or_create_clawjob_system_agent(db)
+        handshake_task = Task(
+            title="ClawJob registration handshake (auto-confirm)",
+            description="新加载 agent 的握手任务，已由平台引导 Agent 自动完成。",
+            status="completed",
+            task_type="general",
+            priority="low",
+            owner_id=user.id,
+            creator_agent_id=agent.id,
+            agent_id=system_agent.id,
+            reward_points=0,
+            category="other",
+            input_data={
+                "skills": ["clawjob", "openclaw"],
+                "source": "register_via_skill",
+                "hidden_from_public": True,
+            },
+            output_data={
+                "result_summary": "首个握手任务由 ClawJob 引导 Agent 自动完成，Skill 已可用。",
+                "auto_completed_by": CLAWJOB_SYSTEM_AGENT_NAME,
+            },
+            submitted_at=datetime.utcnow(),
+            completed_at=datetime.utcnow(),
+        )
+        db.add(handshake_task)
+        db.flush()
+        db.add(TaskSubscription(task_id=handshake_task.id, agent_id=system_agent.id))
+        return user, agent, handshake_task, referral_bound
+    raise HTTPException(status_code=500, detail="生成唯一用户失败，请重试")
 
 
 def _get_or_create_clawjob_system_agent(db: Session):
@@ -394,161 +500,163 @@ def register_via_skill(body: RegisterViaSkillBody, db: Session = Depends(get_db)
     st_priority = (st.priority or "medium").strip()[:32] or "medium"
 
     name = (body.agent_name or "").strip() or "SkillAgent"
-    for _ in range(10):
-        short_id = secrets.token_hex(6)
-        username = f"skill_{short_id}"
-        email = f"skill_{short_id}@clawjob.local"
-        if db.query(User).filter(User.username == username).first():
-            continue
-        if db.query(User).filter(User.email == email).first():
-            continue
-        user = User(
-            username=username,
-            email=email,
-            hashed_password="",
-            credits=SKILL_REGISTER_BONUS_CREDITS,
-        )
-        db.add(user)
-        db.flush()
-        agent = Agent(
-            name=name[:255],
-            description=(body.description or "")[:2000] or "",
-            agent_type=(body.agent_type or "general")[:64],
-            owner_id=user.id,
-            capabilities=[],
-            config={},
-        )
-        db.add(agent)
-        db.flush()
+    user, agent, handshake_task, referral_bound = _create_skill_user_agent_handshake(
+        db,
+        agent_name=name,
+        description=body.description or "",
+        agent_type=body.agent_type or "general",
+        referral_code=body.referral_code,
+    )
 
-        # NOTE: translated comment in English.
-        db.add(CreditTransaction(
-            user_id=user.id,
-            amount=SKILL_REGISTER_BONUS_CREDITS,
-            type="signup_bonus",
-            ref_id=None,
-            remark=f"通过 ClawJob Skill 注册赠送 {SKILL_REGISTER_BONUS_CREDITS} 点",
-        ))
-
-        # NOTE: translated comment in English.
-        _, system_agent = _get_or_create_clawjob_system_agent(db)
-        handshake_task = Task(
-            title="ClawJob registration handshake (auto-confirm)",
-            description="新加载 agent 的握手任务，已由平台引导 Agent 自动完成。",
-            status="completed",
-            task_type="general",
-            priority="low",
-            owner_id=user.id,
-            creator_agent_id=agent.id,
-            agent_id=system_agent.id,
-            reward_points=0,
-            category="other",
-            input_data={
-                "skills": ["clawjob", "openclaw"],
-                "source": "register_via_skill",
-                "hidden_from_public": True,
-            },
-            output_data={
-                "result_summary": "首个握手任务由 ClawJob 引导 Agent 自动完成，Skill 已可用。",
-                "auto_completed_by": CLAWJOB_SYSTEM_AGENT_NAME,
-            },
-            submitted_at=datetime.utcnow(),
-            completed_at=datetime.utcnow(),
-        )
-        db.add(handshake_task)
-        db.flush()
-        db.add(TaskSubscription(task_id=handshake_task.id, agent_id=system_agent.id))
-
-        if reward_points > 0:
-            credits_now = getattr(user, "credits", 0) or 0
-            if credits_now < reward_points:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"信用点不足：当前 {credits_now}，second_task.reward_points 需要 {reward_points}",
-                )
-
-        # NOTE: translated comment in English.
-        second_task = Task(
-            title=st_title,
-            description=st_desc[:50000] if len(st_desc) > 50000 else st_desc,
-            status="open",
-            task_type=st_type,
-            priority=st_priority,
-            owner_id=user.id,
-            creator_agent_id=agent.id,
-            agent_id=None,
-            reward_points=reward_points,
-            completion_webhook_url=webhook if webhook else None,
-            category=st_category,
-            requirements=st_requirements,
-            input_data=st_input,
-        )
-        db.add(second_task)
-        db.flush()
-        # Agent 注册后按 skill 标签生成社区话题（V1）。
-        _community.ensure_auto_topics_for_agent(db, agent, skill_tags, force=False)
-
-        if reward_points > 0:
-            user.credits = max(0, (getattr(user, "credits", 0) or 0) - reward_points)
-            db.add(
-                CreditTransaction(
-                    user_id=user.id,
-                    amount=-reward_points,
-                    type="task_publish",
-                    ref_id=second_task.id,
-                    remark=f"Skill 注册第二条任务 #{second_task.id} 预留奖励 {reward_points} 点",
-                )
+    if reward_points > 0:
+        credits_now = getattr(user, "credits", 0) or 0
+        if credits_now < reward_points:
+            raise HTTPException(
+                status_code=400,
+                detail=f"信用点不足：当前 {credits_now}，second_task.reward_points 需要 {reward_points}",
             )
 
-        db.commit()
-        db.refresh(user)
-        db.refresh(agent)
-        db.refresh(second_task)
-        try:
-            db.add(
-                SystemLog(
-                    level="info",
-                    category="auth",
-                    message="user_registered_via_skill",
-                    user_id=user.id,
-                    extra={
-                        "username": user.username,
-                        "agent_id": agent.id,
-                        "agent_name": agent.name,
-                        "signup_bonus_credits": SKILL_REGISTER_BONUS_CREDITS,
-                        "auto_task_reward_allocated": reward_points,
-                        "auto_task_ids": [handshake_task.id, second_task.id],
-                    },
-                )
+    second_task = Task(
+        title=st_title,
+        description=st_desc[:50000] if len(st_desc) > 50000 else st_desc,
+        status="open",
+        task_type=st_type,
+        priority=st_priority,
+        owner_id=user.id,
+        creator_agent_id=agent.id,
+        agent_id=None,
+        reward_points=reward_points,
+        completion_webhook_url=webhook if webhook else None,
+        category=st_category,
+        requirements=st_requirements,
+        input_data=st_input,
+    )
+    db.add(second_task)
+    db.flush()
+    _community.ensure_auto_topics_for_agent(db, agent, skill_tags, force=False)
+
+    if reward_points > 0:
+        user.credits = max(0, (getattr(user, "credits", 0) or 0) - reward_points)
+        db.add(
+            CreditTransaction(
+                user_id=user.id,
+                amount=-reward_points,
+                type="task_publish",
+                ref_id=second_task.id,
+                remark=f"Skill 注册第二条任务 #{second_task.id} 预留奖励 {reward_points} 点",
             )
-            db.commit()
-        except Exception:
-            db.rollback()
-        token = create_access_token(
-            data={"sub": str(user.id), "type": "user"},
-            expires_delta=timedelta(days=365),
         )
-        return {
-            "access_token": token,
-            "token_type": "bearer",
-            "user_id": user.id,
-            "username": user.username,
-            "agent_id": agent.id,
-            "agent_name": agent.name,
-            "credits": user.credits,
-            "signup_bonus_credits": SKILL_REGISTER_BONUS_CREDITS,
-            "auto_task_reward_allocated": reward_points,
-            "auto_published_tasks": [
-                {"id": handshake_task.id, "title": handshake_task.title, "status": handshake_task.status},
-                {
-                    "id": second_task.id,
-                    "title": second_task.title,
-                    "status": second_task.status,
-                    "reward_points": second_task.reward_points,
+
+    db.commit()
+    db.refresh(user)
+    db.refresh(agent)
+    db.refresh(second_task)
+    try:
+        db.add(
+            SystemLog(
+                level="info",
+                category="auth",
+                message="user_registered_via_skill",
+                user_id=user.id,
+                extra={
+                    "username": user.username,
+                    "agent_id": agent.id,
+                    "agent_name": agent.name,
+                    "signup_bonus_credits": SKILL_REGISTER_BONUS_CREDITS,
+                    "auto_task_reward_allocated": reward_points,
+                    "auto_task_ids": [handshake_task.id, second_task.id],
+                    "referral_bound": referral_bound,
                 },
-            ],
-        }
-    raise HTTPException(status_code=500, detail="生成唯一用户失败，请重试")
+            )
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+    token = create_access_token(
+        data={"sub": str(user.id), "type": "user"},
+        expires_delta=timedelta(days=365),
+    )
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user_id": user.id,
+        "username": user.username,
+        "agent_id": agent.id,
+        "agent_name": agent.name,
+        "credits": user.credits,
+        "signup_bonus_credits": SKILL_REGISTER_BONUS_CREDITS,
+        "auto_task_reward_allocated": reward_points,
+        "referral_bound": referral_bound,
+        "auto_published_tasks": [
+            {"id": handshake_task.id, "title": handshake_task.title, "status": handshake_task.status},
+            {
+                "id": second_task.id,
+                "title": second_task.title,
+                "status": second_task.status,
+                "reward_points": second_task.reward_points,
+            },
+        ],
+    }
+
+
+@router.post("/register-agent-minimal")
+@limiter.limit("30/minute")
+def register_agent_minimal(request: Request, body: RegisterAgentMinimalBody, db: Session = Depends(get_db)):
+    """
+    最低摩擦 Agent 注册：创建用户与 Agent，自动完成握手，无 second_task。
+    适合 guest-token 发布后仅需接取任务、或快速 onboarding 的场景。
+    """
+    _ = request
+    name = (body.agent_name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="agent_name 不能为空")
+    user, agent, handshake_task, referral_bound = _create_skill_user_agent_handshake(
+        db,
+        agent_name=name,
+        description=body.description or "",
+        agent_type=body.agent_type or "general",
+        referral_code=body.referral_code,
+    )
+    db.commit()
+    db.refresh(user)
+    db.refresh(agent)
+    try:
+        db.add(
+            SystemLog(
+                level="info",
+                category="auth",
+                message="user_registered_agent_minimal",
+                user_id=user.id,
+                extra={
+                    "username": user.username,
+                    "agent_id": agent.id,
+                    "agent_name": agent.name,
+                    "signup_bonus_credits": SKILL_REGISTER_BONUS_CREDITS,
+                    "referral_bound": referral_bound,
+                },
+            )
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+    token = create_access_token(
+        data={"sub": str(user.id), "type": "user"},
+        expires_delta=timedelta(days=365),
+    )
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user_id": user.id,
+        "username": user.username,
+        "agent_id": agent.id,
+        "agent_name": agent.name,
+        "credits": user.credits,
+        "signup_bonus_credits": SKILL_REGISTER_BONUS_CREDITS,
+        "referral_bound": referral_bound,
+        "auto_published_tasks": [
+            {"id": handshake_task.id, "title": handshake_task.title, "status": handshake_task.status},
+        ],
+    }
 
 
 @router.post("/guest-token")
@@ -589,8 +697,14 @@ def guest_token(db: Session = Depends(get_db)):
             data={"sub": str(user.id), "type": "user"},
             expires_delta=timedelta(days=365),
         )
-        register_hint_zh = "您当前为游客身份，仅可发布任务。注册后可获得永久账号并关联已注册的智能体。"
-        register_hint_en = "You are using a guest token; you can publish tasks. Register for a permanent account and to link your agents."
+        register_hint_zh = (
+            "您当前为游客身份，仅可发布任务。要让 Agent 接取任务，"
+            "请调用 POST /auth/register-agent-minimal（最快）或 /auth/register-via-skill。"
+        )
+        register_hint_en = (
+            "You are using a guest token; you can publish tasks. "
+            "To accept tasks, call POST /auth/register-agent-minimal (fastest) or /auth/register-via-skill."
+        )
         return {
             "access_token": token,
             "token_type": "bearer",

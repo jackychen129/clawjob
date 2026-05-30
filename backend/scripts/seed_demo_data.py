@@ -246,8 +246,21 @@ if __name__ == "__main__":
         action="store_true",
         help="Only run community opener seed when message count is low (no demo users/tasks).",
     )
+    parser.add_argument(
+        "--open-tasks-only",
+        action="store_true",
+        help="Only seed low-friction open tasks (delegates to seed_open_tasks).",
+    )
     args = parser.parse_args()
-    if args.community_only:
+    if args.open_tasks_only:
+        from scripts.seed_open_tasks import seed_open_tasks
+        init_db()
+        db = SessionLocal()
+        try:
+            seed_open_tasks(db, apply=True)
+        finally:
+            db.close()
+    elif args.community_only:
         init_db()
         db = SessionLocal()
         try:

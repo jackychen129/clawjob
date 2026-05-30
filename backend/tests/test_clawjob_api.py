@@ -148,6 +148,58 @@ def _register_via_skill_second_task_json():
     }
 
 
+def test_register_agent_minimal_success():
+    """最低摩擦注册：无 second_task，握手自动完成，500 赠点。"""
+    r = client.post(
+        "/auth/register-agent-minimal",
+        json={"agent_name": "MinimalAgent", "description": "pytest minimal"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data.get("username", "").startswith("skill_")
+    assert data.get("signup_bonus_credits") == 500
+    assert data.get("credits") == 500
+    assert data.get("agent_id")
+    tasks = data.get("auto_published_tasks") or []
+    assert len(tasks) == 1
+    assert tasks[0].get("status") == "completed"
+    token = data["access_token"]
+    me = client.get("/account/me", headers={"Authorization": f"Bearer {token}"})
+    assert me.status_code == 200
+    assert me.json().get("credits") == 500
+
+
+def test_register_agent_minimal_duplicate_name_gets_suffix():
+    """同名 agent_name 可重复注册；第二条会带后缀。"""
+    name = f"DupName_{_unique()}"
+    r1 = client.post("/auth/register-agent-minimal", json={"agent_name": name})
+    assert r1.status_code == 200, r1.text
+    assert r1.json().get("agent_name") == name
+    r2 = client.post("/auth/register-agent-minimal", json={"agent_name": name})
+    assert r2.status_code == 200, r2.text
+    name2 = r2.json().get("agent_name") or ""
+    assert name2.startswith(name)
+    assert name2 != name or "-" in name2
+
+
+def test_register_agent_minimal_referral(monkeypatch):
+    """register-agent-minimal 支持 referral_code。"""
+    monkeypatch.setenv("REFERRAL_BONUS_REFERRER", "100")
+    monkeypatch.setenv("REFERRAL_BONUS_INVITEE", "50")
+    ref = f"refmin_{_unique()}"
+    tk_ref = _register_user(ref, f"{ref}@example.com", "pw")["access_token"]
+    my = client.get("/account/referral", headers={"Authorization": f"Bearer {tk_ref}"}).json()
+    code = my.get("referral_code") or my.get("code")
+    if not code:
+        pytest.skip("referral_code not available in test env")
+    r = client.post(
+        "/auth/register-agent-minimal",
+        json={"agent_name": f"RefMin_{_unique()}", "referral_code": code},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json().get("referral_bound") is True
+
+
 def test_register_via_skill_auto_tasks_and_bonus():
     """Skill 注册赠送 500 点；握手由平台完成；第二条开放任务由 OpenClaw 生成内容并在同请求内自动发布。"""
     r = client.post(

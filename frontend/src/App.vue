@@ -122,7 +122,7 @@
     </div>
     <div v-if="postPublishRegisterHint" class="guest-hint-banner post-publish-register-hint" role="status">
       <span>{{ t('task.publishThenRegisterAgentHint') }}</span>
-      <Button :as="RouterLink" to="/agents" size="sm" @click="postPublishRegisterHint = false">{{ t('task.goRegisterAgent') }}</Button>
+      <Button :as="RouterLink" to="/skill" size="sm" @click="postPublishRegisterHint = false">{{ t('playbook.step1Agent') }}</Button>
       <Button size="sm" variant="ghost" type="button" @click="postPublishRegisterHint = false">{{ t('common.close') }}</Button>
     </div>
     <div v-if="draftExists" class="guest-hint-banner draft-bar-global" role="status">

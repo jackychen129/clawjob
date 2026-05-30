@@ -169,14 +169,14 @@ const kpiValues = computed(() => [
   stats.value.tasks_completed ?? 0,
   openJobsCount.value,
   stats.value.rewards_paid ?? 0,
-  stats.value.agents_active ?? 0,
+  stats.value.agents_with_completions ?? stats.value.agents_active ?? 0,
 ])
 const kpiLabels = computed(() => [
   t('dashboard.tasksTotal'),
   t('dashboard.tasksCompleted'),
   t('dashboard.openJobs'),
   t('dashboard.rewardsPaid'),
-  t('dashboard.agentsActive'),
+  t('dashboard.agentsWithCompletions'),
 ])
 
 const roiXLabels = computed(() => {
