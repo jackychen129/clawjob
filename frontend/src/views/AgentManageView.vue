@@ -16,6 +16,29 @@
         </div>
       </div>
       <template v-else>
+        <section v-if="earningsSummary" class="earnings-summary card card-content" aria-label="Earnings summary">
+          <h2 class="section-title">{{ t('agentManage.earningsTitle') || '收益概览' }}</h2>
+          <p class="hint">{{ earningsSummary.agent_name }}</p>
+          <div class="earnings-cards">
+            <div class="earnings-card">
+              <span class="earnings-card__num">{{ earningsSummary.reward_points_earned }}</span>
+              <span class="earnings-card__label">{{ t('agentManage.earningsEarned') || '已赚奖励点' }}</span>
+            </div>
+            <div class="earnings-card">
+              <span class="earnings-card__num">{{ earningsSummary.pending_verification }}</span>
+              <span class="earnings-card__label">{{ t('agentManage.earningsPending') || '待验收' }}</span>
+            </div>
+            <div class="earnings-card">
+              <span class="earnings-card__num">{{ earningsSummary.platform_tasks_open }}</span>
+              <span class="earnings-card__label">{{ t('agentManage.earningsOpenTasks') || '平台开放任务' }}</span>
+            </div>
+            <div class="earnings-card">
+              <span class="earnings-card__num">{{ earningsSummary.credits_balance }}</span>
+              <span class="earnings-card__label">{{ t('agentManage.earningsCredits') || '账户点数' }}</span>
+            </div>
+          </div>
+        </section>
+
         <section class="agent-studio-summary" aria-label="Studio KPI">
           <div class="studio-kpi"><div class="studio-kpi__num">{{ studioSummary.agents }}</div><div class="studio-kpi__label">{{ t('agentStudio.kpiAgents') || 'Agents' }}</div></div>
           <div class="studio-kpi"><div class="studio-kpi__num">{{ studioSummary.completed }}</div><div class="studio-kpi__label">{{ t('agentStudio.kpiCompleted') || '累计完成' }}</div></div>
@@ -394,6 +417,13 @@ const copySkillExportDone = ref(false)
 const templateUnpublishLoading = ref<number | null>(null)
 const skillUnpublishLoading = ref<number | null>(null)
 const radarAgentId = ref<number | null>(null)
+const earningsSummary = ref<{
+  agent_name: string
+  reward_points_earned: number
+  pending_verification: number
+  platform_tasks_open: number
+  credits_balance: number
+} | null>(null)
 
 const studioSummary = computed(() => {
   const list = myAgents.value
@@ -414,6 +444,7 @@ watch(myAgents, (list) => {
 watch(radarAgentId, (v) => {
   if (v != null) {
     try { localStorage.setItem('clawjob_radar_last_agent_id', String(v)) } catch { /* noop */ }
+    loadEarningsSummary(v)
   }
 })
 
@@ -476,6 +507,21 @@ async function enrichAgentReputation(list: AgentItem[]) {
   }))
 }
 
+function loadEarningsSummary(agentId: number) {
+  api.fetchAgentEarningsSummary(agentId)
+    .then((res) => {
+      const d = res.data
+      earningsSummary.value = {
+        agent_name: d.agent_name || '',
+        reward_points_earned: d.reward_points_earned ?? 0,
+        pending_verification: d.pending_verification ?? 0,
+        platform_tasks_open: d.platform_tasks_open ?? 0,
+        credits_balance: d.credits_balance ?? 0,
+      }
+    })
+    .catch(() => { earningsSummary.value = null })
+}
+
 function loadMyAgents() {
   if (!auth.isLoggedIn) return
   agentsLoading.value = true
@@ -483,6 +529,8 @@ function loadMyAgents() {
     const list: AgentItem[] = (res.data.agents || []) as AgentItem[]
     myAgents.value = list
     await enrichAgentReputation(list)
+    const aid = radarAgentId.value ?? list[0]?.id
+    if (aid) loadEarningsSummary(aid)
   }).catch(() => { myAgents.value = [] }).finally(() => { agentsLoading.value = false })
 }
 
@@ -809,6 +857,11 @@ function copySkillExportBlurb() {
 .agent-skill-box__tags { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3); }
 .agent-skill-box__loading { margin-top: var(--space-3); }
 
+.earnings-summary { margin-bottom: var(--space-6); }
+.earnings-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: var(--space-3); margin-top: var(--space-4); }
+.earnings-card { padding: var(--space-3); border: var(--border-hairline); border-radius: var(--radius-md); text-align: center; }
+.earnings-card__num { display: block; font-size: var(--font-section-title); font-weight: 650; color: var(--primary-color); }
+.earnings-card__label { font-size: var(--font-caption); color: var(--text-secondary); }
 .onboarding-card--glass { border: var(--border-hairline); border-radius: var(--radius-xl); border-color: rgba(var(--primary-rgb), 0.25); margin-bottom: var(--space-6); }
 .onboarding-card--glass .card-content { padding: var(--space-6); }
 .onboarding-title { font-weight: 650; font-size: var(--font-section-title); margin: 0 0 var(--space-2); letter-spacing: var(--tracking-normal); color: var(--text-primary); line-height: 1.25; }

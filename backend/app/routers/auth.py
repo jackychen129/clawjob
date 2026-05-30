@@ -27,6 +27,7 @@ from app.database.relational_db import (
 from app.security import get_password_hash, create_access_token, verify_password, limiter
 from app.services import referrals as _rf
 from app.services import community as _community
+from app.services.onboarding_quest import onboarding_tasks_for_register
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -170,13 +171,20 @@ def _send_register_welcome_inbox(db: Session, user: User, agent: Agent, next_ste
             return
         tasks_url = next_steps.get("tasks_hall_url") or ""
         community_url = next_steps.get("community_url") or ""
+        quest_ids = next_steps.get("onboarding_task_ids") or []
+        quest_line = (
+            f"4. 新手 Quest 任务 ID：{', '.join(str(i) for i in quest_ids)}\n"
+            if quest_ids
+            else ""
+        )
         body = (
             f"欢迎加入 ClawJob，{agent.name}！\n\n"
             f"你的 Agent ID：{agent.id}，注册赠点已到账。\n\n"
             f"下一步：\n"
             f"1. 浏览开放任务：{tasks_url}\n"
             f"2. 进入社区交流：{community_url}\n"
-            f"3. 阅读 Skill 文档：{next_steps.get('skill_doc_url', '')}\n\n"
+            f"3. 阅读 Skill 文档：{next_steps.get('skill_doc_url', '')}\n"
+            f"{quest_line}\n"
             "接取任务：GET /tasks 后 POST /tasks/{{task_id}}/subscribe，Body 含 agent_id。"
         )
         db.add(
@@ -220,11 +228,11 @@ def _skill_register_validation_error(reason: str, *, missing_sections: Optional[
     return HTTPException(status_code=400, detail=detail)
 
 
-def _register_minimal_next_steps(agent_id: int) -> dict:
-    """注册成功后给 Agent 的下一步指引（Growth v2）。"""
+def _register_minimal_next_steps(db: Session, agent_id: int) -> dict:
+    """注册成功后给 Agent 的下一步指引（Growth v2/v4）。"""
     app_base = os.getenv("CLAWJOB_APP_URL", "https://app.clawjob.com.cn").rstrip("/")
     api_base = os.getenv("CLAWJOB_API_URL", "https://api.clawjob.com.cn").rstrip("/")
-    return {
+    steps = {
         "browse_tasks_url": f"{api_base}/tasks?status_filter=open&limit=20&sort=created_at_desc",
         "tasks_hall_url": f"{app_base}/#/tasks",
         "community_url": f"{app_base}/#/community",
@@ -241,6 +249,19 @@ def _register_minimal_next_steps(agent_id: int) -> dict:
             "hint": "Browse GET /tasks, pick an open task, then subscribe with your agent_id.",
         },
     }
+    steps.update(onboarding_tasks_for_register(db, agent_id))
+    return steps
+
+
+def _register_response_message(*, referral_bound: bool) -> Optional[str]:
+    if not referral_bound:
+        return None
+    invitee_bonus = _rf.invitee_bonus_points()
+    referrer_bonus = _rf.referrer_bonus_points()
+    return (
+        f"已绑定邀请关系：你完成首个有奖任务后，将额外获得 {invitee_bonus} 积分；"
+        f"邀请人可获得 {referrer_bonus} 积分返点。"
+    )
 
 
 def _bind_referral_safe(db: Session, user: User, raw_code: Optional[str]) -> bool:
@@ -656,7 +677,14 @@ def register_via_skill(body: RegisterViaSkillBody, db: Session = Depends(get_db)
         data={"sub": str(user.id), "type": "user"},
         expires_delta=timedelta(days=365),
     )
-    return {
+    next_steps = _register_minimal_next_steps(db, agent.id)
+    try:
+        _send_register_welcome_inbox(db, user, agent, next_steps)
+        db.commit()
+    except Exception:
+        db.rollback()
+    reg_msg = _register_response_message(referral_bound=referral_bound)
+    payload = {
         "access_token": token,
         "token_type": "bearer",
         "user_id": user.id,
@@ -676,7 +704,13 @@ def register_via_skill(body: RegisterViaSkillBody, db: Session = Depends(get_db)
                 "reward_points": second_task.reward_points,
             },
         ],
+        "next_steps": next_steps,
+        "onboarding_task_ids": next_steps.get("onboarding_task_ids") or [],
+        "onboarding_tasks": next_steps.get("onboarding_tasks") or [],
     }
+    if reg_msg:
+        payload["message"] = reg_msg
+    return payload
 
 
 @router.post("/register-agent-minimal")
@@ -700,7 +734,7 @@ def register_agent_minimal(request: Request, body: RegisterAgentMinimalBody, db:
     db.commit()
     db.refresh(user)
     db.refresh(agent)
-    next_steps = _register_minimal_next_steps(agent.id)
+    next_steps = _register_minimal_next_steps(db, agent.id)
     try:
         _send_register_welcome_inbox(db, user, agent, next_steps)
         db.add(
@@ -725,7 +759,8 @@ def register_agent_minimal(request: Request, body: RegisterAgentMinimalBody, db:
         data={"sub": str(user.id), "type": "user"},
         expires_delta=timedelta(days=365),
     )
-    return {
+    reg_msg = _register_response_message(referral_bound=referral_bound)
+    payload = {
         "access_token": token,
         "token_type": "bearer",
         "user_id": user.id,
@@ -739,7 +774,12 @@ def register_agent_minimal(request: Request, body: RegisterAgentMinimalBody, db:
             {"id": handshake_task.id, "title": handshake_task.title, "status": handshake_task.status},
         ],
         "next_steps": next_steps,
+        "onboarding_task_ids": next_steps.get("onboarding_task_ids") or [],
+        "onboarding_tasks": next_steps.get("onboarding_tasks") or [],
     }
+    if reg_msg:
+        payload["message"] = reg_msg
+    return payload
 
 
 @router.post("/guest-token")

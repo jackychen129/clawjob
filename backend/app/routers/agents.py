@@ -431,6 +431,23 @@ def list_agent_tasks(
     return {"tasks": out, "total": len(out), "agent_name": agent.name}
 
 
+@router.get("/agents/{agent_id}/trust-card")
+def get_agent_trust_card(
+    agent_id: int,
+    db: Session = Depends(get_db),
+):
+    """Agent 信任卡（公开只读）：完成率、托管单、累计收益、认证 Skill、徽章等，供 Agent 与爬虫读取。"""
+    from app.services.trust_card import compute_agent_trust_card
+
+    card = compute_agent_trust_card(db, agent_id)
+    if card is None:
+        raise HTTPException(status_code=404, detail="Agent 不存在")
+    return JSONResponse(
+        content=card,
+        headers={"Cache-Control": "public, max-age=300"},
+    )
+
+
 @router.get("/agents/{agent_id}/reputation")
 def get_agent_reputation(
     agent_id: int,
@@ -528,15 +545,21 @@ def get_public_user_profile(
     total_completed = 0
     total_earned = 0
     best_score = 0
+    from app.services.trust_card import compute_agent_trust_card
+
+    api_base = os.getenv("CLAWJOB_API_URL", "https://api.clawjob.com.cn").rstrip("/")
     for a in agents:
         card = compute_agent_reputation(db, a.id) or {}
-        score = int(card.get("score", 0) or 0)
-        completed = int(card.get("completed_tasks", 0) or 0)
-        earned = int(card.get("total_reward_points", 0) or 0)
+        trust = compute_agent_trust_card(db, a.id) or {}
+        score = int(card.get("reputation_score", 0) or 0)
+        stats = card.get("stats") or {}
+        completed = int(stats.get("completed_task_count", 0) or 0)
+        earned = int(stats.get("reward_points_total", 0) or 0)
         total_completed += completed
         total_earned += earned
         best_score = max(best_score, score)
         agent_cards.append({
+            "agent_id": a.id,
             "id": a.id,
             "name": a.name,
             "description": (a.description or "")[:400],
@@ -544,9 +567,14 @@ def get_public_user_profile(
             "category": getattr(a, "category", None),
             "capabilities": a.capabilities if isinstance(a.capabilities, list) else [],
             "reputation_score": score,
+            "tasks_completed": completed,
             "completed_tasks": completed,
-            "top_skills": card.get("top_skills") or [],
+            "top_skills": stats.get("top_skills") or [],
+            "trust_card_url": f"{api_base}/agents/{a.id}/trust-card",
+            "trust_one_liner_zh": trust.get("one_liner_zh"),
+            "badges": trust.get("badges") or [],
         })
+    rep_avg = round(best_score, 1) if agent_cards else None
     return JSONResponse(
         content={
             "username": user.username,
@@ -555,8 +583,11 @@ def get_public_user_profile(
             "agents": agent_cards,
             "summary": {
                 "agents_count": len(agent_cards),
+                "tasks_completed": total_completed,
                 "total_completed_tasks": total_completed,
+                "total_rewards_earned": total_earned,
                 "total_earned_points": total_earned,
+                "reputation_avg": rep_avg,
                 "best_reputation_score": best_score,
             },
         },

@@ -17,6 +17,16 @@
 
         <p v-if="liveStats" class="join-live-stats">{{ t('joinPage.liveStats', liveStats) }}</p>
         <p class="join-referral-hint">{{ t('joinPage.referralHint') }}</p>
+        <p class="join-moat-hint">{{ t('joinPage.moatEscrow') }}</p>
+        <section class="join-earnings-path" aria-label="Earnings path">
+          <h2 class="join-section-title">{{ t('joinPage.earningsPathTitle') }}</h2>
+          <ol class="join-earnings-steps">
+            <li>{{ t('joinPage.earningsStep1') }}</li>
+            <li>{{ t('joinPage.earningsStep2') }}</li>
+            <li>{{ t('joinPage.earningsStep3') }}</li>
+            <li>{{ t('joinPage.earningsStep4') }}</li>
+          </ol>
+        </section>
         <p class="join-earnings-hint">{{ t('joinPage.earningsHint') }}</p>
         <p class="join-skill-link">
           <a :href="skillMdUrl" target="_blank" rel="noopener">{{ t('joinPage.skillMdLink') }}</a>
@@ -100,8 +110,12 @@ function copyCurl() {
   line-height: 1.5;
 }
 .join-live-stats { margin-top: var(--space-3); font-size: var(--font-body); color: var(--primary-color); }
+.join-earnings-path { margin-top: var(--space-6); }
+.join-earnings-steps { margin: var(--space-2) 0 0; padding-left: 1.25rem; color: var(--text-secondary); font-size: var(--font-body); line-height: 1.6; }
+.join-earnings-steps li { margin-bottom: var(--space-2); }
 .join-earnings-hint { margin-top: var(--space-2); font-size: var(--font-caption); color: var(--text-secondary); }
 .join-referral-hint { margin-top: var(--space-4); font-size: var(--font-caption); color: var(--text-secondary); }
+.join-moat-hint { margin-top: var(--space-3); font-size: var(--font-body-sm); color: var(--primary-color); font-weight: 500; }
 .join-skill-link { margin-top: var(--space-2); font-size: var(--font-caption); }
 .join-links { display: flex; flex-wrap: wrap; gap: var(--space-4); margin-top: var(--space-4); font-size: var(--font-caption); }
 </style>

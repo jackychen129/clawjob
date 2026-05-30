@@ -2439,6 +2439,63 @@ def test_agent_reputation_404_for_missing():
     assert r.status_code == 404
 
 
+def test_agent_trust_card_public():
+    """信任卡匿名可读，含完成率、徽章与 URL。"""
+    u = f"trust_{_unique()}"
+    token = _register_user(u, f"{u}@example.com", "pw")["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    ar = client.post("/agents/register", json={"name": "trust-agent", "description": "d"}, headers=headers)
+    assert ar.status_code == 200, ar.text
+    agent_id = ar.json()["id"]
+    r = client.get(f"/agents/{agent_id}/trust-card")
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["agent_id"] == agent_id
+    assert "completion_rate" in data
+    assert "escrow_tasks_completed" in data
+    assert "verified_skills" in data
+    assert "badges" in data
+    assert data["urls"]["trust_card"]
+
+
+def test_task_list_includes_escrow_and_payout_badges():
+    pub = f"badgepub_{_unique()}"
+    tk = _register_user(pub, f"{pub}@example.com", "pw")["access_token"]
+    h = {"Authorization": f"Bearer {tk}"}
+    client.post("/account/recharge", json={"amount": 100}, headers=h)
+    tr = client.post(
+        "/tasks",
+        json={
+            "title": "escrow-badge-task",
+            "reward_points": 20,
+            "completion_webhook_url": "https://example.com/cb",
+            "escrow_milestones": [
+                {"title": "M1", "points": 10, "acceptance_criteria": "done"},
+                {"title": "M2", "points": 10, "acceptance_criteria": "done"},
+            ],
+        },
+        headers=h,
+    )
+    assert tr.status_code == 200, tr.text
+    task_id = tr.json()["id"]
+    lst = client.get("/tasks", params={"status_filter": "open"})
+    assert lst.status_code == 200
+    row = next((t for t in lst.json().get("tasks", []) if t["id"] == task_id), None)
+    assert row is not None
+    badges = row.get("badges") or []
+    assert "escrow" in badges
+    assert "verified_payout" in badges
+
+
+def test_skill_pack_recommended_tasks():
+    r = client.get("/skills/packs/openclaw-starter/recommended-tasks", params={"limit": 5})
+    assert r.status_code == 200, r.text
+    assert r.json().get("pack_id") == "openclaw-starter"
+    assert "tasks" in r.json()
+    r404 = client.get("/skills/packs/no-such-pack/recommended-tasks")
+    assert r404.status_code == 404
+
+
 def test_recommend_candidates_top_k_owner_only():
     """发布方可获取 Top-K 候选人推荐；非发布者 403。"""
     pub = f"reccpub_{_unique()}"
@@ -4413,6 +4470,8 @@ def test_skills_packs_public():
     items = data.get("items") or []
     assert any(i.get("id") == "openclaw-starter" for i in items)
     assert all("install_copy" in i for i in items)
+    assert all("why_this_pack_zh" in i for i in items)
+    assert all("open_tasks_count" in i for i in items)
     r2 = client.get("/skills/packs", params={"scenario": "writing"})
     assert r2.status_code == 200
     assert all(i.get("scenario") == "writing" for i in (r2.json().get("items") or []))
@@ -4427,6 +4486,67 @@ def test_well_known_clawjob_agent_manifest():
     assert "tasks_open" in (data.get("stats") or {})
     assert "agents_count" in (data.get("stats") or {})
     assert isinstance(data.get("skill_packs"), list)
+    assert "onboarding_quest" in data
+    assert "sample_open_tasks" in data
+    assert "referral" in data
+    assert "trust_card_sample_url" in data
+    assert "platform_moats_zh" in data
+    eps = data.get("endpoints") or {}
+    assert "trust_card_pattern" in eps
+
+
+def test_seed_onboarding_quest_idempotent():
+    from app.database.relational_db import SessionLocal
+    from app.services.onboarding_quest import seed_onboarding_quest_tasks
+
+    db = SessionLocal()
+    try:
+        n1 = seed_onboarding_quest_tasks(db, apply=True)
+        n2 = seed_onboarding_quest_tasks(db, apply=True)
+        assert n1 >= 3 or n2 == 0
+        assert n2 == 0
+    finally:
+        db.close()
+
+
+def test_register_minimal_includes_onboarding_quest():
+    from app.database.relational_db import SessionLocal
+    from app.services.onboarding_quest import seed_onboarding_quest_tasks
+
+    db = SessionLocal()
+    try:
+        seed_onboarding_quest_tasks(db, apply=True)
+    finally:
+        db.close()
+    r = client.post(
+        "/auth/register-agent-minimal",
+        json={"agent_name": f"Quest_{_unique()}", "description": "onboarding quest test"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    ids = data.get("onboarding_task_ids") or []
+    assert len(ids) >= 3
+    assert len(data.get("onboarding_tasks") or []) >= 3
+    assert data.get("next_steps", {}).get("onboarding_task_ids")
+
+
+def test_register_minimal_referral_message(monkeypatch):
+    monkeypatch.setenv("REFERRAL_BONUS_REFERRER", "100")
+    monkeypatch.setenv("REFERRAL_BONUS_INVITEE", "50")
+    ref = f"refmsg_{_unique()}"
+    tk_ref = _register_user(ref, f"{ref}@example.com", "pw")["access_token"]
+    my = client.get("/account/referral", headers={"Authorization": f"Bearer {tk_ref}"}).json()
+    code = my.get("referral_code") or my.get("code")
+    if not code:
+        pytest.skip("referral_code not available in test env")
+    r = client.post(
+        "/auth/register-agent-minimal",
+        json={"agent_name": f"RefMsg_{_unique()}", "referral_code": code},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json().get("referral_bound") is True
+    assert r.json().get("message")
+    assert "50" in r.json().get("message", "")
 
 
 def test_agent_earnings_summary_owner_only():

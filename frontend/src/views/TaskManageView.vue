@@ -59,6 +59,7 @@
                     <div class="task-row__head">
                       <span v-if="item.data!.category" class="task-row__category">{{ taskCategoryLabel(item.data!.category) }}</span>
                       <span v-if="item.data!.collaborative" class="task-tag task-tag--collab">{{ t('task.collaborativeBadge') }}</span>
+                      <span v-for="b in (item.data!.badges || [])" :key="b" class="task-tag" :class="'task-tag--' + b">{{ taskBadgeLabel(b) }}</span>
                       <span :class="taskStatusPillClass(item.data!.status)">{{ t('status.' + item.data!.status) || item.data!.status }}</span>
                       <span v-if="item.data!.reward_points" class="task-row__reward mono">{{ t('task.reward', { n: item.data!.reward_points }) }}</span>
                     </div>
@@ -124,6 +125,7 @@
                   <div class="task-row__head">
                     <span v-if="item.data!.category" class="task-row__category">{{ taskCategoryLabel(item.data!.category) }}</span>
                     <span v-if="item.data!.task_type" class="task-row__type">{{ item.data!.task_type }}</span>
+                    <span v-for="b in (item.data!.badges || [])" :key="b" class="task-tag" :class="'task-tag--' + b">{{ taskBadgeLabel(b) }}</span>
                     <span :class="taskStatusPillClass(item.data!.status)">{{ t('status.' + item.data!.status) || item.data!.status }}</span>
                     <span v-if="item.data!.reward_points" class="task-row__reward mono">{{ t('task.reward', { n: item.data!.reward_points }) }}</span>
                   </div>
@@ -131,6 +133,7 @@
                   <p class="task-row__desc">{{ (item.data!.description || t('common.noDescription')).slice(0, 120) }}{{ (item.data!.description || '').length > 120 ? '…' : '' }}</p>
                   <div v-if="item.data!.location || item.data!.duration_estimate || (getTaskSkills(item.data!).length) || item.data!.related_skill?.skill_token || item.data!.collaborative" class="task-row__tags">
                     <span v-if="item.data!.collaborative" class="task-tag task-tag--collab">{{ t('task.collaborativeBadge') }}</span>
+                    <span v-for="b in (item.data!.badges || [])" :key="b" class="task-tag" :class="'task-tag--' + b">{{ taskBadgeLabel(b) }}</span>
                     <span v-if="item.data!.location" class="task-tag task-tag--location">{{ item.data!.location }}</span>
                     <span v-if="item.data!.duration_estimate" class="task-tag task-tag--duration">{{ item.data!.duration_estimate }}</span>
                     <span v-for="s in getTaskSkills(item.data!)" :key="s" class="task-tag task-tag--skill">{{ s }}</span>
@@ -207,6 +210,7 @@
                   >
                     <div class="task-row__head">
                       <span v-if="item.data!.category" class="task-row__category">{{ taskCategoryLabel(item.data!.category) }}</span>
+                      <span v-for="b in (item.data!.badges || [])" :key="b" class="task-tag" :class="'task-tag--' + b">{{ taskBadgeLabel(b) }}</span>
                       <span :class="taskStatusPillClass(item.data!.status)">{{ t('status.' + item.data!.status) || item.data!.status }}</span>
                       <span v-if="item.data!.reward_points" class="task-row__reward mono">{{ t('task.reward', { n: item.data!.reward_points }) }}</span>
                     </div>
@@ -278,6 +282,7 @@
                     <div class="task-row__head">
                       <span class="task-row__dispute-role">{{ disputeRoleLabel(item.data!.id) }}</span>
                       <span v-if="item.data!.category" class="task-row__category">{{ taskCategoryLabel(item.data!.category) }}</span>
+                      <span v-for="b in (item.data!.badges || [])" :key="b" class="task-tag" :class="'task-tag--' + b">{{ taskBadgeLabel(b) }}</span>
                       <span :class="taskStatusPillClass(item.data!.status)">{{ t('status.' + item.data!.status) || item.data!.status }}</span>
                       <span v-if="item.data!.reward_points" class="task-row__reward mono">{{ t('task.reward', { n: item.data!.reward_points }) }}</span>
                     </div>
@@ -1889,6 +1894,12 @@ const categoryLabels: Record<string, string> = {
   data: 'task.categoryData',
   other: 'task.categoryOther',
 }
+function taskBadgeLabel(badge: string): string {
+  if (badge === 'escrow') return t('task.badgeEscrow') || '托管'
+  if (badge === 'verified_payout') return t('task.badgeVerifiedPayout') || '验收放款'
+  return badge
+}
+
 function taskCategoryLabel(cat: string) {
   return t(categoryLabels[cat] || cat)
 }
@@ -3400,6 +3411,8 @@ watch(tab, (newTab) => {
 .task-tag--skill { border-color: rgba(168, 85, 247, 0.35); color: rgba(233, 213, 255, 0.95); }
 .task-tag--skill-related { border-color: rgba(34, 197, 94, 0.38); color: rgba(187, 247, 208, 0.95); }
 .task-tag--collab { border-color: rgba(59, 130, 246, 0.45); color: rgba(191, 219, 254, 0.98); }
+.task-tag--escrow { border-color: rgba(16, 185, 129, 0.5); color: rgba(167, 243, 208, 0.98); }
+.task-tag--verified_payout { border-color: rgba(245, 158, 11, 0.5); color: rgba(253, 230, 138, 0.98); }
 .detail-economy-explainer {
   margin: var(--space-3) 0;
   padding: var(--space-2) var(--space-3);

@@ -37,6 +37,10 @@
                 <strong>{{ a.name }}</strong>
                 <span v-if="a.reputation_score != null" class="user-public-agent-score">⭐ {{ a.reputation_score }}</span>
               </div>
+              <p v-if="a.trust_one_liner_zh" class="user-public-agent-trust">{{ a.trust_one_liner_zh }}</p>
+              <p v-if="a.badges?.length" class="user-public-agent-badges">
+                <span v-for="b in a.badges" :key="b" class="user-public-badge">{{ b }}</span>
+              </p>
               <p v-if="a.description" class="user-public-agent-desc">{{ a.description }}</p>
               <div class="user-public-agent-meta">
                 <span>{{ t('publicUser.tasksCompleted', { n: a.tasks_completed ?? 0 }) || `${a.tasks_completed ?? 0} completed` }}</span>

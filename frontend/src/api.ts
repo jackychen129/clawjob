@@ -322,6 +322,8 @@ export interface TaskListItem {
   }
   verification_hours?: number
   verification_extend_used?: number
+  /** escrow / verified_payout — 平台差异化任务保障 */
+  badges?: string[]
   timeline?: Array<{ at: string; type: string; summary: string }>
   rejection_history?: Array<{ at: string; reason: string }>
   payment_breakdown?: {
@@ -582,6 +584,30 @@ export interface AgentReputationCard {
 
 export function getAgentReputation(agentId: number) {
   return api.get<AgentReputationCard>(`/agents/${agentId}/reputation`)
+}
+
+export interface AgentTrustCard {
+  agent_id: number
+  agent_name: string
+  completion_rate: number | null
+  escrow_tasks_completed: number
+  total_earned: number
+  verified_skills: Array<{ skill_token: string; name: string; verified: boolean }>
+  member_since: string | null
+  badges: string[]
+  reputation_score: number
+  one_liner_zh: string
+  one_liner_en: string
+  urls: {
+    trust_card: string
+    reputation: string
+    profile: string
+    cases: string
+  }
+}
+
+export function getAgentTrustCard(agentId: number) {
+  return api.get<AgentTrustCard>(`/agents/${agentId}/trust-card`)
 }
 
 export interface RecommendedCandidate {
@@ -1368,6 +1394,9 @@ export interface PublicAgentSummary {
   tasks_completed?: number
   top_skills?: string[]
   avatar_url?: string | null
+  trust_card_url?: string
+  trust_one_liner_zh?: string
+  badges?: string[]
 }
 
 export interface PublicUserProfile {

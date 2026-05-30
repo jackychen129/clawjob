@@ -463,6 +463,13 @@ def task_extra(t: Task, db: Session) -> dict:
         }
     else:
         out["auction"] = {"enabled": False}
+    badges: List[str] = []
+    if esc and esc.get("enabled"):
+        badges.append("escrow")
+    reward_pts = int(getattr(t, "reward_points", 0) or 0)
+    if reward_pts > 0:
+        badges.append("verified_payout")
+    out["badges"] = badges
     return out
 def task_is_visible_to(task: Task, viewer_user_id: Optional[int], viewer_agent_ids: List[int]) -> bool:
     """定向任务可见性：仅发布者 + 被邀请 Agent 的拥有者可见。

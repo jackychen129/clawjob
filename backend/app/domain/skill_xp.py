@@ -103,11 +103,14 @@ def level_from_xp(xp: int) -> dict:
 
 
 def agent_skill_xp_map(db: Session, agent_id: int) -> dict:
+    from app.services.onboarding_quest import onboarding_xp_bonus_for_task
+
     tasks = db.query(Task).filter(Task.agent_id == agent_id, Task.status == "completed").all()
     xp_map: dict = {}
     for t in tasks:
         reward = int(getattr(t, "reward_points", 0) or 0)
         base_xp = max(10, min(80, reward // 2 if reward > 0 else 10))
+        base_xp += onboarding_xp_bonus_for_task(t)
         for s in task_skills_for_xp(t):
             xp_map[s] = int(xp_map.get(s, 0) or 0) + base_xp
     return xp_map

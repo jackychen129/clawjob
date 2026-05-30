@@ -6,6 +6,28 @@
       <p>{{ t('auth.pleaseLogin') || '请先登录' }}</p>
     </div>
     <template v-else>
+      <section class="card card-content referral-panel referral-panel--prominent">
+        <h3>{{ t('account.referralTitle') }}</h3>
+        <p class="hint">{{ t('account.referralHint') }}</p>
+        <div v-if="referralLoading" class="account-skel">{{ t('common.loading') }}</div>
+        <template v-else-if="referral">
+          <div class="referral-code-row">
+            <span class="referral-code mono">{{ referral.referral_code }}</span>
+            <Button type="button" size="sm" variant="secondary" @click="copyReferralCode">
+              {{ referralCopyDone === 'code' ? t('account.tokenCopied') : t('account.referralCopyCode') }}
+            </Button>
+            <Button type="button" size="sm" variant="secondary" @click="copyReferralLink">
+              {{ referralCopyDone === 'link' ? t('account.tokenCopied') : t('account.referralCopyLink') }}
+            </Button>
+          </div>
+          <div class="referral-stats">
+            <div><span class="hint">{{ t('account.referralInvited') }}</span><strong>{{ referral.invited_count }}</strong></div>
+            <div><span class="hint">{{ t('account.referralRewarded') }}</span><strong>{{ referral.rewarded_count }}</strong></div>
+            <div><span class="hint">{{ t('account.referralBonusEarned') }}</span><strong>{{ referral.total_bonus_earned }}</strong></div>
+          </div>
+        </template>
+      </section>
+
       <section class="card card-content">
         <h3>{{ t('account.apiTokenTitle') }}</h3>
         <p class="hint">{{ t('account.apiTokenHint') }}</p>
@@ -24,26 +46,11 @@
         <p class="hint">{{ t('account.enterpriseOffHint') }}</p>
       </section>
 
-      <section class="card card-content referral-panel">
-        <h3>{{ t('account.referralTitle') }}</h3>
-        <p class="hint">{{ t('account.referralHint') }}</p>
+      <section class="card card-content referral-panel referral-panel--detail">
+        <h3>{{ t('account.referralRecordsTitle') || '邀请明细' }}</h3>
+        <p class="hint">{{ t('account.referralBonusSpec', { r: referral?.referrer_bonus_points ?? 100, i: referral?.invitee_bonus_points ?? 50 }) }}</p>
         <div v-if="referralLoading" class="account-skel">{{ t('common.loading') }}</div>
         <template v-else-if="referral">
-          <div class="referral-code-row">
-            <span class="referral-code mono">{{ referral.referral_code }}</span>
-            <Button type="button" size="sm" variant="secondary" @click="copyReferralCode">
-              {{ referralCopyDone === 'code' ? t('account.tokenCopied') : t('account.referralCopyCode') }}
-            </Button>
-            <Button type="button" size="sm" variant="secondary" @click="copyReferralLink">
-              {{ referralCopyDone === 'link' ? t('account.tokenCopied') : t('account.referralCopyLink') }}
-            </Button>
-          </div>
-          <div class="referral-stats">
-            <div><span class="hint">{{ t('account.referralInvited') }}</span><strong>{{ referral.invited_count }}</strong></div>
-            <div><span class="hint">{{ t('account.referralRewarded') }}</span><strong>{{ referral.rewarded_count }}</strong></div>
-            <div><span class="hint">{{ t('account.referralBonusEarned') }}</span><strong>{{ referral.total_bonus_earned }}</strong></div>
-            <div><span class="hint">{{ t('account.referralBonusSpec', { r: referral.referrer_bonus_points, i: referral.invitee_bonus_points }) }}</span></div>
-          </div>
           <div v-if="referralRecords.length" class="referral-records">
             <div v-for="rec in referralRecords" :key="rec.invitee_user_id" class="referral-record-row">
               <div class="referral-record-main">
@@ -767,6 +774,8 @@ onMounted(async () => {
 .account-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-3); }
 .recharge-panel { display: grid; gap: var(--space-3); }
 .referral-panel { display: grid; gap: var(--space-3); }
+.referral-panel--prominent { border-color: rgba(var(--primary-rgb), 0.35); background: rgba(var(--primary-rgb), 0.06); }
+.referral-panel--detail { margin-top: 0; }
 .referral-code-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .referral-code { padding: 0.25rem 0.6rem; background: rgba(0,0,0,0.25); border-radius: var(--radius-sm); font-size: var(--font-body); letter-spacing: 0.08em; }
 .referral-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--space-2); }
