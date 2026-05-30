@@ -1,6 +1,9 @@
 """Pytest configuration. Ignore test modules that depend on legacy API not present in current codebase."""
 import os
 
+# Enterprise routers (KYC / workspaces / billing) stay enabled in tests.
+os.environ.setdefault("CLAWJOB_ENTERPRISE", "1")
+
 
 def pytest_configure(config):
     """确保测试库 schema 与模型一致：若 tasks 表缺少列则添加（兼容旧库）。"""

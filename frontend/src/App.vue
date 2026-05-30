@@ -46,23 +46,17 @@
                   aria-hidden="true"
                 />
               </router-link>
-              <router-link to="/dashboard" class="nav-link" :class="{ active: route.path === '/dashboard' }">
-                <LayoutGrid class="nav-icon" aria-hidden="true" />
-                <span>{{ t('nav.dashboard') || '实况' }}</span>
-              </router-link>
               <router-link to="/inbox" class="nav-link" :class="{ active: route.path === '/inbox' }">
                 <Mail class="nav-icon" aria-hidden="true" />
                 <span>{{ t('nav.inbox') || '站内信' }}</span>
               </router-link>
-            </div>
-          </section>
-
-          <section class="nav-group">
-            <p class="nav-group-title">{{ t('nav.navGroupDiscover') }}</p>
-            <div class="nav-group-links">
               <router-link to="/marketplace" class="nav-link" :class="{ active: route.path === '/marketplace' || route.path === '/marketplace/' }">
                 <BookOpen class="nav-icon" aria-hidden="true" />
                 <span>{{ t('nav.skillMarket') || 'Skill 市场' }}</span>
+              </router-link>
+              <router-link to="/dashboard" class="nav-link" :class="{ active: route.path === '/dashboard' }">
+                <LayoutGrid class="nav-icon" aria-hidden="true" />
+                <span>{{ t('nav.dashboard') || '实况' }}</span>
               </router-link>
               <router-link to="/leaderboard" class="nav-link" :class="{ active: route.path === '/leaderboard' }">
                 <Trophy class="nav-icon" aria-hidden="true" />
@@ -72,39 +66,17 @@
                 <Users class="nav-icon" aria-hidden="true" />
                 <span>{{ t('nav.candidates') || '候选人' }}</span>
               </router-link>
-              <router-link to="/forum" class="nav-link" :class="{ active: route.path === '/forum' }">
-                <MessagesSquare class="nav-icon" aria-hidden="true" />
-                <span>{{ t('nav.forum') }}</span>
-              </router-link>
-            </div>
-          </section>
-
-          <section class="nav-group">
-            <p class="nav-group-title">{{ t('nav.navGroupCreate') }}</p>
-            <div class="nav-group-links">
-              <router-link to="/agents" class="nav-link" :class="{ active: route.path === '/agents' }">
+              <router-link to="/agents" class="nav-link" :class="{ active: route.path.startsWith('/agents') }">
                 <Bot class="nav-icon" aria-hidden="true" />
                 <span>{{ t('nav.agentManage') || 'Agent 管理' }}</span>
-              </router-link>
-              <router-link to="/studio" class="nav-link" :class="{ active: route.path === '/studio' }">
-                <Sparkles class="nav-icon" aria-hidden="true" />
-                <span>{{ t('nav.agentStudio') || 'Studio' }}</span>
               </router-link>
               <router-link to="/playbook" class="nav-link" :class="{ active: route.path === '/playbook' }">
                 <ListChecks class="nav-icon" aria-hidden="true" />
                 <span>{{ t('nav.playbook') }}</span>
               </router-link>
-              <router-link to="/skill" class="nav-link" :class="{ active: route.path === '/skill' }">
-                <Sparkles class="nav-icon" aria-hidden="true" />
-                <span>{{ t('common.skill') }}</span>
-              </router-link>
-              <router-link to="/a2a-console" class="nav-link" :class="{ active: route.path === '/a2a-console' }">
-                <Mail class="nav-icon" aria-hidden="true" />
-                <span>{{ t('nav.a2aConsole') }}</span>
-              </router-link>
-              <router-link to="/agent-lab" class="nav-link" :class="{ active: route.path === '/agent-lab' }">
-                <Bot class="nav-icon" aria-hidden="true" />
-                <span>{{ t('nav.agentLab') }}</span>
+              <router-link to="/docs" class="nav-link" :class="{ active: route.path.startsWith('/docs') }">
+                <BookOpen class="nav-icon" aria-hidden="true" />
+                <span>{{ t('common.docs') }}</span>
               </router-link>
               <router-link v-if="isAdmin" to="/admin" class="nav-link" :class="{ active: route.path === '/admin' }">
                 <Shield class="nav-icon" aria-hidden="true" />
@@ -185,316 +157,12 @@
       </div>
     </div>
     <main class="main-content relative z-0" :key="route.path">
-      <SkillPage v-if="route.path === '/skill'" />
-      <DocsPage v-else-if="route.path === '/docs'" />
-      <ManualPage v-else-if="route.path === '/docs/manual'" />
-      <OpenClawQuickstartPage v-else-if="route.path === '/docs/openclaw-quickstart'" />
-      <DashboardView v-else-if="route.path === '/dashboard'" />
-      <LeaderboardView v-else-if="route.path === '/leaderboard'" />
-      <CandidatesView v-else-if="route.path === '/candidates'" />
-      <MarketplaceView v-else-if="route.path === '/marketplace' || route.path === '/marketplace/'" />
-      <PlaybookView v-else-if="route.path === '/playbook'" />
-      <CommunityChatView v-else-if="route.path === '/community' || route.path === '/'" />
-      <ForumView v-else-if="route.path === '/forum'" />
-      <TaskManageView v-else-if="route.path === '/tasks'" @success="showSuccess" @register-hint="postPublishRegisterHint = true" />
-      <AgentManageView v-else-if="route.path === '/agents'" />
-      <AgentStudioView v-else-if="route.path === '/studio'" />
-      <AgentProfileView v-else-if="route.name === 'AgentProfile'" />
-      <A2aConsoleView v-else-if="route.path === '/a2a-console'" />
-      <AgentLabView v-else-if="route.path === '/agent-lab'" />
-      <InboxView v-else-if="route.path === '/inbox' || route.path === '/inbox/'" @show-auth="showAuthModal = true" />
-      <AccountPage v-else-if="route.path === '/account'" @credits-updated="loadAccountMe" />
-      <AdminView v-else-if="route.path === '/admin'" />
-      <template v-else-if="route.path !== '/'">
-      <div class="home-wrap apple-layout">
-        <!-- NOTE: translated comment in English. -->
-        <section class="home-playbook-cta apple-section" aria-label="Onboarding">
-          <p class="home-playbook-cta__tagline">{{ t('home.heroTagline') }}</p>
-          <div class="home-playbook-cta__actions">
-            <Button :as="RouterLink" to="/playbook" size="sm">{{ t('home.ctaPlaybook') }}</Button>
-            <Button :as="RouterLink" to="/tasks" size="sm" variant="secondary">{{ t('home.ctaTasks') }}</Button>
-            <Button :as="RouterLink" to="/skill" size="sm" variant="ghost">{{ t('home.ctaSkill') }}</Button>
-          </div>
-        </section>
-        <section class="home-dashboard" aria-label="Dashboard">
-          <div class="home-kpi">
-            <div v-if="homeStatsLoading" class="home-kpi-skeleton">
-              <div v-for="i in 4" :key="i" class="home-kpi-card tw-skeleton"></div>
-            </div>
-            <template v-else>
-              <div class="home-kpi-card">
-                <span class="home-kpi-value">{{ (homeStats.rewards_paid ?? 0).toLocaleString() }} / {{ (homeStats.tasks_open ?? 0).toLocaleString() }}</span>
-                <span class="home-kpi-label">{{ t('home.kpiVolume') || '已发放 / 开放任务' }}</span>
-              </div>
-              <div class="home-kpi-card">
-                <span class="home-kpi-value">{{ homeStats.agents_active ?? 0 }} / {{ homeStats.agents_count ?? 0 }}</span>
-                <span class="home-kpi-label">{{ t('home.kpiAgents') || '活跃 / 总 Agent' }}</span>
-              </div>
-              <div class="home-kpi-card">
-                <span class="home-kpi-value">{{ homeStats.tasks_open ?? 0 }} / {{ homeStats.tasks_total ?? 0 }}</span>
-                <span class="home-kpi-label">{{ t('home.kpiJobs') || '开放 / 总任务' }}</span>
-              </div>
-              <div class="home-kpi-card">
-                <span class="home-kpi-value">{{ homeStats.tasks_completed ?? 0 }}</span>
-                <span class="home-kpi-label">{{ t('dashboard.tasksCompleted') || '已完成' }}</span>
-              </div>
-            </template>
-          </div>
-        </section>
-        <section class="home-trust-strip" aria-label="Trust">
-          <div class="home-trust-grid">
-            <div class="home-trust-item">
-              <strong>{{ t('marketing.trustEscrowTitle') }}</strong>
-              <p>{{ t('marketing.trustEscrowBody') }}</p>
-            </div>
-            <div class="home-trust-item">
-              <strong>{{ t('marketing.trustFeeTitle') }}</strong>
-              <p>{{ t('marketing.trustFeeBody') }}</p>
-            </div>
-            <div class="home-trust-item home-trust-calc">
-              <label class="home-trust-calc-label">{{ t('marketing.feeCalcLabel') }}</label>
-              <div class="home-trust-calc-row">
-                <input v-model.number="feeCalcPoints" type="number" min="0" class="input input-num home-trust-calc-input" />
-                <p class="home-trust-calc-result mono">{{ t('marketing.feeCalcResult', { net: feeCalcNet, comm: feeCalcComm }) }}</p>
-              </div>
-            </div>
-          </div>
-        </section>
-        <h2 id="task-list" class="section-title">{{ t('common.openTasks') }}</h2>
-      <div class="home-layout">
-        <main class="home-main">
-          <div class="home-toolbar">
-            <input
-              v-model="homeSearchQuery"
-              type="search"
-              class="home-search input"
-              :placeholder="t('task.searchPlaceholder')"
-              @input="onHomeSearchInput"
-            />
-            <div class="home-filters">
-              <div class="home-categories">
-                <button
-                  v-for="opt in homeCategoryOptions"
-                  :key="opt.value"
-                  type="button"
-                  class="filter-chip"
-                  :class="{ active: homeCategoryFilter === opt.value }"
-                  @click="homeCategoryFilter = opt.value; loadTasks()"
-                >
-                  {{ t(opt.labelKey) }}
-                </button>
-              </div>
-              <div class="home-reward-filters flex flex-wrap gap-2 items-center">
-                <span class="home-reward-label">{{ t('task.rewardRange') || '奖励区间' }}:</span>
-                <button
-                  v-for="opt in homeRewardRangeOptions"
-                  :key="opt.value"
-                  type="button"
-                  class="filter-chip text-sm"
-                  :class="{ active: homeRewardRange === opt.value }"
-                  @click="homeRewardRange = opt.value; loadTasks()"
-                >
-                  {{ t(opt.labelKey) }}
-                </button>
-              </div>
-              <select v-model="homeSort" class="home-sort input" @change="loadTasks">
-                <option value="created_at_desc">{{ t('task.sortNewest') }}</option>
-                <option value="reward_desc">{{ t('task.sortReward') }}</option>
-                <option value="deadline_asc">{{ t('task.sortDeadline') || '即将截止' }}</option>
-                <option value="created_at_asc">{{ t('task.sortEarliest') }}</option>
-                <option value="comments_desc">{{ t('task.sortComments') }}</option>
-              </select>
-            </div>
-          </div>
-          <div v-if="tasksLoading && tasks.length === 0" class="task-list home-task-list home-task-list--skeleton">
-            <div v-for="i in 6" :key="i" class="card tw-skeleton-card home-task-skeleton-card">
-              <div class="tw-skeleton home-task-skeleton-line home-task-skeleton-line--title"></div>
-              <div class="tw-skeleton home-task-skeleton-line home-task-skeleton-line--desc"></div>
-              <div class="tw-skeleton home-task-skeleton-line home-task-skeleton-line--meta"></div>
-            </div>
-          </div>
-          <div v-else class="task-list home-task-list home-task-list--grid">
-          <div
-            v-for="task in tasks"
-            :key="task.id"
-            class="card tw-card task-card task-card--structured home-task-card h-full min-w-0 task-card--hover"
-            :data-task-id="task.id"
-            :data-task-status="task.status"
-            :data-task-location="task.location || ''"
-            :data-task-duration="task.duration_estimate || ''"
-            :data-task-skills="getTaskSkills(task).join(',')"
-            :data-task-reward="(task.reward_points || 0).toString()"
-          >
-            <div class="task-card__top">
-              <span v-if="task.category" class="task-card__category" data-attr="category">{{ taskCategoryLabel(task.category) }}</span>
-              <span v-if="task.task_type" class="task-card__type" data-attr="task_type">{{ task.task_type }}</span>
-              <span v-if="task.priority && task.priority !== 'medium'" class="task-card__priority" :class="'priority--' + task.priority">{{ task.priority }}</span>
-              <span v-if="task.escrow?.enabled" class="task-badge-escrow" :title="t('marketing.escrowBadgeTitle')">{{ t('marketing.escrowBadge') }}</span>
-              <span v-if="task.collaborative" class="task-badge-collab" :title="t('task.collaborativeBadgeTitle')">{{ t('task.collaborativeBadge') }}</span>
-              <span class="badge" :class="task.status">{{ t('status.' + task.status) || task.status }}</span>
-              <span v-if="task.reward_points" class="task-card__reward mono" data-attr="reward">{{ t('task.reward', { n: task.reward_points }) }}</span>
-            </div>
-            <h3 class="task-card__title home-task-card__title">{{ task.title }}</h3>
-            <p class="task-card__desc home-task-card__desc">{{ (task.description || t('common.noDescription')).slice(0, 150) }}{{ (task.description || '').length > 150 ? '…' : '' }}</p>
-            <p v-if="task.requirements" class="task-card__requirements-snippet home-task-card__requirements">{{ (task.requirements || '').replace(/\s+/g, ' ').slice(0, 80) }}{{ (task.requirements || '').length > 80 ? '…' : '' }}</p>
-            <div class="task-card__attrs home-task-card__attrs" role="list" aria-label="Task attributes">
-              <span v-if="task.location" class="task-attr task-attr--location" data-attr="location" role="listitem">{{ task.location }}</span>
-              <span v-if="task.duration_estimate" class="task-attr task-attr--duration" data-attr="duration_estimate" role="listitem">{{ task.duration_estimate }}</span>
-              <span v-for="s in getTaskSkills(task)" :key="s" class="task-attr task-attr--skill" data-attr="skill" role="listitem">{{ s }}</span>
-            </div>
-            <p class="task-card__meta home-task-card__meta">
-              <span class="task-publisher-row">
-                <span class="task-publisher-avatar" aria-hidden="true">{{ (task.publisher_name || '?').charAt(0).toUpperCase() }}</span>
-                <span>{{ task.publisher_name }}</span>
-              </span>
-              <span v-if="task.creator_agent_name" class="task-creator-agent"> · {{ t('task.publishedByAgent') }}：{{ task.creator_agent_name }}</span>
-              <span v-if="task.created_at" class="task-created-at mono"> · {{ formatTaskCreatedAt(task.created_at) }}</span>
-              <span> · <span class="mono">{{ task.subscription_count }}</span>{{ t('task.subscribers') }}</span>
-              <span v-if="task.comment_count != null"> · 💬 <span class="mono">{{ task.comment_count }}</span>{{ t('task.commentCountLabel') }}</span>
-              <span v-if="task.invited_agent_ids && task.invited_agent_ids.length" class="invited-only-badge"> · {{ t('task.invitedOnly') }}</span>
-            </p>
-            <p v-if="task.status === 'pending_verification' && task.verification_deadline_at" class="hint deadline-hint">{{ t('task.deadlineHint', { date: formatDeadline(task.verification_deadline_at) }) }}</p>
-            <div class="card-content task-card__actions-wrap">
-              <div class="task-actions">
-              <Button
-                v-if="auth.isLoggedIn && myAgents.length && task.status === 'open' && !isExecutor(task)"
-                size="sm"
-                variant="secondary"
-                :disabled="subscribeLoading === task.id"
-                @click="openSubscribeModal(task)"
-              >
-                {{ t('task.subscribe') }}
-              </Button>
-              <Button
-                v-if="auth.isLoggedIn && isExecutor(task) && task.status === 'open'"
-                size="sm"
-                :disabled="submitCompletionLoading === task.id"
-                @click="openSubmitCompletionModal(task)"
-              >
-                {{ t('task.submitCompletion') }}
-              </Button>
-              <template v-if="auth.isLoggedIn && task.owner_id === auth.userId && task.status === 'pending_verification'">
-                <Button size="sm" :disabled="confirmLoading === task.id" @click="doConfirm(task.id)">{{ t('task.confirmPass') }}</Button>
-                <Button size="sm" variant="secondary" :disabled="rejectLoading === task.id" @click="openRejectModal(task.id)">{{ t('task.reject') }}</Button>
-              </template>
-              <Button
-                v-if="auth.isLoggedIn && task.owner_id === auth.userId && task.status === 'open' && !task.reward_points"
-                size="sm"
-                variant="secondary"
-                :disabled="confirmLoading === task.id"
-                @click="doConfirm(task.id)"
-              >
-                {{ t('task.closeTask') }}
-              </Button>
-              <Button v-else-if="auth.isLoggedIn && !myAgents.length" :as="RouterLink" to="/agents" size="sm" variant="secondary">{{ t('task.goRegisterAgent') }}</Button>
-              <Button v-else-if="!auth.isLoggedIn" size="sm" type="button" @click="showAuthModal = true">{{ t('task.loginToAccept') }}</Button>
-              <Button size="sm" variant="ghost" type="button" class="task-card-comment-btn" @click="openHomeTaskDetail(task)">💬 {{ t('task.comments') }}</Button>
-              </div>
-            </div>
-          </div>
-          <EmptyState
-            v-if="!tasks.length && !tasksLoading"
-            :title="t('task.emptyTasks') || '暂无任务'"
-            :description="t('taskManage.emptyTaskHint') || '暂无任务，快去发布吧！'"
-            illustration-src="/assets/illustrations/market-empty.svg"
-            size="lg"
-          >
-            <template #actions>
-              <Button variant="secondary" type="button" @click="showCreateTaskModal = true">{{ t('task.publishFirst') }}</Button>
-            </template>
-          </EmptyState>
-          <div v-if="tasks.length && homeHasMore" class="home-load-more">
-            <Button variant="secondary" type="button" :disabled="tasksLoadingMore" @click="loadMoreTasks">
-              {{ tasksLoadingMore ? (t('task.loadingMore') || '加载中…') : (t('task.loadMore') || '加载更多') }}
-            </Button>
-          </div>
-          </div>
-        </main>
-        <aside class="home-sidebar">
-          <Button class="home-publish-btn" type="button" @click="openCreateTaskModal">
-            {{ t('task.publish') || '发布任务' }}
-          </Button>
-          <Card class="home-sidebar-feed">
-            <CardHeader class="pb-2">
-              <CardTitle class="home-dash-feed-title text-base">{{ t('dashboard.liveFeed') || '实时动态' }} <span class="mono text-zinc-500 text-sm">{{ t('dashboard.live') || 'LIVE' }}</span></CardTitle>
-            </CardHeader>
-            <CardContent class="pt-0">
-              <div v-if="homeActivityLoading" class="home-activity-skeleton">
-                <div v-for="i in 5" :key="i" class="tw-skeleton" style="height: 2rem; margin-bottom: 0.5rem; border-radius: 6px;"></div>
-              </div>
-              <ul v-else-if="homeActivity.length" class="home-activity-list">
-                <li v-for="ev in homeActivity.slice(0, 10)" :key="ev.at + ':' + ev.type + ':' + (ev.task_id || ev.agent_id || '')" class="home-activity-item">
-                  <span class="home-activity-time mono">{{ formatTimeAgoHome(ev.at) }}</span>
-                  <span class="home-activity-text">
-                    <template v-if="ev.type === 'task_created'">{{ ev.publisher_name }} {{ t('dashboard.eventTaskCreated', { title: (ev.task_title || '#' + (ev.task_id || '')).slice(0, 30) }) }}</template>
-                    <template v-else-if="ev.type === 'task_completed'">{{ ev.agent_name || t('common.agent') }} {{ t('dashboard.eventTaskCompleted', { title: (ev.task_title || '#' + (ev.task_id || '')).slice(0, 30), points: ev.reward_points ?? 0 }) }}</template>
-                    <template v-else-if="ev.type === 'agent_registered'">{{ ev.owner_name }} {{ t('dashboard.eventAgentRegistered', { name: ev.agent_name || '#' + (ev.agent_id || '') }) }}</template>
-                  </span>
-                  <router-link v-if="ev.task_id" :to="'/#/tasks?taskId=' + ev.task_id" class="home-activity-link">{{ t('task.viewDetail') }}</router-link>
-                </li>
-              </ul>
-              <p v-else class="hint">{{ t('dashboard.noActivity') || '暂无动态' }}</p>
-              <Button :as="RouterLink" to="/dashboard" size="sm" variant="ghost" class="mt-2 home-view-feed-btn">{{ t('home.viewFullFeed') || '查看完整实况 →' }}</Button>
-            </CardContent>
-          </Card>
-          <Card class="home-sidebar-feed">
-            <CardHeader class="pb-2">
-              <CardTitle class="home-dash-feed-title text-base">{{ t('community.hotDigest') || '社区热议' }}</CardTitle>
-            </CardHeader>
-            <CardContent class="pt-0">
-              <ul v-if="homeCommunityHot.length" class="home-activity-list">
-                <li v-for="it in homeCommunityHot.slice(0, 6)" :key="it.topic_id" class="home-activity-item">
-                  <span class="home-activity-text">{{ it.title }}</span>
-                  <router-link :to="'/community'" class="home-activity-link">#{{ it.skill_tag }}</router-link>
-                </li>
-              </ul>
-              <p v-else class="hint">{{ t('forum.emptyHot') || '暂无数据' }}</p>
-              <Button :as="RouterLink" to="/community" size="sm" variant="ghost" class="mt-2 home-view-feed-btn">
-                {{ t('community.enter') || '进入社区聊天 →' }}
-              </Button>
-            </CardContent>
-          </Card>
-        </aside>
-      </div>
-      </div>
-
-      <!-- NOTE: translated comment in English. -->
-      <section v-if="auth.isLoggedIn" class="home-my-created section apple-section">
-        <div class="section-head">
-          <h2 class="section-title">{{ t('task.myCreatedTasks') }}</h2>
-          <Button
-            v-if="batchConfirmSelected.length"
-            size="sm"
-            type="button"
-            :disabled="batchConfirmLoading"
-            @click="doBatchConfirm"
-          >
-            {{ t('task.batchConfirm') || '批量验收' }} ({{ batchConfirmSelected.length }})
-          </Button>
-        </div>
-        <div v-if="myCreatedTasksLoading" class="loading"><div class="spinner"></div></div>
-        <div v-else class="my-created-list">
-          <div
-            v-for="task in myCreatedTasks"
-            :key="task.id"
-            class="card tw-card task-card task-card--compact p-5"
-          >
-            <label v-if="task.status === 'pending_verification'" class="task-card__batch-check">
-              <input v-model="batchConfirmSelected" type="checkbox" :value="task.id" />
-            </label>
-            <div class="task-card__top">
-              <span v-if="task.category" class="task-card__category">{{ taskCategoryLabel(task.category) }}</span>
-              <span class="badge" :class="task.status">{{ t('status.' + task.status) || task.status }}</span>
-              <span v-if="task.reward_points" class="task-card__reward">{{ t('task.reward', { n: task.reward_points }) }}</span>
-            </div>
-            <h3 class="task-card__title">{{ task.title }}</h3>
-            <p class="task-card__meta">{{ task.publisher_name }} · {{ task.subscription_count || 0 }}{{ t('task.subscribers') }}</p>
-            <Button :as="RouterLink" :to="'/tasks?taskId=' + task.id" size="sm" variant="ghost">{{ t('task.viewDetail') }}</Button>
-          </div>
-        </div>
-        <p v-if="!myCreatedTasks.length && !myCreatedTasksLoading" class="hint">{{ t('task.noMyCreatedTasks') }}</p>
-      </section>
-      </template>
+      <router-view
+        @success="showSuccess"
+        @register-hint="postPublishRegisterHint = true"
+        @show-auth="showAuthModal = true"
+        @credits-updated="loadAccountMe"
+      />
     </main>
 
     <!-- NOTE: translated comment in English. -->
@@ -763,146 +431,6 @@
     </div>
 
     <!-- NOTE: translated comment in English. -->
-    <div v-if="submitCompletionTask" class="modal-mask" @click.self="submitCompletionTask = null">
-      <div class="modal">
-        <h3>{{ t('task.submitCompletionTitle', { title: submitCompletionTask.title }) }}</h3>
-        <p class="hint">{{ t('task.submitCompletionHint') }}</p>
-        <div class="form">
-          <Textarea v-model="submitCompletionForm.result_summary" rows="3" :placeholder="t('task.resultSummaryPlaceholder')" />
-          <Input v-model="submitCompletionForm.completion_link" type="url" :placeholder="t('task.completionLinkPlaceholder')" />
-          <Button :disabled="submitCompletionLoading" @click="doSubmitCompletion">{{ t('task.submitCompletion') }}</Button>
-        </div>
-        <Button variant="secondary" class="close-btn w-full" @click="submitCompletionTask = null">{{ t('common.cancel') }}</Button>
-      </div>
-    </div>
-
-    <!-- NOTE: translated comment in English. -->
-    <div v-if="rejectTaskId" class="modal-mask" @click.self="rejectTaskId = null; rejectReason = ''">
-      <div class="modal">
-        <h3>{{ t('task.rejectTitle') || '拒绝验收' }}</h3>
-        <p class="hint">{{ t('task.rejectHint') || '请填写拒绝理由，以便接取者改进（将作为强化学习反馈）。' }}</p>
-        <div class="form">
-          <Textarea v-model="rejectReason" rows="3" :placeholder="t('task.rejectReasonPlaceholder') || '例如：代码规范需改进、逻辑需更严密…'" />
-          <div class="quick-reply-templates flex flex-wrap gap-2 mt-2">
-            <Button
-              v-for="tpl in rejectQuickReplyTemplates"
-              :key="tpl"
-              size="sm"
-              variant="ghost"
-              type="button"
-              class="border border-zinc-600 rounded-lg px-2 py-1 text-zinc-400 hover:text-white"
-              @click="rejectReason = (rejectReason ? rejectReason + '；' : '') + tpl"
-            >
-              {{ tpl }}
-            </Button>
-          </div>
-          <Button class="mt-3" :disabled="rejectLoading === rejectTaskId || !rejectReason.trim()" @click="doRejectWithReason">{{ t('task.reject') }}</Button>
-        </div>
-        <Button variant="secondary" class="close-btn w-full" @click="rejectTaskId = null; rejectReason = ''">{{ t('common.cancel') }}</Button>
-      </div>
-    </div>
-
-    <!-- NOTE: translated comment in English. -->
-    <div v-if="homeTaskDetail" class="modal-mask" @click.self="closeHomeTaskDetail">
-      <div class="modal modal--task-detail">
-        <div class="task-detail-modal-head">
-          <h3 class="task-detail-modal-title">{{ homeTaskDetail.title }}</h3>
-          <Button size="sm" variant="ghost" type="button" aria-label="关闭" @click="closeHomeTaskDetail">×</Button>
-        </div>
-        <div class="task-detail-modal-meta-row">
-          <span class="task-publisher-avatar" aria-hidden="true">{{ (homeTaskDetail.publisher_name || '?').charAt(0).toUpperCase() }}</span>
-          <span>{{ t('task.publisher') }}：{{ homeTaskDetail.publisher_name }}</span>
-          <span v-if="homeTaskDetail.creator_agent_name" class="task-creator-agent"> · {{ t('task.publishedByAgent') }}：{{ homeTaskDetail.creator_agent_name }}</span>
-          <span v-if="homeTaskDetail.created_at" class="task-created-at"> · {{ formatTaskCreatedAt(homeTaskDetail.created_at) }}</span>
-          <span class="badge" :class="homeTaskDetail.status">{{ t('status.' + homeTaskDetail.status) || homeTaskDetail.status }}</span>
-          <span v-if="homeTaskDetail.reward_points" class="detail-reward"> · {{ t('task.reward', { n: homeTaskDetail.reward_points }) }}</span>
-        </div>
-        <p class="task-detail-modal-desc">{{ homeTaskDetail.description || t('common.noDescription') }}</p>
-        <div v-if="homeTaskDetail.reward_points && homeTaskDetail.payment_breakdown" class="home-task-payment-hint mono text-sm">
-          {{ t('task.paymentNet') }} ≈ {{ homeTaskDetail.payment_breakdown.executor_net_points }}
-          · {{ t('task.paymentCommission') }} {{ homeTaskDetail.payment_breakdown.commission_points }}
-        </div>
-        <p v-if="homeTaskDetail.status === 'pending_verification' && homeTaskDetail.verification_deadline_at" class="hint text-sm">
-          {{ t('task.verificationWindowHint', { h: homeTaskDetail.verification_hours ?? 6 }) }}
-        </p>
-        <TaskTimelinePanel v-if="homeTaskDetail.timeline?.length" :events="homeTaskDetail.timeline ?? []">
-          <router-link :to="'/tasks?taskId=' + homeTaskDetail.id" class="app-link text-sm">{{ t('task.openFullFlow') }}</router-link>
-        </TaskTimelinePanel>
-        <dl v-if="homeTaskDetail.requirements || homeTaskDetail.category || (getTaskSkills(homeTaskDetail).length) || homeTaskDetail.location || homeTaskDetail.duration_estimate" class="task-detail-modal-attrs">
-          <template v-if="homeTaskDetail.category"><dt>{{ t('task.detailCategory') }}</dt><dd>{{ taskCategoryLabel(homeTaskDetail.category) }}</dd></template>
-          <template v-if="homeTaskDetail.requirements"><dt>{{ t('task.detailRequirements') }}</dt><dd class="task-detail-requirements">{{ homeTaskDetail.requirements }}</dd></template>
-          <template v-if="getTaskSkills(homeTaskDetail).length"><dt>{{ t('task.detailSkills') }}</dt><dd><span v-for="s in getTaskSkills(homeTaskDetail)" :key="s" class="task-attr task-attr--skill">{{ s }}</span></dd></template>
-          <template v-if="homeTaskDetail.location"><dt>{{ t('task.detailLocation') }}</dt><dd>{{ homeTaskDetail.location }}</dd></template>
-          <template v-if="homeTaskDetail.duration_estimate"><dt>{{ t('task.detailDuration') }}</dt><dd>{{ homeTaskDetail.duration_estimate }}</dd></template>
-        </dl>
-        <div v-if="homeTaskDetail.status === 'pending_verification' && homeTaskDetail.output_data && (homeTaskDetail.output_data.result_summary || (homeTaskDetail.output_data.evidence && homeTaskDetail.output_data.evidence.link))" class="task-detail-completion-submission">
-          <h4 class="task-comments-title">{{ t('task.completionSubmissionTitle') }}</h4>
-          <p v-if="homeTaskDetail.output_data.result_summary" class="completion-summary">{{ homeTaskDetail.output_data.result_summary }}</p>
-          <p v-if="homeTaskDetail.output_data.evidence && homeTaskDetail.output_data.evidence.link" class="completion-link">
-            <a :href="String(homeTaskDetail.output_data.evidence.link)" target="_blank" rel="noopener noreferrer" class="app-link">{{ t('task.completionLink') }}：{{ homeTaskDetail.output_data.evidence.link }}</a>
-          </p>
-        </div>
-        <div class="task-detail-modal-comments">
-          <h4 class="task-comments-title">{{ t('task.comments') }}</h4>
-          <div v-if="homeTaskCommentsLoading" class="loading"><div class="spinner"></div></div>
-          <ul v-else class="task-comments-list">
-            <li v-for="c in homeTaskComments" :key="c.id" class="task-comment-item" :class="{ 'comment-kind-status': c.kind === 'status_update' }">
-              <span class="task-comment-avatar">{{ (c.agent_name || c.author_name || '?').charAt(0).toUpperCase() }}</span>
-              <div class="task-comment-body">
-                <div class="task-comment-header">
-                  <span class="task-comment-author">{{ c.agent_name || c.author_name }}</span>
-                  <span v-if="c.agent_name" class="task-comment-by-user">@{{ c.author_name }}</span>
-                  <span v-if="c.kind === 'status_update'" class="task-comment-kind-badge">{{ t('task.statusUpdate') }}</span>
-                  <span class="task-comment-time">{{ formatCommentTimeHome(c.created_at) }}</span>
-                </div>
-                <MarkdownHtml class="task-comment-content" :content="c.content" />
-              </div>
-            </li>
-          </ul>
-          <p v-if="!homeTaskComments.length && !homeTaskCommentsLoading" class="task-comments-empty">{{ t('task.noComments') }}</p>
-          <div v-if="auth.isLoggedIn" class="task-comment-form">
-            <Textarea v-model="homeNewCommentContent" rows="2" :placeholder="t('task.writeComment')" />
-            <Button size="sm" type="button" :disabled="homePostCommentLoading || !homeNewCommentContent.trim()" @click="postHomeComment">{{ t('task.postComment') }}</Button>
-          </div>
-          <p v-else class="hint">{{ t('task.loginToComment') }}</p>
-        </div>
-      </div>
-    </div>
-
-    <!-- NOTE: translated comment in English. -->
-    <div v-if="subscribeTaskItem" class="modal-mask" @click.self="subscribeTaskItem = null">
-      <div class="modal">
-        <h3>{{ t('task.selectAgentTitle', { title: subscribeTaskItem.title }) }}</h3>
-        <div class="subscribe-preflight">
-          <p class="hint">{{ t('task.subscribePreflightIntro') }}</p>
-          <ul class="subscribe-preflight-list">
-            <li>{{ t('task.preflightItemToken') }}</li>
-            <li>{{ t('task.preflightItemSkill') }}</li>
-            <li>{{ t('task.preflightItemWebhook') }}</li>
-          </ul>
-          <p class="hint subscribe-preflight-links">
-            <RouterLink to="/account">{{ t('common.myAccount') }}</RouterLink>
-            ·
-            <RouterLink to="/skill">{{ t('common.skill') }}</RouterLink>
-          </p>
-        </div>
-        <div class="agent-select-list">
-          <Button
-            v-for="a in myAgents"
-            :key="a.id"
-            variant="secondary"
-            class="w-full"
-            :disabled="subscribeLoading === subscribeTaskItem.id"
-            @click="doSubscribe(subscribeTaskItem.id, a.id)"
-          >
-            {{ a.name }}（{{ a.agent_type }}）
-          </Button>
-        </div>
-        <Button variant="secondary" class="close-btn w-full" @click="subscribeTaskItem = null">{{ t('common.cancel') }}</Button>
-      </div>
-    </div>
-
-    <!-- NOTE: translated comment in English. -->
     <Transition name="toast">
       <div v-if="successToast" class="toast" role="status">{{ successToast }}</div>
     </Transition>
@@ -922,43 +450,18 @@
 
 <script setup lang="ts">
 declare const __BUILD_ID__: string | undefined
-import { ref, reactive, onMounted, onUnmounted, computed, watch, defineAsyncComponent } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { i18n, setLocale, safeT, type LocaleKey } from './i18n'
 import { useAuthStore } from './stores/auth'
 import * as api from './api'
 import { taskPulseRelevantNav } from './utils/taskPulseHub'
-import { formatTaskRelativeTime } from './utils/taskTimeline'
-const SkillPage = defineAsyncComponent(() => import('./views/SkillPage.vue'))
-const DocsPage = defineAsyncComponent(() => import('./views/DocsPage.vue'))
-const ManualPage = defineAsyncComponent(() => import('./views/ManualPage.vue'))
-const TaskManageView = defineAsyncComponent(() => import('./views/TaskManageView.vue'))
-const AgentManageView = defineAsyncComponent(() => import('./views/AgentManageView.vue'))
-const AgentStudioView = defineAsyncComponent(() => import('./views/AgentStudioView.vue'))
-const AgentProfileView = defineAsyncComponent(() => import('./views/AgentProfileView.vue'))
-const InboxView = defineAsyncComponent(() => import('./views/InboxView.vue'))
-const AccountPage = defineAsyncComponent(() => import('./views/AccountPage.vue'))
-const OpenClawQuickstartPage = defineAsyncComponent(() => import('./views/OpenClawQuickstartPage.vue'))
-const DashboardView = defineAsyncComponent(() => import('./views/DashboardView.vue'))
-const LeaderboardView = defineAsyncComponent(() => import('./views/LeaderboardView.vue'))
-const CandidatesView = defineAsyncComponent(() => import('./views/CandidatesView.vue'))
-const MarketplaceView = defineAsyncComponent(() => import('./views/MarketplaceView.vue'))
-const PlaybookView = defineAsyncComponent(() => import('./views/PlaybookView.vue'))
-const CommunityChatView = defineAsyncComponent(() => import('./views/CommunityChatView.vue'))
-const ForumView = defineAsyncComponent(() => import('./views/ForumView.vue'))
-const AdminView = defineAsyncComponent(() => import('./views/AdminView.vue'))
-const A2aConsoleView = defineAsyncComponent(() => import('./views/A2aConsoleView.vue'))
-const AgentLabView = defineAsyncComponent(() => import('./views/AgentLabView.vue'))
 import { Button } from './components/ui/button'
 import { Input } from './components/ui/input'
-import { Card, CardContent, CardHeader, CardTitle } from './components/ui/card'
 import { Textarea } from './components/ui/textarea'
-import EmptyState from './components/EmptyState.vue'
-import MarkdownHtml from './components/MarkdownHtml.vue'
-import TaskTimelinePanel from './components/TaskTimelinePanel.vue'
 import { getTemplateById } from './constants/taskTemplates'
-import { BookOpen, Bot, Home, LayoutGrid, ListChecks, ListTodo, LogIn, LogOut, Mail, MessagesSquare, Shield, Sparkles, Trophy, Users, Wallet } from 'lucide-vue-next'
+import { BookOpen, Bot, LayoutGrid, ListChecks, ListTodo, LogIn, LogOut, Mail, MessagesSquare, Shield, Trophy, Users, Wallet } from 'lucide-vue-next'
 
 const route = useRoute()
 const router = useRouter()
@@ -993,61 +496,12 @@ function refreshAdminFlag() {
   api.getAdminMe().then(() => { isAdmin.value = true }).catch(() => { isAdmin.value = false })
 }
 
-const tasks = ref<api.TaskListItem[]>([])
-const tasksLoading = ref(false)
-const tasksLoadingMore = ref(false)
-const homeTaskPageSize = 20
-const homeHasMore = ref(true)
-const homeTasksTotal = ref(0)
-
-const homeCategoryFilter = ref('')
-const homeSort = ref<'created_at_desc' | 'reward_desc' | 'created_at_asc' | 'comments_desc' | 'deadline_asc'>('reward_desc')
-const homeRewardRange = ref<string>('')
-const homeRewardRangeOptions = [
-  { value: '', labelKey: 'task.rewardRangeAll' },
-  { value: '0-50', labelKey: 'task.rewardRange0_50' },
-  { value: '50-500', labelKey: 'task.rewardRange50_500' },
-  { value: '500+', labelKey: 'task.rewardRange500' },
-]
-const rejectTaskId = ref<number | null>(null)
-const rejectReason = ref('')
-const rejectQuickReplyTemplates = [
-  '代码规范需改进',
-  '逻辑需更严密',
-  '请按需求补充输出',
-  '格式不符合要求',
-  '需要更详细的说明',
-]
-const homeSearchQuery = ref('')
-let homeSearchTimer: ReturnType<typeof setTimeout> | null = null
-const homeCategoryOptions = [
-  { value: '', labelKey: 'taskManage.categoryAll' },
-  { value: 'development', labelKey: 'task.categoryDevelopment' },
-  { value: 'design', labelKey: 'task.categoryDesign' },
-  { value: 'research', labelKey: 'task.categoryResearch' },
-  { value: 'writing', labelKey: 'task.categoryWriting' },
-  { value: 'data', labelKey: 'task.categoryData' },
-  { value: 'other', labelKey: 'task.categoryOther' },
-]
-
-const tasksTotal = ref<number>(0)
-const agentsTotal = ref<number>(0)
-const homeStats = ref<Record<string, number>>({})
-const homeStatsLoading = ref(true)
-const homeActivity = ref<api.ActivityEvent[]>([])
-const homeActivityLoading = ref(true)
-const homeLeaderboard = ref<api.LeaderboardItem[]>([])
-const homeLeaderboardLoading = ref(true)
 const homeCommunityHot = ref<api.CommunityHotFeedItem[]>([])
 const communityHotDeltaCount = ref(0)
 let communityRefreshTimer: ReturnType<typeof setInterval> | null = null
 const COMMUNITY_REFRESH_MS = 25000
 const showCreateTaskModal = ref(false)
 const createStep = ref(1)
-const myCreatedTasks = ref<typeof tasks.value>([])
-const myCreatedTasksLoading = ref(false)
-const batchConfirmSelected = ref<number[]>([])
-const batchConfirmLoading = ref(false)
 
 const selectedTaskTemplateId = ref('none')
 function applyTaskTemplateHome() {
@@ -1134,27 +588,7 @@ const publishError = ref('')
 
 const candidates = ref<Array<{ id: number; type?: string; name: string; description: string; agent_type: string; owner_name: string; points?: number }>>([])
 const candidatesLoading = ref(false)
-const recentAgents = ref<Array<{ id: number; name: string; agent_type: string; owner_name: string }>>([])
-const recentAgentsLoading = ref(false)
 const myAgents = ref<Array<{ id: number; name: string; description: string; agent_type: string }>>([])
-const agentsLoading = ref(false)
-const agentForm = reactive({ name: '', description: '', skill_bound_token: '' })
-const agentLoading = ref(false)
-const agentError = ref('')
-
-const subscribeTaskItem = ref<{ id: number; title: string } | null>(null)
-const subscribeLoading = ref<number | null>(null)
-const submitCompletionTask = ref<{ id: number; title: string } | null>(null)
-
-const homeTaskDetail = ref<api.TaskListItem | null>(null)
-const homeTaskComments = ref<api.TaskCommentItem[]>([])
-const homeTaskCommentsLoading = ref(false)
-const homeNewCommentContent = ref('')
-const homePostCommentLoading = ref(false)
-const submitCompletionForm = reactive({ result_summary: '', completion_link: '' })
-const submitCompletionLoading = ref(false)
-const confirmLoading = ref<number | null>(null)
-const rejectLoading = ref<number | null>(null)
 
 const PUBLISH_DRAFT_KEY = 'clawjob_publish_draft'
 const draftExists = ref(false)
@@ -1259,7 +693,6 @@ function clearDraft() {
 
 const SKILL_BANNER_KEY = 'clawjob_skill_banner_dismissed'
 const showSkillBanner = ref(false)
-const showAgentGuide = ref(false)
 const successToast = ref('')
 const postPublishRegisterHint = ref(false)
 function showSuccess(message: string) {
@@ -1270,11 +703,6 @@ function dismissSkillBanner() {
   try { localStorage.setItem(SKILL_BANNER_KEY, '1') } catch (_) {}
   showSkillBanner.value = false
 }
-
-function scrollToPublishSection() {
-  document.getElementById('section-publish')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-}
-
 
 /* NOTE: translated comment in English. */
 function onGoogleLoginClick(e: Event) {
@@ -1288,24 +716,10 @@ function onGoogleLoginClick(e: Event) {
 
 function onEscapeKey(e: KeyboardEvent) {
   if (e.key !== 'Escape') return
-  if (homeTaskDetail.value) { closeHomeTaskDetail(); return }
   if (showCreateTaskModal.value) { closeCreateTaskModal(); return }
   if (showAuthModal.value) { showAuthModal.value = false; return }
-  if (submitCompletionTask.value) { submitCompletionTask.value = null; return }
-  if (subscribeTaskItem.value) { subscribeTaskItem.value = null; return }
 }
 const accountCredits = ref(0)
-
-const PLATFORM_FEE_RATE = 0.01
-const feeCalcPoints = ref(100)
-const feeCalcComm = computed(() => {
-  const p = Math.max(0, Math.floor(Number(feeCalcPoints.value) || 0))
-  return Math.floor(p * PLATFORM_FEE_RATE)
-})
-const feeCalcNet = computed(() => {
-  const p = Math.max(0, Math.floor(Number(feeCalcPoints.value) || 0))
-  return p - feeCalcComm.value
-})
 
 const taskPulse = ref({
   awaiting_verify_as_owner: 0,
@@ -1332,67 +746,7 @@ const navTasksLinkAriaLabel = computed(() => {
   return undefined
 })
 
-function loadTasks(reset = true) {
-  if (reset) {
-    tasksLoading.value = true
-    tasks.value = []
-  }
-  const params: { skip?: number; limit?: number; category_filter?: string; sort?: string; q?: string; reward_min?: number; reward_max?: number } = {
-    limit: homeTaskPageSize,
-    skip: reset ? 0 : tasks.value.length,
-  }
-  if (homeCategoryFilter.value) params.category_filter = homeCategoryFilter.value
-  params.sort = homeSort.value
-  if (homeSearchQuery.value.trim()) params.q = homeSearchQuery.value.trim()
-  if (homeRewardRange.value === '0-50') { params.reward_min = 0; params.reward_max = 50 }
-  else if (homeRewardRange.value === '50-500') { params.reward_min = 50; params.reward_max = 500 }
-  else if (homeRewardRange.value === '500+') { params.reward_min = 500 }
-  const doRequest = reset
-    ? api.fetchTasks(params).then((res) => {
-        tasks.value = res.data.tasks || []
-        homeTasksTotal.value = res.data.total ?? 0
-        homeHasMore.value = (res.data.tasks?.length ?? 0) < (res.data.total ?? 0)
-      }).catch(() => { tasks.value = []; homeHasMore.value = false })
-    : api.fetchTasks(params).then((res) => {
-        const list = res.data.tasks || []
-        tasks.value = [...tasks.value, ...list]
-        homeHasMore.value = tasks.value.length < (res.data.total ?? 0)
-      }).catch(() => {})
-  if (reset) {
-    doRequest.finally(() => {
-      tasksLoading.value = false
-      if (auth.isLoggedIn) loadAccountMe()
-    })
-  } else {
-    tasksLoadingMore.value = true
-    doRequest.finally(() => { tasksLoadingMore.value = false })
-  }
-}
-
-function loadMoreTasks() {
-  if (tasksLoadingMore.value || !homeHasMore.value) return
-  loadTasks(false)
-}
-
-function loadStats() {
-  api.fetchStats().then((res) => {
-    tasksTotal.value = res.data.tasks_count ?? 0
-    agentsTotal.value = res.data.agents_count ?? 0
-  }).catch(() => {
-    tasksTotal.value = 0
-    agentsTotal.value = 0
-  })
-}
-
 function loadHomeDashboard() {
-  homeStatsLoading.value = true
-  homeActivityLoading.value = true
-  api.fetchStats().then((res) => {
-    homeStats.value = res.data ?? {}
-  }).catch(() => { homeStats.value = {} }).finally(() => { homeStatsLoading.value = false })
-  api.fetchActivity(10).then((res) => {
-    homeActivity.value = res.data.events ?? []
-  }).catch(() => { homeActivity.value = [] }).finally(() => { homeActivityLoading.value = false })
   api.fetchCommunityHotFeed(8).then((res) => {
     const next = res.data.items || []
     const prevMap = new Map<number, number>()
@@ -1403,84 +757,9 @@ function loadHomeDashboard() {
       if (prevHeat == null || Number(it.heat_score || 0) > prevHeat) delta += 1
     }
     homeCommunityHot.value = next
-    if (route.path !== '/community') communityHotDeltaCount.value = delta
+    if (route.path !== '/community' && route.path !== '/') communityHotDeltaCount.value = delta
     else communityHotDeltaCount.value = 0
   }).catch(() => { homeCommunityHot.value = [] })
-}
-
-function formatTimeAgoHome(iso: string) {
-  try {
-    const d = new Date(iso)
-    const diff = Math.floor((Date.now() - d.getTime()) / 1000)
-    if (diff < 60) return (diff <= 0 ? '1' : String(diff)) + (locale.value === 'zh-CN' ? '秒前' : 's ago')
-    if (diff < 3600) return Math.floor(diff / 60) + (locale.value === 'zh-CN' ? '分钟前' : 'm ago')
-    if (diff < 86400) return Math.floor(diff / 3600) + (locale.value === 'zh-CN' ? '小时前' : 'h ago')
-    return Math.floor(diff / 86400) + (locale.value === 'zh-CN' ? '天前' : 'd ago')
-  } catch { return '' }
-}
-
-function onHomeSearchInput() {
-  if (homeSearchTimer) clearTimeout(homeSearchTimer)
-  homeSearchTimer = setTimeout(() => loadTasks(), 300)
-}
-
-function formatCommentTimeHome(iso: string | null) {
-  return formatTaskRelativeTime(t, iso)
-}
-
-function formatTaskCreatedAt(iso: string | undefined) {
-  if (!iso) return ''
-  const d = new Date(iso)
-  const now = new Date()
-  const diffMin = (now.getTime() - d.getTime()) / 60000
-  if (diffMin < 1) return t('task.justNow')
-  if (diffMin < 60) return t('task.minutesAgo', { n: Math.floor(diffMin) })
-  if (diffMin < 1440) return t('task.hoursAgo', { n: Math.floor(diffMin / 60) })
-  const diffDays = Math.floor(diffMin / 1440)
-  if (diffDays < 31) return (t('task.daysAgo') as string).replace('{n}', String(diffDays))
-  return d.toLocaleDateString(undefined, { dateStyle: 'short' })
-}
-
-function openHomeTaskDetail(task: api.TaskListItem) {
-  homeTaskDetail.value = { ...task }
-  homeTaskComments.value = []
-  homeNewCommentContent.value = ''
-  homeTaskCommentsLoading.value = true
-  api.getTaskDetail(task.id).then((res) => {
-    homeTaskDetail.value = res.data as api.TaskListItem
-  }).catch(() => {})
-  api.getTaskComments(task.id).then((res) => {
-    homeTaskComments.value = res.data.comments || []
-  }).catch(() => { homeTaskComments.value = [] }).finally(() => { homeTaskCommentsLoading.value = false })
-}
-
-function closeHomeTaskDetail() {
-  homeTaskDetail.value = null
-  homeTaskComments.value = []
-}
-
-function postHomeComment() {
-  if (!homeTaskDetail.value || !homeNewCommentContent.value.trim()) return
-  homePostCommentLoading.value = true
-  api.postTaskComment(homeTaskDetail.value.id, { content: homeNewCommentContent.value.trim() }).then((res) => {
-    homeTaskComments.value = [...homeTaskComments.value, res.data]
-    homeNewCommentContent.value = ''
-    showSuccess(t('task.commentPosted'))
-    const task = tasks.value.find((x) => x.id === homeTaskDetail.value!.id)
-    if (task && task.comment_count != null) task.comment_count = (task.comment_count || 0) + 1
-  }).catch(() => {}).finally(() => { homePostCommentLoading.value = false })
-}
-
-function openCreateTaskModal() {
-  if (!auth.isLoggedIn) {
-    showAuthModal.value = true
-    return
-  }
-  publishError.value = ''
-  createStep.value = 1
-  showCreateTaskModal.value = true
-  draftExists.value = hasDraft()
-  loadCandidates()
 }
 
 async function doGuestPublish() {
@@ -1507,32 +786,6 @@ function closeCreateTaskModal() {
   selectedTaskTemplateId.value = 'none'
 }
 
-function loadMyCreatedTasks() {
-  if (!auth.isLoggedIn) return
-  myCreatedTasksLoading.value = true
-  api.fetchMyCreatedTasks({ limit: 20 }).then((res) => {
-    myCreatedTasks.value = res.data.tasks || []
-  }).catch(() => {
-    myCreatedTasks.value = []
-  }).finally(() => {
-    myCreatedTasksLoading.value = false
-  })
-}
-
-function doBatchConfirm() {
-  const ids = batchConfirmSelected.value.slice()
-  if (!ids.length) return
-  batchConfirmLoading.value = true
-  api.batchConfirmTasks(ids).then((res) => {
-    batchConfirmSelected.value = []
-    loadMyCreatedTasks()
-    const w = res.data.summary?.warning
-    if (w) showSuccess(`${t('task.batchConfirmWarningToast') || ''} ${w}`)
-  }).finally(() => {
-    batchConfirmLoading.value = false
-  })
-}
-
 function doPublishFromModal() {
   doPublish()
 }
@@ -1548,26 +801,12 @@ function loadCandidates() {
   })
 }
 
-function loadRecentAgents() {
-  recentAgentsLoading.value = true
-  api.fetchCandidates({ limit: 8, sort: 'recent' }).then((res) => {
-    recentAgents.value = (res.data.candidates || []).map((c: { id: number; name: string; agent_type: string; owner_name: string }) => ({ id: c.id, name: c.name, agent_type: c.agent_type, owner_name: c.owner_name }))
-  }).catch(() => {
-    recentAgents.value = []
-  }).finally(() => {
-    recentAgentsLoading.value = false
-  })
-}
-
 function loadMyAgents() {
   if (!auth.isLoggedIn) return
-  agentsLoading.value = true
   api.fetchMyAgents().then((res) => {
     myAgents.value = res.data.agents || []
   }).catch(() => {
     myAgents.value = []
-  }).finally(() => {
-    agentsLoading.value = false
   })
 }
 
@@ -1580,7 +819,6 @@ function doLogin() {
     showAuthModal.value = false
     loadAccountMe()
     loadMyAgents()
-    loadMyCreatedTasks()
   }).catch((e) => {
     authError.value = e.response?.data?.detail || t('common.loginFailed')
   }).finally(() => {
@@ -1633,7 +871,6 @@ function doRegister() {
     showAuthModal.value = false
     loadAccountMe()
     loadMyAgents()
-    loadMyCreatedTasks()
   }).catch((e) => {
     authError.value = e.response?.data?.detail || t('common.registerFailed')
   }).finally(() => {
@@ -1711,8 +948,6 @@ function doPublish() {
     showSuccess(t('task.publishSuccess'))
     if (showCreateTaskModal.value) closeCreateTaskModal()
     loadAccountMe()
-    loadTasks()
-    loadMyCreatedTasks()
     if (auth.isGuestUser || !myAgents.value.length) {
       postPublishRegisterHint.value = true
     }
@@ -1722,111 +957,6 @@ function doPublish() {
   }).finally(() => {
     publishLoading.value = false
   })
-}
-
-function doRegisterAgent() {
-  if (!agentForm.name.trim()) return
-  agentError.value = ''
-  agentLoading.value = true
-  api.registerAgent({
-    name: agentForm.name.trim(),
-    description: agentForm.description.trim(),
-    skill_bound_token: agentForm.skill_bound_token.trim() || undefined,
-  }).then(() => {
-    agentForm.name = ''
-    agentForm.description = ''
-    agentForm.skill_bound_token = ''
-    loadMyAgents()
-  }).catch((e) => {
-    agentError.value = e.response?.data?.detail || t('common.registerFailed')
-  }).finally(() => {
-    agentLoading.value = false
-  })
-}
-
-function openSubscribeModal(task: { id: number; title: string }) {
-  subscribeTaskItem.value = task
-}
-
-function doSubscribe(taskId: number, agentId: number) {
-  subscribeLoading.value = taskId
-  api.subscribeTask(taskId, agentId).then(() => {
-    subscribeTaskItem.value = null
-    showSuccess(t('task.subscribeSuccess'))
-    loadTasks()
-  }).catch(() => {}).finally(() => {
-    subscribeLoading.value = null
-  })
-}
-
-function formatDeadline(iso: string) {
-  if (!iso) return ''
-  try {
-    return new Date(iso).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
-  } catch {
-    return iso.slice(0, 19).replace('T', ' ')
-  }
-}
-function isExecutor(t: { agent_id?: number }) {
-  if (!auth.userId || !t.agent_id) return false
-  return myAgents.value.some((a) => a.id === t.agent_id)
-}
-function getTaskSkills(t: { skills?: string[] | string }): string[] {
-  if (!t.skills) return []
-  if (Array.isArray(t.skills)) return t.skills
-  if (typeof t.skills === 'string') return t.skills.split(/[,，]/).map((s) => s.trim()).filter(Boolean)
-  return []
-}
-const categoryLabels: Record<string, string> = {
-  development: 'task.categoryDevelopment',
-  design: 'task.categoryDesign',
-  research: 'task.categoryResearch',
-  writing: 'task.categoryWriting',
-  data: 'task.categoryData',
-  other: 'task.categoryOther',
-}
-function taskCategoryLabel(cat: string) {
-  return t(categoryLabels[cat] || cat)
-}
-function openSubmitCompletionModal(task: { id: number; title: string }) {
-  submitCompletionTask.value = task
-  submitCompletionForm.result_summary = ''
-  submitCompletionForm.completion_link = ''
-}
-function doSubmitCompletion() {
-  if (!submitCompletionTask.value) return
-  const taskId = submitCompletionTask.value.id
-  submitCompletionLoading.value = true
-  const evidence = submitCompletionForm.completion_link.trim() ? { link: submitCompletionForm.completion_link.trim() } : {}
-  api.submitCompletion(taskId, { result_summary: submitCompletionForm.result_summary.trim(), evidence }).then(() => {
-    submitCompletionTask.value = null
-    showSuccess(t('task.submitCompletionSuccess'))
-    loadTasks()
-  }).catch(() => {}).finally(() => { submitCompletionLoading.value = false })
-}
-function doConfirm(taskId: number) {
-  confirmLoading.value = taskId
-  api.confirmTask(taskId).then(() => {
-    showSuccess(t('task.confirmSuccess'))
-    loadTasks()
-    loadAccountMe()
-  }).catch(() => {}).finally(() => { confirmLoading.value = null })
-}
-function openRejectModal(taskId: number) {
-  rejectTaskId.value = taskId
-  rejectReason.value = ''
-}
-function doRejectWithReason() {
-  if (!rejectTaskId.value || !rejectReason.value.trim()) return
-  const taskId = rejectTaskId.value
-  rejectLoading.value = taskId
-  api.rejectTask(taskId, { rejection_reason: rejectReason.value.trim() }).then(() => {
-    showSuccess(t('task.rejectSuccess'))
-    rejectTaskId.value = null
-    rejectReason.value = ''
-    loadTasks()
-    loadAccountMe()
-  }).catch(() => {}).finally(() => { rejectLoading.value = null })
 }
 
 function loadAccountMe() {
@@ -1867,7 +997,7 @@ function onDocumentVisibilityForPulse() {
 let removeRouterAfterEach: (() => void) | null = null
 
 onMounted(() => {
-  // NOTE: translated comment in English.
+  api.loadAppFeatures().catch(() => {})
   // NOTE: translated comment in English.
   api.getGoogleOAuthStatus().then((s) => {
     googleOAuthConfigured.value = s.configured
@@ -1941,21 +1071,16 @@ onMounted(() => {
     }
   }
   draftExists.value = hasDraft()
-  loadTasks()
-  loadCandidates()
-  loadRecentAgents()
-  loadStats()
   loadHomeDashboard()
   if (auth.isLoggedIn) {
     loadAccountMe()
     loadMyAgents()
-    loadMyCreatedTasks()
     refreshAdminFlag()
   }
 
   removeRouterAfterEach = router.afterEach((to, from) => {
     if (taskPulseRelevantNav(to.path, from.path)) refreshTaskPulseThrottled()
-    if (to.path === '/community') communityHotDeltaCount.value = 0
+    if (to.path === '/community' || to.path === '/') communityHotDeltaCount.value = 0
   })
   document.addEventListener('visibilitychange', onDocumentVisibilityForPulse)
   communityRefreshTimer = setInterval(() => {

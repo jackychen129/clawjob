@@ -80,10 +80,9 @@ from app.agents.tool_system import ToolSystem
 from app.security import get_current_user, get_current_user_optional, limiter
 from app.routers import auth
 from app.routers import account
-from app.routers import kyc as kyc_router
-from app.routers import workspaces as workspaces_router
-from app.routers import billing as billing_router
 from app.routers import community as community_router
+
+_CLAWJOB_ENTERPRISE = os.getenv("CLAWJOB_ENTERPRISE", "0").strip() not in ("0", "false", "no", "")
 
 
 def _safe_int_env(key: str, default: int) -> int:
@@ -204,10 +203,15 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 app.include_router(auth.router)
 app.include_router(account.router)
-app.include_router(kyc_router.router)
-app.include_router(kyc_router.withdraw_router)
-app.include_router(workspaces_router.router)
-app.include_router(billing_router.router)
+if _CLAWJOB_ENTERPRISE:
+    from app.routers import kyc as kyc_router
+    from app.routers import workspaces as workspaces_router
+    from app.routers import billing as billing_router
+
+    app.include_router(kyc_router.router)
+    app.include_router(kyc_router.withdraw_router)
+    app.include_router(workspaces_router.router)
+    app.include_router(billing_router.router)
 app.include_router(community_router.router)
 # NOTE: translated comment in English.
 from app.routers import admin as admin_router_module
@@ -254,6 +258,7 @@ async def health_check():
             "tool_system": "active"
         },
         "features": {
+            "enterprise_enabled": _CLAWJOB_ENTERPRISE,
             "community_enabled": os.getenv("CLAWJOB_COMMUNITY_ENABLED", "1").strip() != "0",
             "community_hot_dispatch_enabled": os.getenv("CLAWJOB_COMMUNITY_HOT_DISPATCH_ENABLED", "1").strip() != "0",
             "community_background_jobs": os.getenv("CLAWJOB_COMMUNITY_BACKGROUND_JOBS", "1").strip() != "0",
@@ -1566,27 +1571,6 @@ def list_candidates(
         })
     return {"candidates": out, "total": len(out)}
 
-
-# Agent Management Endpoints (legacy)
-@app.post("/agents")
-async def create_agent(agent_config: dict, current_user: str = Depends(get_current_user)):
-    """Create a new AI agent with specified capabilities"""
-    return await agent_manager.create_agent(agent_config, current_user)
-
-@app.get("/agents/{agent_id}")
-async def get_agent(agent_id: str, current_user: str = Depends(get_current_user)):
-    """Get agent details"""
-    return await agent_manager.get_agent(agent_id, current_user)
-
-@app.get("/agents")
-async def list_agents(current_user: str = Depends(get_current_user)):
-    """List all agents for current user"""
-    return await agent_manager.list_agents(current_user)
-
-@app.delete("/agents/{agent_id}")
-async def delete_agent(agent_id: str, current_user: str = Depends(get_current_user)):
-    """Delete an agent"""
-    return await agent_manager.delete_agent(agent_id, current_user)
 
 # NOTE: translated comment in English.
 VERIFICATION_HOURS_DEFAULT = 6  # 默认验收窗口（小时）；可被任务级 verification_hours 覆盖

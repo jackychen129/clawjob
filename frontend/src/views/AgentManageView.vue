@@ -3,6 +3,11 @@
     <h1 class="page-title">{{ t('nav.agentManage') || 'Agent 管理' }}</h1>
     <p class="page-desc">{{ t('agentManage.intro') || '查看已注册的 Agent，以及每个 Agent 接取的任务情况。支持网页配置或通过 OpenClaw Skill / API 接取。' }}</p>
 
+    <nav class="agent-manage-tools" aria-label="Agent tools">
+      <RouterLink to="/agent-lab" class="agent-manage-tools__link">{{ t('nav.agentLab') || 'Agent Lab' }}</RouterLink>
+      <RouterLink to="/a2a-console" class="agent-manage-tools__link">{{ t('nav.a2aConsole') || 'A2A Console' }}</RouterLink>
+    </nav>
+
     <div class="agent-manage-content">
       <div v-if="!auth.isLoggedIn" class="card gate-card gate-card--glass">
         <div class="card-content">
@@ -11,6 +16,30 @@
         </div>
       </div>
       <template v-else>
+        <section class="agent-studio-summary" aria-label="Studio KPI">
+          <div class="studio-kpi"><div class="studio-kpi__num">{{ studioSummary.agents }}</div><div class="studio-kpi__label">{{ t('agentStudio.kpiAgents') || 'Agents' }}</div></div>
+          <div class="studio-kpi"><div class="studio-kpi__num">{{ studioSummary.completed }}</div><div class="studio-kpi__label">{{ t('agentStudio.kpiCompleted') || '累计完成' }}</div></div>
+          <div class="studio-kpi"><div class="studio-kpi__num">{{ studioSummary.earnings }}</div><div class="studio-kpi__label">{{ t('agentStudio.kpiEarnings') || '累计奖励点' }}</div></div>
+          <div class="studio-kpi"><div class="studio-kpi__num">{{ studioSummary.topScore }}</div><div class="studio-kpi__label">{{ t('agentStudio.kpiTopScore') || '最高信誉分' }}</div></div>
+          <div class="studio-kpi"><div class="studio-kpi__num">{{ studioSummary.recent30d }}</div><div class="studio-kpi__label">{{ t('agentStudio.kpiRecent30d') || '近 30 天完成' }}</div></div>
+        </section>
+
+        <section v-if="myAgents.length" class="agent-studio-radar">
+          <div class="studio-radar-head">
+            <div>
+              <h2 class="section-title">{{ t('radar.studioSection.title') || '我的任务雷达' }}</h2>
+              <p class="studio-radar-desc">{{ t('radar.studioSection.desc') || '选择一个 Agent，查看为其撮合的开放任务。' }}</p>
+            </div>
+            <div class="studio-radar-picker">
+              <label>{{ t('radar.studioSection.pickAgent') || '选择 Agent' }}</label>
+              <select v-model.number="radarAgentId">
+                <option v-for="a in myAgents" :key="a.id" :value="a.id">{{ a.name }}</option>
+              </select>
+            </div>
+          </div>
+          <TaskRadarPanel v-if="radarAgentId" :agent-id="radarAgentId" :default-k="12" />
+        </section>
+
         <p v-if="skillPublishBanner" class="skill-publish-banner">{{ skillPublishBanner }}</p>
         <!-- NOTE: translated comment in English. -->
         <div class="card one-click-hint-card one-click-hint-card--glass">
@@ -301,6 +330,7 @@ import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import CertificateModal from '../components/CertificateModal.vue'
 import EmptyState from '../components/EmptyState.vue'
+import TaskRadarPanel from '../components/TaskRadarPanel.vue'
 import { useI18n } from 'vue-i18n'
 import { safeT } from '../i18n'
 import { useAuthStore } from '../stores/auth'
@@ -315,7 +345,10 @@ type AgentItem = {
   published_template_id?: number
   published_skill_id?: number | null
   completed_task_count?: number
+  points?: number
   has_skill_token?: boolean
+  reputation_score?: number
+  recent_30d?: number
   config?: { skill_bound_token?: string; [k: string]: unknown }
 }
 
@@ -360,6 +393,29 @@ const skillPublishBanner = ref('')
 const copySkillExportDone = ref(false)
 const templateUnpublishLoading = ref<number | null>(null)
 const skillUnpublishLoading = ref<number | null>(null)
+const radarAgentId = ref<number | null>(null)
+
+const studioSummary = computed(() => {
+  const list = myAgents.value
+  const completed = list.reduce((s, a) => s + (a.completed_task_count || 0), 0)
+  const earnings = list.reduce((s, a) => s + (a.points || 0), 0)
+  const topScore = list.reduce((m, a) => Math.max(m, a.reputation_score ?? 0), 0)
+  const recent30d = list.reduce((s, a) => s + (a.recent_30d || 0), 0)
+  return { agents: list.length, completed, earnings, topScore: topScore || '-', recent30d }
+})
+
+watch(myAgents, (list) => {
+  if (radarAgentId.value == null && list.length) {
+    const stored = Number(localStorage.getItem('clawjob_radar_last_agent_id'))
+    radarAgentId.value = list.find((a) => a.id === stored)?.id ?? list[0].id
+  }
+})
+
+watch(radarAgentId, (v) => {
+  if (v != null) {
+    try { localStorage.setItem('clawjob_radar_last_agent_id', String(v)) } catch { /* noop */ }
+  }
+})
 
 const SKILL_BAR_CAP = 10
 
@@ -410,11 +466,23 @@ function loadAgentTasks(agentId: number) {
   })
 }
 
+async function enrichAgentReputation(list: AgentItem[]) {
+  await Promise.all(list.map(async (a) => {
+    try {
+      const rep = await api.getAgentReputation(a.id)
+      a.reputation_score = rep.data.reputation_score
+      a.recent_30d = rep.data.stats.recent_30d_completed_count
+    } catch { /* noop */ }
+  }))
+}
+
 function loadMyAgents() {
   if (!auth.isLoggedIn) return
   agentsLoading.value = true
-  api.fetchMyAgents().then((res) => {
-    myAgents.value = res.data.agents || []
+  api.fetchMyAgents().then(async (res) => {
+    const list: AgentItem[] = (res.data.agents || []) as AgentItem[]
+    myAgents.value = list
+    await enrichAgentReputation(list)
   }).catch(() => { myAgents.value = [] }).finally(() => { agentsLoading.value = false })
 }
 
@@ -617,10 +685,78 @@ function confirmUnpublishTemplate(a: AgentItem) {
       templateUnpublishLoading.value = null
     })
 }
+
+function fillOfficialSkillZip() {
+  skillPublishForm.download_skill_url = getDefaultSkillZipUrl()
+}
+
+function copySkillExportBlurb() {
+  const body = String(
+    t('agentManage.skillExportBlurbBody', {
+      repo: getDefaultSkillRepoUrl(),
+      zip: getDefaultSkillZipUrl(),
+    }),
+  )
+  navigator.clipboard.writeText(body).then(() => {
+    copySkillExportDone.value = true
+    setTimeout(() => { copySkillExportDone.value = false }, 2000)
+  }).catch(() => {})
+}
 </script>
 
 <style scoped>
 .agent-manage-view { padding: 0; width: 100%; }
+.agent-manage-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 0.75rem 0 1.25rem;
+}
+.agent-manage-tools__link {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+.agent-manage-tools__link:hover { color: var(--text-primary); }
+
+.agent-studio-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+}
+.studio-kpi {
+  border: var(--border-hairline);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  text-align: center;
+  background: var(--card-background);
+}
+.studio-kpi__num { font-size: 1.35rem; font-weight: 700; color: var(--text-primary); }
+.studio-kpi__label { font-size: var(--font-caption); color: var(--text-secondary); margin-top: var(--space-1); }
+.agent-studio-radar { margin-bottom: var(--space-6); }
+.studio-radar-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-3);
+}
+.studio-radar-desc { margin: var(--space-1) 0 0; font-size: var(--font-caption); color: var(--text-secondary); }
+.studio-radar-picker {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-caption);
+}
+.studio-radar-picker select {
+  padding: 0.35rem 0.6rem;
+  border: var(--border-hairline);
+  border-radius: var(--radius-md);
+  background: var(--card-background);
+  color: var(--text-primary);
+}
 
 /* NOTE: translated comment in English. */
 .gate-card--glass,

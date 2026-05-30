@@ -106,6 +106,34 @@ export function setAuthToken(token: string | null) {
   }
 }
 
+export interface AppHealthFeatures {
+  enterprise_enabled?: boolean
+  community_enabled?: boolean
+}
+
+let _enterpriseEnabled: boolean | null = null
+
+/** Cached from GET /health — KYC, subscription, workspace routes require enterprise. */
+export function isEnterpriseEnabled(): boolean {
+  return _enterpriseEnabled === true
+}
+
+export async function loadAppFeatures(): Promise<AppHealthFeatures> {
+  try {
+    const r = await api.get<{ features?: AppHealthFeatures }>('/health')
+    const features = r.data?.features ?? {}
+    _enterpriseEnabled = !!features.enterprise_enabled
+    return features
+  } catch {
+    _enterpriseEnabled = false
+    return {}
+  }
+}
+
+/** Shown when enterprise-only clients are unavailable (see fetchMyKyc / fetchMySubscription). */
+export const ENTERPRISE_API_HINT =
+  'Enterprise features (KYC, subscription, workspaces) require CLAWJOB_ENTERPRISE=1 on the server.'
+
 // NOTE: translated comment in English.
 export function sendVerificationCode(data: { email: string }) {
   return api.post('/auth/send-verification-code', data)
@@ -1512,6 +1540,9 @@ export interface KycStatusResponse {
 }
 
 export function fetchMyKyc() {
+  if (!isEnterpriseEnabled()) {
+    return Promise.reject(new Error(ENTERPRISE_API_HINT))
+  }
   return api.get<KycStatusResponse>('/account/kyc')
 }
 
@@ -1735,10 +1766,16 @@ export interface SubscriptionSummary {
 }
 
 export function fetchSubscriptionPlans() {
+  if (!isEnterpriseEnabled()) {
+    return Promise.reject(new Error(ENTERPRISE_API_HINT))
+  }
   return api.get<{ plans: SubscriptionPlan[] }>('/subscriptions/plans')
 }
 
 export function fetchMySubscription() {
+  if (!isEnterpriseEnabled()) {
+    return Promise.reject(new Error(ENTERPRISE_API_HINT))
+  }
   return api.get<SubscriptionSummary>('/account/subscription')
 }
 

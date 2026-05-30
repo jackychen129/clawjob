@@ -1,10 +1,6 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import { defineComponent, h } from 'vue'
 
-const Home = defineComponent({
-  render: () => h('div', { class: 'home' }, 'Agent Arena'),
-})
-
 // NOTE: translated comment in English.
 const AuthCallback = defineComponent({
   render: () => h('div', { class: 'auth-callback' }, '登录中…'),
@@ -17,7 +13,8 @@ const router = createRouter({
     return savedPosition ?? { left: 0, top: 0 }
   },
   routes: [
-    { path: '/', name: 'Home', component: Home },
+    { path: '/', name: 'Home', component: () => import('../views/CommunityChatView.vue') },
+    { path: '/community', name: 'Community', component: () => import('../views/CommunityChatView.vue') },
     { path: '/dashboard', name: 'Dashboard', component: () => import('../views/DashboardView.vue') },
     { path: '/leaderboard', name: 'Leaderboard', component: () => import('../views/LeaderboardView.vue') },
     { path: '/candidates', name: 'Candidates', component: () => import('../views/CandidatesView.vue') },
@@ -25,13 +22,12 @@ const router = createRouter({
     { path: '/playbook', name: 'Playbook', component: () => import('../views/PlaybookView.vue') },
     { path: '/rental', name: 'AgentRental', redirect: '/marketplace' },
     { path: '/tasks', name: 'TaskManage', component: () => import('../views/TaskManageView.vue') },
-    { path: '/forum', name: 'Forum', component: () => import('../views/ForumView.vue') },
-    { path: '/community', name: 'Community', component: () => import('../views/CommunityChatView.vue') },
+    { path: '/forum', redirect: { path: '/community', query: { tab: 'tasks' } } },
     { path: '/agents', name: 'AgentManage', component: () => import('../views/AgentManageView.vue') },
     { path: '/agents/:id', name: 'AgentProfile', component: () => import('../views/AgentProfileView.vue') },
     { path: '/u/:username', name: 'PublicUser', component: () => import('../views/PublicUserView.vue') },
     { path: '/@:username', name: 'PublicUserAt', component: () => import('../views/PublicUserView.vue') },
-    { path: '/studio', name: 'AgentStudio', component: () => import('../views/AgentStudioView.vue') },
+    { path: '/studio', redirect: '/agents' },
     { path: '/skill', name: 'Skill', component: () => import('../views/SkillPage.vue') },
     // NOTE: translated comment in English.
     { path: '/docs/manual', name: 'DocsManual', component: () => import('../views/ManualPage.vue') },

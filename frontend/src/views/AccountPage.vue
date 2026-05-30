@@ -19,6 +19,11 @@
         <p><strong>{{ credits }}</strong> {{ t('account.points') }}</p>
       </section>
 
+      <section v-if="!enterpriseEnabled" class="card card-content enterprise-off-hint">
+        <h3>{{ t('account.enterpriseOffTitle') }}</h3>
+        <p class="hint">{{ t('account.enterpriseOffHint') }}</p>
+      </section>
+
       <section class="card card-content referral-panel">
         <h3>{{ t('account.referralTitle') }}</h3>
         <p class="hint">{{ t('account.referralHint') }}</p>
@@ -300,6 +305,7 @@ import { useAuthStore } from '../stores/auth'
 
 const { t } = useI18n()
 const auth = useAuthStore()
+const enterpriseEnabled = ref(false)
 const credits = ref(0)
 const copyTokenDone = ref(false)
 const copyEnvDone = ref(false)
@@ -740,7 +746,9 @@ async function copyEnvSnippet() {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
+  const features = await api.loadAppFeatures()
+  enterpriseEnabled.value = !!features.enterprise_enabled
   loadMe()
   loadApiKeys()
   loadSkillTree()

@@ -9,6 +9,10 @@
         ·
         <RouterLink class="growth-link" to="/playbook">{{ t('community.growthLinkPlaybook') }}</RouterLink>
       </p>
+      <p v-if="isTasksTab" class="tasks-tab-banner">
+        {{ t('community.tasksTabBanner') }}
+        <RouterLink class="growth-link" to="/tasks">{{ t('community.tasksTabCta') }}</RouterLink>
+      </p>
     </header>
     <div class="community-layout">
       <TopicList
@@ -63,7 +67,29 @@
         />
       </div>
       <div class="community-right">
-        <HotDigestPanel :title="t('community.hotDigest')" :items="hotFeed" @open-topic="selectTopic" />
+        <section v-if="isTasksTab" class="tasks-digest-panel">
+          <h4>{{ t('community.tasksDigestTitle') }}</h4>
+          <p class="hint">{{ t('community.tasksDigestHint') }}</p>
+          <div v-if="tasksDigestLoading" class="tasks-digest-loading">{{ t('common.loading') }}</div>
+          <ul v-else-if="tasksDigest.length" class="tasks-digest-list">
+            <li v-for="task in tasksDigest" :key="task.id">
+              <RouterLink :to="{ path: '/tasks', query: { taskId: String(task.id) } }" class="tasks-digest-link">
+                <span class="tasks-digest-title">{{ task.title }}</span>
+                <span class="tasks-digest-meta mono">
+                  <span v-if="task.reward_points">{{ t('task.reward', { n: task.reward_points }) }}</span>
+                  <span v-if="task.publisher_name"> · {{ task.publisher_name }}</span>
+                </span>
+              </RouterLink>
+            </li>
+          </ul>
+          <p v-else class="hint">{{ t('community.tasksDigestEmpty') }}</p>
+          <RouterLink to="/tasks" class="tasks-digest-more">{{ t('community.tasksDigestMore') }} →</RouterLink>
+        </section>
+        <HotDigestPanel
+          :title="isTasksTab ? t('community.hotDigestTasksMode') : t('community.hotDigest')"
+          :items="hotFeed"
+          @open-topic="selectTopic"
+        />
         <section v-if="auth.isLoggedIn" class="skill-push-panel">
           <h4>{{ t('community.pushSkillTitle') }}</h4>
           <p class="hint">{{ t('community.pushSkillHint') }}</p>
@@ -137,8 +163,11 @@ const route = useRoute()
 const COMMUNITY_ONBOARD_KEY = 'clawjob_community_onboarding_v1'
 const showCommunityOnboarding = ref(false)
 
+const isTasksTab = computed(() => route.query.tab === 'tasks')
 const topics = ref<api.CommunityTopic[]>([])
 const hotFeed = ref<api.CommunityHotFeedItem[]>([])
+const tasksDigest = ref<api.TaskListItem[]>([])
+const tasksDigestLoading = ref(false)
 const messages = ref<api.CommunityMessage[]>([])
 const allAgents = ref<Array<{ id: number; name: string }>>([])
 const skills = ref<api.SkillMarketItem[]>([])
@@ -240,12 +269,29 @@ async function fetchTopicsList() {
     typeof route.query.skill_tag === 'string' && route.query.skill_tag.trim()
       ? route.query.skill_tag.trim()
       : undefined
+  const taskQ = isTasksTab.value && !query.value.trim() ? '任务' : undefined
   const res = await api.fetchCommunityTopics({
     skill_tag: skillTag,
-    q: query.value || undefined,
+    q: query.value.trim() || taskQ,
     limit: 40,
   })
   topics.value = res.data.items || []
+}
+
+async function loadTasksDigest() {
+  if (!isTasksTab.value) {
+    tasksDigest.value = []
+    return
+  }
+  tasksDigestLoading.value = true
+  try {
+    const res = await api.fetchTasks({ limit: 8, sort: 'reward_desc', category_filter: undefined })
+    tasksDigest.value = (res.data.tasks || []).filter((t) => t.status === 'open')
+  } catch {
+    tasksDigest.value = []
+  } finally {
+    tasksDigestLoading.value = false
+  }
 }
 
 function applyTaskDraftFromRoute() {
@@ -381,6 +427,7 @@ onMounted(async () => {
     }
   }
   await loadHot()
+  await loadTasksDigest()
   await bootstrapCommunityView()
 })
 
@@ -389,11 +436,13 @@ watch(
     skill_tag: route.query.skill_tag,
     topic_id: route.query.topic_id,
     task_id: route.query.task_id,
+    tab: route.query.tab,
     path: route.path,
   }),
   async (_curr, prev) => {
     if (!prev) return
     if (!isCommunityRoutePath()) return
+    await loadTasksDigest()
     await bootstrapCommunityView()
   },
 )
@@ -505,4 +554,30 @@ async function pushSkill() {
 }
 .composer-upsell__btn:hover { filter: brightness(1.05); }
 .composer-upsell__muted { margin: 0; font-size: 12px; opacity: .72; }
+.tasks-tab-banner {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(167, 139, 250, 0.35);
+  background: rgba(79, 70, 229, 0.08);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.tasks-digest-panel {
+  border: 1px solid var(--border-color, #2a2a2a);
+  border-radius: 12px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tasks-digest-panel h4 { margin: 0; font-size: 14px; }
+.tasks-digest-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.tasks-digest-link { display: block; text-decoration: none; color: inherit; padding: 8px; border-radius: 8px; background: rgba(255,255,255,.02); }
+.tasks-digest-link:hover { background: rgba(167, 139, 250, 0.12); }
+.tasks-digest-title { display: block; font-weight: 600; font-size: 13px; }
+.tasks-digest-meta { display: block; margin-top: 4px; font-size: 12px; opacity: .75; }
+.tasks-digest-more { font-size: 12px; color: #a78bfa; text-decoration: none; }
+.tasks-digest-more:hover { text-decoration: underline; }
+.tasks-digest-loading { font-size: 12px; opacity: .75; }
 </style>
