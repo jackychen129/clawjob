@@ -30,7 +30,7 @@ from app.domain.task_helpers import (
     can_view_task_runs, compute_publish_fee, get_or_create_clawjob_system_agent,
     intent_rate_check, maybe_auto_confirm, maybe_settle_skill_revenue, normalize_verification_method, owner_display_name,
     pay_task_reward, push_task_to_discord, require_auction_task, serialize_auction_state,
-    task_extra, task_is_public_listing, task_is_visible_to, task_payment_breakdown,
+    task_extra, task_is_platform_seed_listing, task_is_public_listing, task_is_visible_to, task_payment_breakdown,
     task_verification_hours, validate_verification_submission,
 )
 from app.domain.task_models import (
@@ -227,7 +227,21 @@ def list_tasks_public(
         if reward_max is not None:
             qy = qy.filter(Task.reward_points <= reward_max)
         if system_owner_ids:
-            qy = qy.filter(~Task.owner_id.in_(system_owner_ids))
+            try:
+                dialect = db.bind.dialect.name if db.bind is not None else ""
+            except Exception:
+                dialect = ""
+            if dialect == "postgresql":
+                from sqlalchemy import or_ as _or
+                src_expr = Task.input_data.op("->>")("source")
+                showcase_expr = Task.input_data.op("->>")("showcase")
+                qy = qy.filter(
+                    _or(
+                        ~Task.owner_id.in_(system_owner_ids),
+                        src_expr == "seed_open_tasks",
+                        showcase_expr.in_(("true", "True", "1")),
+                    )
+                )
         qy = _apply_hidden_filter(qy)
         return qy
 
@@ -2282,7 +2296,21 @@ def list_tasks_public(
         if reward_max is not None:
             qy = qy.filter(Task.reward_points <= reward_max)
         if system_owner_ids:
-            qy = qy.filter(~Task.owner_id.in_(system_owner_ids))
+            try:
+                dialect = db.bind.dialect.name if db.bind is not None else ""
+            except Exception:
+                dialect = ""
+            if dialect == "postgresql":
+                from sqlalchemy import or_ as _or
+                src_expr = Task.input_data.op("->>")("source")
+                showcase_expr = Task.input_data.op("->>")("showcase")
+                qy = qy.filter(
+                    _or(
+                        ~Task.owner_id.in_(system_owner_ids),
+                        src_expr == "seed_open_tasks",
+                        showcase_expr.in_(("true", "True", "1")),
+                    )
+                )
         qy = _apply_hidden_filter(qy)
         return qy
 

@@ -498,6 +498,16 @@ def task_is_visible_to(task: Task, viewer_user_id: Optional[int], viewer_agent_i
 CLAWJOB_SYSTEM_USERNAME = "clawjob_system"
 
 
+def task_is_platform_seed_listing(task: Task) -> bool:
+    """平台系统账号发布的开放种子任务（非 onboarding/握手）可进入公开大厅。"""
+    extra = task.input_data if isinstance(task.input_data, dict) else {}
+    if not isinstance(extra, dict):
+        return False
+    if extra.get("showcase"):
+        return True
+    return (extra.get("source") or "").strip() == "seed_open_tasks"
+
+
 def task_is_public_listing(task: Task, owner: Optional[User]) -> bool:
     """公开大厅/计数是否应当收录该任务（对所有访客一致的真实任务）。"""
     extra = task.input_data if isinstance(task.input_data, dict) else {}
@@ -507,7 +517,7 @@ def task_is_public_listing(task: Task, owner: Optional[User]) -> bool:
         if (extra.get("source") or "").strip() == "register_via_skill":
             return False
     if owner is not None and owner.username == CLAWJOB_SYSTEM_USERNAME:
-        return False
+        return task_is_platform_seed_listing(task)
     return True
 
 
