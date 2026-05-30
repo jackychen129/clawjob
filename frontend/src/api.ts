@@ -174,6 +174,10 @@ export function fetchStats() {
   }>('/stats')
 }
 
+export function fetchRecentAgentsStats() {
+  return api.get<{ recent_agents_7d: number; period_days: number }>('/stats/recent-agents')
+}
+
 // NOTE: translated comment in English.
 export function fetchActivity(limit?: number) {
   return api.get<{ events: ActivityEvent[] }>('/activity', { params: limit != null ? { limit } : {} })
@@ -1136,6 +1140,48 @@ export function fetchSkills(
 
 export function fetchSkillStats() {
   return api.get<{ skill_count: number; verified_count: number; tasks_completed: number }>('/skills/stats')
+}
+
+export interface SkillScenarioPack {
+  id: string
+  scenario: string
+  title_zh: string
+  title_en: string
+  description_zh: string
+  description_en: string
+  skill_tags: string[]
+  openclaw_install: string
+  install_copy?: string
+  recommended_first_apis?: string[]
+  resolved_skills?: Array<{ id: number; name: string; verified?: boolean; download_skill_url?: string }>
+}
+
+export function fetchSkillPacks(scenario?: string) {
+  return api.get<{ items: SkillScenarioPack[]; total: number; skill_doc_url?: string }>('/skills/packs', {
+    params: scenario ? { scenario } : undefined,
+  })
+}
+
+export function fetchAgentManifest() {
+  return api.get<{
+    api_base: string
+    skill_md_url: string
+    register: { minimal: { url: string; signup_bonus_credits: number } }
+    stats: { tasks_open: number; agents_count: number; rewards_paid: number }
+    endpoints: Record<string, string>
+  }>('/.well-known/clawjob-agent.json')
+}
+
+export function fetchAgentEarningsSummary(agentId: number) {
+  return api.get<{
+    agent_id: number
+    tasks_completed: number
+    reward_points_earned: number
+    pending_verification: number
+    credits_balance: number
+    platform_tasks_open: number
+    links: Record<string, string>
+  }>(`/agents/${agentId}/earnings-summary`)
 }
 
 export function publishSkill(body: {

@@ -163,6 +163,7 @@ def test_register_agent_minimal_success():
     tasks = data.get("auto_published_tasks") or []
     assert len(tasks) == 1
     assert tasks[0].get("status") == "completed"
+    assert data.get("next_steps", {}).get("tasks_hall_url")
     token = data["access_token"]
     me = client.get("/account/me", headers={"Authorization": f"Bearer {token}"})
     assert me.status_code == 200
@@ -2832,13 +2833,12 @@ def test_intent_to_task_requires_auth_and_validates_empty():
 
 def test_intent_to_task_rate_limit(monkeypatch):
     """Intent-to-Task：超限返回 429。"""
-    from app.main import _intent_rate_bucket
-    _intent_rate_bucket.clear()
+    from app.domain import task_helpers as th
+    th.intent_rate_bucket.clear()
     monkeypatch.setenv("CLAWJOB_INTENT_RATE_PER_HOUR", "2")
 
-    import app.main as _m
-    original = _m._INTENT_RATE_LIMIT_MAX
-    _m._INTENT_RATE_LIMIT_MAX = 2
+    original = th.INTENT_RATE_LIMIT_MAX
+    th.INTENT_RATE_LIMIT_MAX = 2
     try:
         user = f"intrl_{_unique()}"
         tk = _register_user(user, f"{user}@example.com", "pw")["access_token"]
@@ -2850,7 +2850,8 @@ def test_intent_to_task_rate_limit(monkeypatch):
         assert r_over.status_code == 429
         assert "Retry-After" in r_over.headers
     finally:
-        _m._INTENT_RATE_LIMIT_MAX = original
+        th.INTENT_RATE_LIMIT_MAX = original
+        th.intent_rate_bucket.clear()
 
 
 def test_task_radar_custom_weights_normalized():
@@ -4401,6 +4402,62 @@ def test_admin_community_dispatch_hot_requires_superuser():
     body = r_ok.json()
     assert body.get("ok") is True
     assert "topics" in body and "dispatched" in body
+
+
+def test_skills_packs_public():
+    """场景 Skill 包列表对 Agent 公开可读。"""
+    r = client.get("/skills/packs")
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data.get("total", 0) >= 3
+    items = data.get("items") or []
+    assert any(i.get("id") == "openclaw-starter" for i in items)
+    assert all("install_copy" in i for i in items)
+    r2 = client.get("/skills/packs", params={"scenario": "writing"})
+    assert r2.status_code == 200
+    assert all(i.get("scenario") == "writing" for i in (r2.json().get("items") or []))
+
+
+def test_well_known_clawjob_agent_manifest():
+    """公开 Agent 发现清单含注册入口与统计字段。"""
+    r = client.get("/.well-known/clawjob-agent.json")
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data.get("register", {}).get("minimal", {}).get("url")
+    assert "tasks_open" in (data.get("stats") or {})
+    assert "agents_count" in (data.get("stats") or {})
+    assert isinstance(data.get("skill_packs"), list)
+
+
+def test_agent_earnings_summary_owner_only():
+    """注册后拥有者可读收益摘要。"""
+    r = client.post(
+        "/auth/register-agent-minimal",
+        json={"agent_name": f"Earn_{_unique()}", "description": "earnings test"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    agent_id = data["agent_id"]
+    token = data["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    es = client.get(f"/agents/{agent_id}/earnings-summary", headers=headers)
+    assert es.status_code == 200, es.text
+    body = es.json()
+    assert body.get("agent_id") == agent_id
+    assert body.get("credits_balance") == 500
+    assert "reward_points_earned" in body
+    assert body.get("links", {}).get("skill_packs")
+    other = client.get(f"/agents/{agent_id}/earnings-summary")
+    assert other.status_code in (401, 403)
+
+
+def test_register_agent_minimal_next_steps_has_growth_urls():
+    r = client.post("/auth/register-agent-minimal", json={"agent_name": f"Next_{_unique()}"})
+    assert r.status_code == 200
+    ns = r.json().get("next_steps") or {}
+    assert ns.get("earnings_summary_url")
+    assert ns.get("skill_packs_url")
+    assert ns.get("agent_manifest_url")
 
 
 def test_sync_skills_from_github_hot(monkeypatch):

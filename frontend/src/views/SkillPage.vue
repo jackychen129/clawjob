@@ -25,6 +25,7 @@
           </Button>
         </div>
         <p class="skill-note">{{ t('skillPage.oneClickNote') }}</p>
+        <p class="skill-referral-hint">{{ t('skillPage.referralHint') }}</p>
       </div>
     </section>
 
@@ -106,6 +107,28 @@
             {{ contractValidateLoading ? 'Validating...' : 'Validate Contract' }}
           </Button>
           <pre v-if="contractValidateResult" class="skill-pre"><code>{{ contractValidateResult }}</code></pre>
+        </div>
+      </div>
+    </section>
+
+    <section class="skill-section card">
+      <div class="card-content">
+        <h2 class="section-title">{{ t('skillPage.scenarioPacksTitle') }}</h2>
+        <p class="skill-section-desc">{{ t('skillPage.scenarioPacksDesc') }}</p>
+        <p v-if="manifestStats" class="skill-note">{{ t('skillPage.scenarioPacksStats', manifestStats) }}</p>
+        <div v-if="skillPacksLoading" class="skill-note">{{ t('common.loading') }}</div>
+        <div v-else class="skill-market-grid">
+          <article v-for="pack in skillPacks" :key="pack.id" class="skill-market-card">
+            <h4 class="skill-market-card__title">{{ pack.title_zh }}</h4>
+            <p class="skill-market-card__desc">{{ pack.description_zh }}</p>
+            <p class="skill-market-card__meta">
+              <span v-for="tag in (pack.skill_tags || []).slice(0, 4)" :key="tag">{{ tag }}</span>
+            </p>
+            <pre class="skill-pre skill-pack-install"><code>{{ pack.install_copy || pack.openclaw_install }}</code></pre>
+            <Button type="button" size="sm" variant="secondary" @click="copyPackInstall(pack)">
+              {{ copiedPackId === pack.id ? t('skillPage.copied') : t('skillPage.scenarioPacksCopy') }}
+            </Button>
+          </article>
         </div>
       </div>
     </section>
@@ -206,6 +229,13 @@
           <p class="skill-config-hint">{{ t('skillPage.configTokenHint') }}</p>
         </div>
         <div class="skill-quick-register">
+          <label class="skill-config-label">{{ t('skillPage.minimalRegisterCurlTitle') }}</label>
+          <pre class="skill-pre"><code>{{ minimalRegisterCurl }}</code></pre>
+          <Button size="sm" variant="secondary" type="button" @click="copyMinimalRegisterCurl">
+            {{ copyMinimalRegisterDone ? t('skillPage.copied') : t('skillPage.copy') }}
+          </Button>
+        </div>
+        <div class="skill-quick-register">
           <label class="skill-config-label">{{ t('skillPage.quickRegisterTitle') }}</label>
           <pre class="skill-pre"><code>{{ quickRegisterCommand }}</code></pre>
           <Button size="sm" variant="secondary" type="button" @click="copyQuickRegisterCmd">
@@ -227,7 +257,7 @@ import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Button } from '../components/ui/button'
 import * as api from '../api'
-import type { SkillMarketItem } from '../api'
+import type { SkillMarketItem, SkillScenarioPack } from '../api'
 import { safeT } from '../i18n'
 
 const _i18n = useI18n()
@@ -261,15 +291,26 @@ const useAfterLoadKeys = [
 ]
 const quickRegisterCommand = `export CLAWJOB_API_URL=${apiBaseUrl}\npython3 tools/quick_register.py <username> <email> <password>`
 
+const minimalRegisterCurl = computed(() =>
+  `curl -sS -X POST "${apiBaseUrl}/auth/register-agent-minimal" \\\n` +
+  `  -H "Content-Type: application/json" \\\n` +
+  `  -d '{"agent_name":"OpenClaw","description":"via skill page"}'`
+)
+
 const copySkillUrlDone = ref(false)
 const copyApiUrlDone = ref(false)
 const copyQuickRegisterDone = ref(false)
+const copyMinimalRegisterDone = ref(false)
 const copyOneClickDone = ref(false)
 const copyPublishSkillCmdDone = ref(false)
 const contractValidateLoading = ref(false)
 const contractValidateResult = ref('')
 const marketSkillsLoading = ref(false)
 const marketSkills = ref<SkillMarketItem[]>([])
+const skillPacksLoading = ref(false)
+const skillPacks = ref<SkillScenarioPack[]>([])
+const copiedPackId = ref('')
+const manifestStats = ref<{ tasksOpen: number; agentsCount: number; rewardsPaid: number } | null>(null)
 const contractSchemaText = ref('{\n  "type": "object",\n  "properties": {\n    "query": { "type": "string" },\n    "limit": { "type": "integer", "enum": [10, 20, 50] }\n  },\n  "required": ["query"]\n}')
 const failureSemanticsText = ref('{\n  "codes": [\n    { "code": "RETRYABLE_TIMEOUT", "retryable": true },\n    { "code": "INVALID_ARGUMENT", "retryable": false }\n  ]\n}')
 const samplePayloadText = ref('{\n  "query": "hello",\n  "limit": 20\n}')
@@ -293,6 +334,10 @@ function copyApiUrl() {
 
 function copyQuickRegisterCmd() {
   copyToClipboard(quickRegisterCommand, copyQuickRegisterDone)
+}
+
+function copyMinimalRegisterCurl() {
+  copyToClipboard(minimalRegisterCurl.value, copyMinimalRegisterDone)
 }
 
 function copyOneClickPrompt() {
@@ -355,8 +400,40 @@ async function loadMarketSkills() {
   }
 }
 
+async function loadSkillPacks() {
+  skillPacksLoading.value = true
+  try {
+    const [packsRes, manifestRes] = await Promise.all([
+      api.fetchSkillPacks(),
+      api.fetchAgentManifest().catch(() => null),
+    ])
+    skillPacks.value = Array.isArray(packsRes.data?.items) ? packsRes.data.items : []
+    if (manifestRes?.data?.stats) {
+      manifestStats.value = {
+        tasksOpen: manifestRes.data.stats.tasks_open ?? 0,
+        agentsCount: manifestRes.data.stats.agents_count ?? 0,
+        rewardsPaid: manifestRes.data.stats.rewards_paid ?? 0,
+      }
+    }
+  } catch {
+    skillPacks.value = []
+  } finally {
+    skillPacksLoading.value = false
+  }
+}
+
+function copyPackInstall(pack: SkillScenarioPack) {
+  const text = pack.install_copy || pack.openclaw_install || ''
+  if (!text) return
+  navigator.clipboard.writeText(text).then(() => {
+    copiedPackId.value = pack.id
+    setTimeout(() => { copiedPackId.value = '' }, 2000)
+  }).catch(() => {})
+}
+
 onMounted(() => {
   loadMarketSkills()
+  loadSkillPacks()
 })
 </script>
 

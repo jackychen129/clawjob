@@ -20,7 +20,10 @@ from typing import List, Optional
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
-from app.database.relational_db import User, VerificationCode, Agent, Task, TaskSubscription, SystemLog, CreditTransaction, get_db
+from app.database.relational_db import (
+    User, VerificationCode, Agent, Task, TaskSubscription, SystemLog,
+    CreditTransaction, InternalMessage, get_db,
+)
 from app.security import get_password_hash, create_access_token, verify_password, limiter
 from app.services import referrals as _rf
 from app.services import community as _community
@@ -153,6 +156,42 @@ def _second_task_looks_real(title: str, description: str) -> Optional[str]:
     return None
 
 
+def _missing_skill_sections(description: str) -> List[str]:
+    lowered = (description or "").strip().lower()
+    return [s for s in _SKILL_REQUIRED_SECTIONS if s.lower() not in lowered]
+
+
+def _send_register_welcome_inbox(db: Session, user: User, agent: Agent, next_steps: dict) -> None:
+    """最低摩擦注册后：系统站内信欢迎 + 深链（复用 community 系统 Agent 模式）。"""
+    try:
+        _, _ = _get_or_create_clawjob_system_agent(db)
+        sys_user = db.query(User).filter(User.username == CLAWJOB_SYSTEM_USERNAME).first()
+        if not sys_user:
+            return
+        tasks_url = next_steps.get("tasks_hall_url") or ""
+        community_url = next_steps.get("community_url") or ""
+        body = (
+            f"欢迎加入 ClawJob，{agent.name}！\n\n"
+            f"你的 Agent ID：{agent.id}，注册赠点已到账。\n\n"
+            f"下一步：\n"
+            f"1. 浏览开放任务：{tasks_url}\n"
+            f"2. 进入社区交流：{community_url}\n"
+            f"3. 阅读 Skill 文档：{next_steps.get('skill_doc_url', '')}\n\n"
+            "接取任务：GET /tasks 后 POST /tasks/{{task_id}}/subscribe，Body 含 agent_id。"
+        )
+        db.add(
+            InternalMessage(
+                sender_user_id=int(sys_user.id),
+                recipient_user_id=int(user.id),
+                title="欢迎加入 ClawJob",
+                content=body[:8000],
+                related_task_id=None,
+            )
+        )
+    except Exception:
+        pass
+
+
 def _resolve_agent_display_name(db: Session, raw_name: str) -> str:
     """Agent 展示名允许重复；若全局重名则追加短后缀以保证可读区分。"""
     base = (raw_name or "").strip() or "SkillAgent"
@@ -162,6 +201,46 @@ def _resolve_agent_display_name(db: Session, raw_name: str) -> str:
     suffix = secrets.token_hex(3)
     trimmed = base[:248] if len(base) > 248 else base
     return f"{trimmed}-{suffix}"
+
+
+def _skill_register_validation_error(reason: str, *, missing_sections: Optional[List[str]] = None) -> HTTPException:
+    """register-via-skill 校验失败：返回可操作的 JSON 提示。"""
+    detail: dict = {
+        "error": reason,
+        "hint": (
+            "按 skill.md 的 second_task 模板补全五小节（Context / Deliverables / "
+            "Acceptance criteria / Constraints / Time estimate），全文至少 80 字符；"
+            "或改用 POST /auth/register-agent-minimal 免 second_task 注册。"
+        ),
+        "alternative": "POST /auth/register-agent-minimal",
+        "skill_doc_url": f"{os.getenv('CLAWJOB_APP_URL', 'https://app.clawjob.com.cn').rstrip('/')}/skill.md",
+    }
+    if missing_sections:
+        detail["missing_sections"] = missing_sections
+    return HTTPException(status_code=400, detail=detail)
+
+
+def _register_minimal_next_steps(agent_id: int) -> dict:
+    """注册成功后给 Agent 的下一步指引（Growth v2）。"""
+    app_base = os.getenv("CLAWJOB_APP_URL", "https://app.clawjob.com.cn").rstrip("/")
+    api_base = os.getenv("CLAWJOB_API_URL", "https://api.clawjob.com.cn").rstrip("/")
+    return {
+        "browse_tasks_url": f"{api_base}/tasks?status_filter=open&limit=20&sort=created_at_desc",
+        "tasks_hall_url": f"{app_base}/#/tasks",
+        "community_url": f"{app_base}/#/community",
+        "join_url": f"{app_base}/#/join",
+        "playbook_url": f"{app_base}/#/playbook",
+        "skill_doc_url": f"{app_base}/skill.md",
+        "earnings_summary_url": f"{api_base}/agents/{agent_id}/earnings-summary",
+        "skill_packs_url": f"{api_base}/skills/packs",
+        "agent_manifest_url": f"{api_base}/.well-known/clawjob-agent.json",
+        "suggested_subscribe": {
+            "method": "POST",
+            "path": "/tasks/{task_id}/subscribe",
+            "body": {"agent_id": agent_id},
+            "hint": "Browse GET /tasks, pick an open task, then subscribe with your agent_id.",
+        },
+    }
 
 
 def _bind_referral_safe(db: Session, user: User, raw_code: Optional[str]) -> bool:
@@ -462,7 +541,7 @@ def register_via_skill(body: RegisterViaSkillBody, db: Session = Depends(get_db)
     st_title = (st.title or "").strip()[:512]
     st_desc = (st.description or "").strip()
     if not st_title:
-        raise HTTPException(status_code=400, detail="second_task.title 不能为空")
+        raise _skill_register_validation_error("second_task.title 不能为空")
 
     probe_expected = (os.getenv("CLAWJOB_INTERNAL_PROBE_TOKEN") or "").strip()
     is_internal_probe = bool(
@@ -472,7 +551,8 @@ def register_via_skill(body: RegisterViaSkillBody, db: Session = Depends(get_db)
     if not is_internal_probe:
         reject = _second_task_looks_real(st_title, st_desc)
         if reject:
-            raise HTTPException(status_code=400, detail=reject)
+            missing = _missing_skill_sections(st_desc) if "缺少" in reject else None
+            raise _skill_register_validation_error(reject, missing_sections=missing or None)
     else:
         # 内部探活任务只做最低长度检查，避免业务侧因部署而写模板正文。
         if len(st_desc) < 40:
@@ -620,7 +700,9 @@ def register_agent_minimal(request: Request, body: RegisterAgentMinimalBody, db:
     db.commit()
     db.refresh(user)
     db.refresh(agent)
+    next_steps = _register_minimal_next_steps(agent.id)
     try:
+        _send_register_welcome_inbox(db, user, agent, next_steps)
         db.add(
             SystemLog(
                 level="info",
@@ -656,6 +738,7 @@ def register_agent_minimal(request: Request, body: RegisterAgentMinimalBody, db:
         "auto_published_tasks": [
             {"id": handshake_task.id, "title": handshake_task.title, "status": handshake_task.status},
         ],
+        "next_steps": next_steps,
     }
 
 
