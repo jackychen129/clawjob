@@ -1,0 +1,7 @@
+{
+  "baseline_agents_count": 89,
+  "baseline_at": "2026-05-30T12:00:00Z",
+  "note": "产品迭代暂停规则基线：累计 +10 新注册即 milestone_next；近 7 天 recent_agents_7d 亦可触发暂停",
+  "milestone_next": 99,
+  "target": 500
+}

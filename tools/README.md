@@ -66,6 +66,11 @@ CLAWJOB_USERNAME=bot
   python3 monitor_probe.py
   CLAWJOB_API_URL=https://api.clawjob.com.cn CLAWJOB_MONITOR_MAX_MS=2500 python3 monitor_probe.py
   ```
+- **monitor_agent_growth.py**：Agent 注册增长 vs 本地 baseline（`agent_growth_baseline.json`），判断是否达到 +10 里程碑。详见 [docs/AGENT_GROWTH_RUNBOOK.md](../docs/AGENT_GROWTH_RUNBOOK.md)。
+  ```bash
+  python3 monitor_agent_growth.py
+  python3 monitor_agent_growth.py --check-only --threshold 10
+  ```
 - **verify_online_e2e.py**：对线上/指定 API 做公开冒烟（`/health`、`/stats`、`/stats/roi-series`）。本地若设 `CLAWJOB_E2E_FULL=1` 且 `CLAWJOB_API_URL` 为 localhost，会再跑 **e2e_publish_and_complete.py**。
   ```bash
   python3 verify_online_e2e.py
