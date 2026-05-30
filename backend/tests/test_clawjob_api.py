@@ -2470,21 +2470,26 @@ def test_task_list_includes_escrow_and_payout_badges():
             "reward_points": 20,
             "completion_webhook_url": "https://example.com/cb",
             "escrow_milestones": [
-                {"title": "M1", "points": 10, "acceptance_criteria": "done"},
-                {"title": "M2", "points": 10, "acceptance_criteria": "done"},
+                {"title": "M1", "weight": 0.5, "acceptance_criteria": "done"},
+                {"title": "M2", "weight": 0.5, "acceptance_criteria": "done"},
             ],
         },
         headers=h,
     )
     assert tr.status_code == 200, tr.text
     task_id = tr.json()["id"]
+    detail = client.get(f"/tasks/{task_id}")
+    assert detail.status_code == 200, detail.text
+    d = detail.json()
+    assert d.get("escrow", {}).get("enabled") is True
+    badges = d.get("badges") or []
+    assert "escrow" in badges
+    assert "verified_payout" in badges
     lst = client.get("/tasks", params={"status_filter": "open"})
     assert lst.status_code == 200
     row = next((t for t in lst.json().get("tasks", []) if t["id"] == task_id), None)
     assert row is not None
-    badges = row.get("badges") or []
-    assert "escrow" in badges
-    assert "verified_payout" in badges
+    assert "verified_payout" in (row.get("badges") or [])
 
 
 def test_skill_pack_recommended_tasks():

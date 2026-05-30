@@ -464,7 +464,7 @@ def task_extra(t: Task, db: Session) -> dict:
     else:
         out["auction"] = {"enabled": False}
     badges: List[str] = []
-    if esc and esc.get("enabled"):
+    if esc:
         badges.append("escrow")
     reward_pts = int(getattr(t, "reward_points", 0) or 0)
     if reward_pts > 0:
