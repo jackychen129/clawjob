@@ -21,6 +21,7 @@ if _backend not in sys.path:
 
 from app.database.relational_db import SessionLocal, init_db, Task
 from app.routers.auth import _get_or_create_clawjob_system_agent
+from app.services.escrow_tasks import build_escrow_plan, save_escrow_to_task
 
 OPEN_TASKS = [
     {"title": "【入门】整理 ClawJob Skill 安装步骤", "description": "将 SKILL.md 安装流程整理为 5 步 checklist，Markdown 输出。", "category": "writing", "task_type": "documentation"},
@@ -35,6 +36,28 @@ OPEN_TASKS = [
     {"title": "【写作】FAQ：游客能否接取任务？", "description": "回答游客发布与 Agent 注册的关系，含 register-agent-minimal 路径。", "category": "writing", "task_type": "documentation"},
     {"title": "【数据】统计公开任务分类分布", "description": "基于 GET /tasks 结果，按 category 汇总数量，表格输出。", "category": "data", "task_type": "analysis"},
     {"title": "【入门】完成一次任务订阅流程演练", "description": "文档形式描述：register → GET /tasks → subscribe → submit-completion。", "category": "other", "task_type": "general"},
+]
+
+# 展示 verified_payout / escrow 徽章的公开任务（幂等，系统账号发布）
+SHOWCASE_TASKS = [
+    {
+        "title": "【展示】有奖调研：Agent 任务平台 UX 反馈",
+        "description": "试用 ClawJob 任务大厅，输出 3 条 UX 改进建议（Markdown 列表）。",
+        "category": "research",
+        "task_type": "analysis",
+        "reward_points": 30,
+    },
+    {
+        "title": "【展示】托管里程碑：Skill 文档两阶段交付",
+        "description": "阶段一输出 Skill 大纲，阶段二完成完整 SKILL.md 草稿。",
+        "category": "writing",
+        "task_type": "documentation",
+        "reward_points": 50,
+        "escrow_milestones": [
+            {"title": "Skill 大纲", "weight": 0.4},
+            {"title": "完整 SKILL.md", "weight": 0.6},
+        ],
+    },
 ]
 
 
@@ -72,6 +95,41 @@ def seed_open_tasks(db, *, apply: bool) -> int:
         db.add(task)
         created += 1
         print(f"  created: {title}")
+    for spec in SHOWCASE_TASKS:
+        title = spec["title"]
+        existing = (
+            db.query(Task)
+            .filter(Task.title == title, Task.owner_id == user.id, Task.status == "open")
+            .first()
+        )
+        if existing:
+            print(f"  skip (exists): {title}")
+            continue
+        if not apply:
+            print(f"  would create showcase: {title}")
+            created += 1
+            continue
+        reward = int(spec.get("reward_points", 0) or 0)
+        task = Task(
+            title=title,
+            description=spec["description"],
+            status="open",
+            task_type=spec.get("task_type", "general"),
+            priority="medium",
+            owner_id=user.id,
+            creator_agent_id=system_agent.id,
+            agent_id=None,
+            reward_points=reward,
+            category=spec.get("category"),
+            completion_webhook_url="https://api.clawjob.com.cn/health",
+            input_data={"source": "seed_open_tasks", "skills": ["clawjob"], "showcase": True},
+        )
+        milestones = spec.get("escrow_milestones")
+        if milestones and reward > 0:
+            save_escrow_to_task(task, build_escrow_plan(milestones, reward))
+        db.add(task)
+        created += 1
+        print(f"  created showcase: {title}")
     if apply and created:
         db.commit()
     return created
