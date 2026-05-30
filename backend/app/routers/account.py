@@ -1,6 +1,7 @@
 """
 ClawJob - 账户：信用点余额、充值、支付方式绑定、流水
 """
+import os
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -19,6 +20,7 @@ from app.database.relational_db import (
     Agent,
     UserCommissionRecord,
     UserApiCredential,
+    Referral,
 )
 from app.security import get_current_user, SECRET_KEY
 from app.services.payment_methods import (
@@ -645,3 +647,76 @@ def unbind_payment_method(
     db.delete(pm)
     db.commit()
     return {"message": "已解绑"}
+
+
+@router.get("/referral")
+def get_my_referral(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """个人邀请中心：返回邀请码、邀请链接样本、累计邀请人数、累计发放返点。"""
+    from app.services import referrals as _rf
+
+    uid = int(current_user["user_id"])
+    try:
+        user = db.query(User).filter(User.id == uid).with_for_update().first()
+    except Exception:
+        user = db.query(User).filter(User.id == uid).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    code = _rf.ensure_user_code(db, user)
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+    rels = db.query(Referral).filter(Referral.referrer_user_id == uid).all()
+    total_invited = len(rels)
+    rewarded = [r for r in rels if r.first_task_reward_at is not None]
+    total_reward_points = int(sum(r.referrer_bonus_points or 0 for r in rewarded))
+    pending = total_invited - len(rewarded)
+    frontend_url = (os.getenv("FRONTEND_URL", "") or "").rstrip("/")
+    share_link = f"{frontend_url}/register?ref={code}" if frontend_url else f"/register?ref={code}"
+    return {
+        "user_id": uid,
+        "referral_code": code,
+        "share_link": share_link,
+        "total_invited": total_invited,
+        "completed_first_task": len(rewarded),
+        "pending_first_task": pending,
+        "total_reward_points": total_reward_points,
+        "bonus_policy": {
+            "referrer_points": _rf.referrer_bonus_points(),
+            "invitee_points": _rf.invitee_bonus_points(),
+            "trigger": "invitee_first_task_reward",
+        },
+    }
+
+
+@router.get("/referral/records")
+def list_my_referral_records(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """邀请明细：谁在什么时候被邀请，是否已触发首单返点。"""
+    uid = int(current_user["user_id"])
+    rels = (
+        db.query(Referral)
+        .filter(Referral.referrer_user_id == uid)
+        .order_by(Referral.signup_at.desc())
+        .limit(200)
+        .all()
+    )
+    out = []
+    for r in rels:
+        invitee = db.query(User).filter(User.id == r.invitee_user_id).first()
+        out.append({
+            "id": r.id,
+            "invitee_user_id": r.invitee_user_id,
+            "invitee_username": invitee.username if invitee else None,
+            "signup_at": r.signup_at.isoformat() + "Z" if r.signup_at else None,
+            "first_task_reward_at": r.first_task_reward_at.isoformat() + "Z" if r.first_task_reward_at else None,
+            "referrer_bonus_points": int(r.referrer_bonus_points or 0),
+            "invitee_bonus_points": int(r.invitee_bonus_points or 0),
+            "status": "rewarded" if r.first_task_reward_at else "pending",
+        })
+    return {"records": out, "total": len(out)}

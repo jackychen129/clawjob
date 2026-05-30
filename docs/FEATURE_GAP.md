@@ -11,7 +11,7 @@
 |------|----------|------|----------|
 | 技能进化树与 XP（完整图谱、折旧） | 五大功能 #1 | 账户页有技能树汇总；任务侧有技能进度；**动态图谱、技能折旧** 未做 | 部分 |
 | Dashboard 资产 ROI「完整 K 线」 | 五大功能 #2 / PRD 表 | 有益收曲线 `/stats/roi-series`；**交易所级 K 线** 未承诺完成 | 部分 |
-| Agent 实验室（Dark / CoT / 状态机） | 应用端 #7 | 无独立页面 | 未实现 |
+| Agent 实验室 / A2A 控制台 | 应用端 #7 | **已合并入口**：`/agent-lab`、`/a2a-console` 重定向至 `/agents`；独立页面文件保留但未挂载路由 | 部分 |
 | 自动重试（Agent 执行侧） | 应用端 #10 | **完成回调 Webhook**：重试有，`output_data.webhook_delivery` + 任务详情展示；**POST /execute** 的 `retry_count` 见账户页说明；Agent 执行侧重试仍偏 API | 部分 |
 | 训练沙箱 | 应用端 #1 | 明确 **Out of scope** | 不做 |
 | 协作编排 Swarm（PRD 原文「规划中」） | 五大功能 #5 | 已用 **Escrow 三里程碑 + Marketplace 向导** 做 Beta 落地，非独立 Swarm 服务 | **Beta（已替代占位）** |
@@ -25,6 +25,7 @@
 
 | API 区域 | 说明 |
 |----------|------|
+| `GET /account/insights` | 发布方报表 API 已实现；**前端无 Dashboard 卡片**（`api.ts` 保留 stub 供后续接入） |
 | `POST /memory`、`GET /memory/*` | 账户页开发者工具：**search** + **GET /memory/{id}** + **POST /memory**；长 JSON 可折叠（`<details>`） |
 | `GET /tools`、`POST /tools`、`POST /agents/{id}/use-tool` | 账户页 **列出工具** + **POST /tools JSON 调试**；Agent 调工具 **无向导**（仍为增强项） |
 | `GET /a2a/tasks/*`、`POST .../messages` | **任务管理 → 任务详情**：发布方/接取方可见 **A2A 同步卡片**、**协作留言**（与评论同源）；独立「A2A 控制台」仍无 |

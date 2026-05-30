@@ -29,6 +29,7 @@ const router = createRouter({
     { path: '/@:username', name: 'PublicUserAt', component: () => import('../views/PublicUserView.vue') },
     { path: '/studio', redirect: '/agents' },
     { path: '/skill', name: 'Skill', component: () => import('../views/SkillPage.vue') },
+    { path: '/join', name: 'Join', component: () => import('../views/JoinView.vue') },
     // NOTE: translated comment in English.
     { path: '/docs/manual', name: 'DocsManual', component: () => import('../views/ManualPage.vue') },
     { path: '/docs/openclaw-quickstart', name: 'DocsOpenClawQuickstart', component: () => import('../views/OpenClawQuickstartPage.vue') },
@@ -38,8 +39,8 @@ const router = createRouter({
     { path: '/inbox', name: 'Inbox', component: () => import('../views/InboxView.vue') },
     { path: '/account', name: 'Account', component: () => import('../views/AccountPage.vue') },
     { path: '/admin', name: 'Admin', component: () => import('../views/AdminView.vue') },
-    { path: '/agent-lab', name: 'AgentLab', component: () => import('../views/AgentLabView.vue') },
-    { path: '/a2a-console', name: 'A2aConsole', component: () => import('../views/A2aConsoleView.vue') },
+    { path: '/agent-lab', redirect: { path: '/agents', query: { tab: 'lab' } } },
+    { path: '/a2a-console', redirect: { path: '/agents', query: { tab: 'a2a' } } },
     { path: '/auth/callback', name: 'AuthCallback', component: AuthCallback },
   ],
 })

@@ -1,39 +1,17 @@
-"""Pytest configuration. Ignore test modules that depend on legacy API not present in current codebase."""
+"""Shared pytest fixtures for ClawJob API tests."""
 import os
 
-# Enterprise routers (KYC / workspaces / billing) stay enabled in tests.
+# Enterprise routers (KYC, workspace, billing) must load before app.main is imported by tests.
 os.environ.setdefault("CLAWJOB_ENTERPRISE", "1")
 
-
-def pytest_configure(config):
-    """确保测试库 schema 与模型一致：若 tasks 表缺少列则添加（兼容旧库）。"""
-    try:
-        from app.database.relational_db import engine
-        from sqlalchemy import text
-        with engine.connect() as conn:
-            for sql in (
-                "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS creator_agent_id INTEGER REFERENCES agents(id)",
-                "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS reward_points INTEGER DEFAULT 0",
-                "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS completion_webhook_url TEXT",
-                "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMP",
-                "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS verification_deadline_at TIMESTAMP",
-                "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS invited_agent_ids JSONB",
-            ):
-                conn.execute(text(sql))
-            conn.commit()
-    except Exception:
-        pass  # 例如表尚未创建，由各测试里 init_db 处理
+import pytest
 
 
-def pytest_ignore_collect(collection_path, config):
-    """Do not collect tests that import legacy-only classes (MessageRouter, StrategyEvolutionManager, etc.)."""
-    name = os.path.basename(collection_path)
-    if name in (
-        "test_agent_communication.py",
-        "test_agent_self_iteration.py",
-        "test_basic_agentic_functionality.py",
-        "test_e2e.py",
-        "test_integration.py",
-    ):
-        return True
-    return False
+@pytest.fixture(autouse=True)
+def _reset_runtime_circuit_breakers():
+    """Avoid cross-test pollution when circuit-breaker tests open hosts like example.com."""
+    from app.core.systems import runtime_guard
+
+    runtime_guard._state.clear()
+    yield
+    runtime_guard._state.clear()

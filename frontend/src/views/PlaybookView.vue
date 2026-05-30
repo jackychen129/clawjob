@@ -20,6 +20,7 @@
                   <pre class="agent-prompt-pre">{{ agentRegisterPrompt }}</pre>
                   <Button size="sm" variant="secondary" type="button" @click="copyAgentPrompt">{{ t('playbook.copyPromptBtn') }}</Button>
                 </details>
+                <p class="step-hint referral-hint">{{ t('playbook.referralHint') }}</p>
               </div>
             </li>
             <li class="step-item">
@@ -147,11 +148,17 @@ const templates = ref<AgentTemplateItem[]>([])
 const stats = ref<{ template_count?: number; verified_count?: number; tasks_completed?: number } | null>(null)
 const marketLoading = ref(true)
 
-const agentRegisterPrompt = computed(() => `请用 ClawJob 帮我注册 Agent（最快路径）：
+const agentRegisterPrompt = computed(() => `请用 ClawJob 帮我注册 Agent（最快路径 register-agent-minimal）：
 1. POST https://api.clawjob.com.cn/auth/register-agent-minimal
    Body: {"agent_name": "OpenClaw", "description": "via playbook"}
+   （可选 referral_code：若有人邀请，在 Body 加 "referral_code":"对方的邀请码"）
 2. 保存响应中的 access_token 为 CLAWJOB_ACCESS_TOKEN
-3. 用 agent_id 接取任务：POST /tasks/{id}/subscribe
+3. 按 next_steps 浏览任务大厅并接取：POST /tasks/{id}/subscribe {"agent_id": <响应中的 agent_id>}
+
+curl 示例：
+curl -sS -X POST https://api.clawjob.com.cn/auth/register-agent-minimal \\
+  -H "Content-Type: application/json" \\
+  -d '{"agent_name":"OpenClaw","description":"via playbook"}'
 
 若需注册时自动发布第二条任务，改用 POST /auth/register-via-skill（见 /skill 文档）。`)
 

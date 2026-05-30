@@ -74,6 +74,10 @@
                 <ListChecks class="nav-icon" aria-hidden="true" />
                 <span>{{ t('nav.playbook') }}</span>
               </router-link>
+              <router-link to="/join" class="nav-link nav-link--join" :class="{ active: route.path === '/join' }">
+                <UserPlus class="nav-icon" aria-hidden="true" />
+                <span>{{ t('nav.joinAgent') }}</span>
+              </router-link>
               <router-link to="/docs" class="nav-link" :class="{ active: route.path.startsWith('/docs') }">
                 <BookOpen class="nav-icon" aria-hidden="true" />
                 <span>{{ t('common.docs') }}</span>
@@ -118,7 +122,8 @@
     </div>
     <div v-if="auth.isLoggedIn && auth.isGuestUser" class="guest-hint-banner" role="status">
       <span>{{ t('auth.guestHint') }}</span>
-      <Button size="sm" type="button" @click="showAuthModal = true; authTab = 'register'">{{ t('auth.goRegister') }}</Button>
+      <Button size="sm" type="button" @click="showGuestRegisterModal = true">{{ t('auth.guestRegisterAgent') }}</Button>
+      <Button size="sm" variant="ghost" type="button" @click="showAuthModal = true; authTab = 'register'">{{ t('auth.goRegister') }}</Button>
     </div>
     <div v-if="postPublishRegisterHint" class="guest-hint-banner post-publish-register-hint" role="status">
       <span>{{ t('task.publishThenRegisterAgentHint') }}</span>
@@ -430,6 +435,19 @@
       </div>
     </div>
 
+    <div v-if="showGuestRegisterModal" class="modal-mask" @click.self="showGuestRegisterModal = false">
+      <div class="modal modal--guest-register">
+        <h3>{{ t('auth.guestRegisterModalTitle') }}</h3>
+        <p class="hint">{{ t('auth.guestRegisterModalDesc') }}</p>
+        <pre class="guest-register-curl"><code>{{ guestRegisterCurl }}</code></pre>
+        <div class="guest-register-actions">
+          <Button type="button" @click="copyGuestRegisterCurl">{{ guestRegisterCurlCopied ? t('skillPage.copied') : t('auth.copyRegisterCurl') }}</Button>
+          <Button as="router-link" to="/join" variant="secondary" @click="showGuestRegisterModal = false">{{ t('nav.joinAgent') }}</Button>
+          <Button variant="ghost" type="button" @click="showGuestRegisterModal = false">{{ t('common.close') }}</Button>
+        </div>
+      </div>
+    </div>
+
     <!-- NOTE: translated comment in English. -->
     <Transition name="toast">
       <div v-if="successToast" class="toast" role="status">{{ successToast }}</div>
@@ -461,7 +479,7 @@ import { Button } from './components/ui/button'
 import { Input } from './components/ui/input'
 import { Textarea } from './components/ui/textarea'
 import { getTemplateById } from './constants/taskTemplates'
-import { BookOpen, Bot, LayoutGrid, ListChecks, ListTodo, LogIn, LogOut, Mail, MessagesSquare, Shield, Trophy, Users, Wallet } from 'lucide-vue-next'
+import { BookOpen, Bot, LayoutGrid, ListChecks, ListTodo, LogIn, LogOut, Mail, MessagesSquare, Shield, Trophy, UserPlus, Users, Wallet } from 'lucide-vue-next'
 
 const route = useRoute()
 const router = useRouter()
@@ -477,8 +495,16 @@ const googleLoginUrl = computed(() => api.getGoogleLoginUrl())
 const googleOAuthConfigured = ref(true) // 在请求 /auth/google/status 前先显示按钮，避免闪烁
 const googleConfigError = ref('') // 未配置时后端返回的提示，用于在弹窗内展示
 const skillRepoUrl = (import.meta as any).env?.VITE_SKILL_REPO_URL || 'https://github.com/jackychen129/clawjob-skill'
+const apiBaseUrl = (import.meta as any).env?.VITE_API_BASE_URL || 'https://api.clawjob.com.cn'
+const guestRegisterCurl = computed(() =>
+  `curl -sS -X POST "${apiBaseUrl}/auth/register-agent-minimal" \\\n` +
+  `  -H "Content-Type: application/json" \\\n` +
+  `  -d '{"agent_name":"OpenClaw","description":"guest upgrade"}'`
+)
 
 const showAuthModal = ref(false)
+const showGuestRegisterModal = ref(false)
+const guestRegisterCurlCopied = ref(false)
 const authTab = ref<'login' | 'register'>('login')
 const authLoading = ref(false)
 const guestTokenLoading = ref(false)
@@ -773,11 +799,19 @@ async function doGuestPublish() {
       true
     )
     loadAccountMe()
+    showGuestRegisterModal.value = true
   } catch (e: any) {
     showSuccess(e?.response?.data?.detail || t('common.loadError'), 'error')
   } finally {
     guestTokenLoading.value = false
   }
+}
+
+function copyGuestRegisterCurl() {
+  navigator.clipboard.writeText(guestRegisterCurl.value).then(() => {
+    guestRegisterCurlCopied.value = true
+    setTimeout(() => { guestRegisterCurlCopied.value = false }, 2000)
+  }).catch(() => {})
 }
 
 function closeCreateTaskModal() {
@@ -1412,6 +1446,17 @@ onUnmounted(() => {
   font-size: 0.9375rem;
 }
 .guest-hint-banner span { flex: 1; min-width: 0; }
+.guest-register-curl {
+  margin: var(--space-4) 0;
+  padding: var(--space-4);
+  background: rgba(0,0,0,0.25);
+  border-radius: var(--radius-md);
+  white-space: pre-wrap;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  overflow-x: auto;
+}
+.guest-register-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 
 .task-pulse-banner {
   padding: 0.65rem 1rem;

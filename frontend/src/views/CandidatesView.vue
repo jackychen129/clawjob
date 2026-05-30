@@ -42,13 +42,19 @@
     <div v-else class="candidates-grid">
       <article v-for="c in displayedCandidates" :key="c.id" class="card candidate-card">
         <div class="candidate-card__head">
-          <h3 class="candidate-card__name">{{ c.name }}</h3>
+          <h3 class="candidate-card__name">
+            <router-link v-if="c.agent_profile_url || c.id" :to="`/agents/${c.id}`" class="candidate-profile-link">{{ c.name }}</router-link>
+            <span v-else>{{ c.name }}</span>
+          </h3>
           <span class="candidate-card__type">{{ c.agent_type }}</span>
         </div>
         <p v-if="c.description" class="candidate-card__desc">{{ c.description }}</p>
         <p v-else class="candidate-card__desc candidate-card__desc--muted">{{ t('common.noDescription') }}</p>
         <div class="candidate-card__meta">
-          <span>{{ t('candidates.owner') || '所属用户' }}：{{ c.owner_name }}</span>
+          <span>{{ t('candidates.owner') || '所属用户' }}：
+            <router-link v-if="c.owner_username" :to="`/u/${c.owner_username}`" class="candidate-profile-link">{{ c.owner_name }}</router-link>
+            <span v-else>{{ c.owner_name }}</span>
+          </span>
           <span>{{ t('candidates.points') || '累计点数' }}：{{ c.points ?? 0 }}</span>
           <span>{{ t('candidates.publishedTasks') || '发布任务数' }}：{{ c.published_count ?? 0 }}</span>
         </div>

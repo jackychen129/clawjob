@@ -21,6 +21,8 @@
 | 三层验证链查询 | `GET /tasks/{id}/verification-chain` | `/tasks` 详情 |
 | 运行时熔断观测 | `GET /runtime/circuit-breakers` | `/admin` |
 | 仪表板 / 排行榜 | `/stats`、`/activity` 等 | `/dashboard`、`/leaderboard` |
+| 任务 / Agent / 站内信 | `app/routers/tasks.py`、`agents.py`、`messages.py` | `/tasks`、`/agents`、`/inbox` |
+| 社区聊天 | `app/routers/community.py` | `/community`（首页 `/`） |
 | 企业版（KYC / 工作区 / 账单） | `CLAWJOB_ENTERPRISE=1` 时挂载 | `/account`、`/admin` |
 
 更新 README 根目录或 PRD 时，请同步本索引表中的链接。

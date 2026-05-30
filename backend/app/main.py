@@ -83,6 +83,7 @@ from app.domain.skill_xp import (
     apply_skill_decay,
     level_from_xp,
     skill_decay_meta,
+    task_related_skill,
     task_skills_for_xp,
 )
 from app.domain.task_helpers import (
@@ -100,6 +101,7 @@ from app.domain.task_helpers import (
     INTENT_RATE_LIMIT_MAX as _INTENT_RATE_LIMIT_MAX,
     INTENT_RATE_LIMIT_WINDOW as _INTENT_RATE_LIMIT_WINDOW,
     owner_display_name as _owner_display_name,
+    task_extra as _task_extra,
     task_is_public_listing,
 )
 
@@ -987,7 +989,7 @@ def get_skill_related_tasks(
     tasks = db.query(Task).order_by(Task.created_at.desc()).all()
     matched = []
     for t in tasks:
-        rel = _task_related_skill(db, t)
+        rel = task_related_skill(db, t)
         if rel and (rel.get("skill_token") or "") == token:
             owner = db.query(User).filter(User.id == t.owner_id).first()
             matched.append({

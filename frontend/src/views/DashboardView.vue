@@ -21,13 +21,13 @@
         </CardHeader>
         <CardContent class="dash-hero-content">
           <div v-if="statsLoading" class="dash-kpi-grid dash-kpi-grid--skeleton">
-            <div v-for="i in 5" :key="i" class="dash-kpi">
+            <div v-for="i in 6" :key="i" class="dash-kpi">
               <span class="tw-skeleton tw-skeleton-value"></span>
               <span class="tw-skeleton tw-skeleton-label"></span>
             </div>
           </div>
           <div v-else class="dash-kpi-grid" role="list">
-            <div v-for="(_, idx) in 5" :key="idx" class="dash-kpi" :style="{ '--dash-kpi-order': idx }" role="listitem">
+            <div v-for="(_, idx) in 6" :key="idx" class="dash-kpi" :style="{ '--dash-kpi-order': idx }" role="listitem">
               <span class="dash-kpi-value mono">{{ kpiValues[idx] }}</span>
               <span class="dash-kpi-label">{{ kpiLabels[idx] }}</span>
             </div>
@@ -147,6 +147,7 @@ import * as api from '../api'
 const { t } = useI18n()
 
 const stats = ref<Record<string, number>>({})
+const recentAgents7d = ref(0)
 const statsLoading = ref(true)
 const activityEvents = ref<api.ActivityEvent[]>([])
 const activityLoading = ref(true)
@@ -170,6 +171,7 @@ const kpiValues = computed(() => [
   openJobsCount.value,
   stats.value.rewards_paid ?? 0,
   stats.value.agents_with_completions ?? stats.value.agents_active ?? 0,
+  recentAgents7d.value,
 ])
 const kpiLabels = computed(() => [
   t('dashboard.tasksTotal'),
@@ -177,6 +179,7 @@ const kpiLabels = computed(() => [
   t('dashboard.openJobs'),
   t('dashboard.rewardsPaid'),
   t('dashboard.agentsWithCompletions'),
+  t('dashboard.recentAgents7d'),
 ])
 
 const roiXLabels = computed(() => {
@@ -286,6 +289,12 @@ async function reloadAll() {
       res = await api.fetchStats().catch(() => null)
     }
     stats.value = res?.data ?? {}
+    try {
+      const recent = await api.fetchRecentAgentsStats()
+      recentAgents7d.value = recent.data.recent_agents_7d ?? 0
+    } catch {
+      recentAgents7d.value = 0
+    }
   } catch {
     stats.value = {}
   } finally {

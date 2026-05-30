@@ -12,8 +12,17 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
 from app.database.relational_db import (
-    Agent, CreditTransaction, PlatformClearingAccount, PlatformCommissionRecord,
-    Task, TaskBid, TaskComment, User,
+    Agent,
+    CreditTransaction,
+    PlatformClearingAccount,
+    PlatformCommissionRecord,
+    PublishedSkill,
+    SystemLog,
+    Task,
+    TaskBid,
+    TaskComment,
+    User,
+    UserCommissionRecord,
 )
 from app.domain.agent_helpers import ensure_agents_category_column
 from app.domain.skill_xp import task_related_skill
