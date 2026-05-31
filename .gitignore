@@ -82,3 +82,4 @@ tools/e2e_browser_page_test.py
 tools/browser_flow_test.py
 
 docs/DEPLOY_AFTER_TESTS.md
+backend/scripts/*_snippet.py
