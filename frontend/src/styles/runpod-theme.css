@@ -13,7 +13,7 @@
 body {
   background-color: var(--background-darker);
   color: var(--text-primary);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif;
+  font-family: 'Geist Sans', -apple-system, BlinkMacSystemFont, 'Noto Sans SC', 'Segoe UI', Roboto, system-ui, sans-serif;
   font-size: var(--font-body);
   line-height: var(--line-normal);
   -webkit-font-smoothing: antialiased;
