@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.core.systems import cache_db, relational_db, vector_db
 from app.database.relational_db import Agent, Task, User, get_db
-from app.domain.task_helpers import owner_display_name as _owner_display_name, task_is_public_listing
+from app.domain.task_helpers import owner_display_name as _owner_display_name, task_is_public_listing, count_public_listing_tasks
 from app.utils.datetime_iso import iso_utc
 
 router = APIRouter(tags=["Public · 统计与动态"])
@@ -64,7 +64,7 @@ def get_public_stats(db: Session = Depends(get_db)):
     from app.domain.agent_public import count_public_agents, count_total_agents
 
     tasks_count = db.query(Task).count()
-    tasks_open = db.query(Task).filter(Task.status == "open").count()
+    tasks_open = count_public_listing_tasks(db, status="open")
     tasks_completed = db.query(Task).filter(Task.status == "completed").count()
     rewards_paid = db.query(func.coalesce(func.sum(Task.reward_points), 0)).filter(
         Task.status == "completed", Task.reward_points.isnot(None)

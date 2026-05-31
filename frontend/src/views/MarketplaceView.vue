@@ -1,9 +1,14 @@
 <template>
   <div class="marketplace-view apple-layout">
-    <section class="marketplace-hero">
-      <h1 class="page-title">{{ t('marketplace.title') || 'Marketplace' }}</h1>
-      <p class="page-desc">{{ t('marketplace.desc') || '租赁与托管（Escrow + Skill 导出 + Swarm 编排）与 Agent 模板/Skill 市场一站式入口。' }}</p>
-    </section>
+    <PageHeader
+      :title="t('marketplace.title') || 'Marketplace'"
+      :description="t('marketplace.desc') || '租赁与托管（Escrow + Skill 导出 + Swarm 编排）与 Agent 模板/Skill 市场一站式入口。'"
+    >
+      <template #actions>
+        <Button :as="RouterLink" to="/tasks" size="sm" variant="secondary">{{ t('nav.market') }}</Button>
+        <Button :as="RouterLink" to="/agent-studio" size="sm" variant="ghost">{{ t('account.navStudio') }}</Button>
+      </template>
+    </PageHeader>
 
     <!-- NOTE: translated comment in English. -->
     <section class="marketplace-section" aria-labelledby="section-rental">
@@ -104,9 +109,15 @@
           <CardContent class="pt-0">
             <div class="template-meta">
               <span class="template-stat">{{ tpl.tasks_completed ?? 0 }} {{ t('playbook.tasksDone') || '任务完成' }}</span>
+              <span v-if="tpl.reputation_score != null && tpl.reputation_score > 0" class="template-rep mono" :title="t('marketplace.reputationScore')">
+                ★ {{ tpl.reputation_score }}
+              </span>
               <span v-if="tpl.agent_type" class="template-type">{{ tpl.agent_type }}</span>
             </div>
             <div class="template-actions">
+              <Button v-if="tpl.agent_id" :as="RouterLink" :to="`/agents/${tpl.agent_id}`" size="sm" variant="ghost">
+                {{ t('marketplace.viewAgentProfile') }}
+              </Button>
               <Button v-if="tpl.download_agent_url" as="a" :href="tpl.download_agent_url" target="_blank" rel="noopener noreferrer" size="sm" variant="secondary">
                 {{ t('playbook.downloadTemplate') || '下载 Agent 模板' }}
               </Button>
@@ -165,8 +176,14 @@
           <CardContent class="pt-0">
             <div class="template-meta">
               <span class="template-stat">{{ s.tasks_completed ?? 0 }} {{ t('playbook.tasksDone') || '任务完成' }}</span>
+              <span v-if="s.reputation_score != null && s.reputation_score > 0" class="template-rep mono" :title="t('marketplace.reputationScore')">
+                ★ {{ s.reputation_score }}
+              </span>
             </div>
             <div class="template-actions">
+              <Button v-if="s.agent_id" :as="RouterLink" :to="`/agents/${s.agent_id}`" size="sm" variant="ghost">
+                {{ t('marketplace.viewAgentProfile') }}
+              </Button>
               <Button v-if="s.download_skill_url" as="a" :href="s.download_skill_url" target="_blank" rel="noopener noreferrer" size="sm" variant="secondary">
                 {{ t('marketplace.downloadSkill') || '下载 Skill' }}
               </Button>
@@ -238,6 +255,7 @@ import { useI18n } from 'vue-i18n'
 import { RouterLink, useRouter } from 'vue-router'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
+import PageHeader from '../components/PageHeader.vue'
 import * as api from '../api'
 import type { AgentTemplateItem, SkillMarketItem } from '../api'
 import { useAuthStore } from '../stores/auth'
@@ -500,6 +518,7 @@ onMounted(() => {
 .template-desc { font-size: var(--font-caption); color: var(--text-secondary); margin: var(--space-1) 0 0; line-height: 1.45; }
 .template-publisher { font-size: var(--font-caption); color: var(--text-secondary); margin: var(--space-2) 0 0; opacity: 0.9; }
 .template-meta { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-bottom: var(--space-3); font-size: var(--font-caption); color: var(--text-secondary); }
+.template-rep { color: #4ade80; font-weight: 600; }
 .template-stat { font-weight: 500; color: var(--primary-color); }
 .template-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 </style>

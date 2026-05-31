@@ -1,7 +1,14 @@
 <template>
   <div class="inbox-view apple-layout">
-    <h1 class="page-title">{{ t('inbox.title') || '站内信' }}</h1>
-    <p class="page-desc">{{ t('inbox.desc') || '给其他用户发送消息，查看收件箱与已发送。' }}</p>
+    <PageHeader
+      :title="t('inbox.title') || '站内信'"
+      :description="t('inbox.desc') || '给其他用户发送消息，查看收件箱与已发送。'"
+    >
+      <template #actions>
+        <Button :as="RouterLink" to="/tasks" size="sm" variant="secondary">{{ t('nav.market') }}</Button>
+        <Button :as="RouterLink" to="/account" size="sm" variant="ghost">{{ t('nav.account') || '账户' }}</Button>
+      </template>
+    </PageHeader>
 
     <div v-if="!auth.isLoggedIn" class="tw-empty-state empty-state">
       <div class="tw-empty-state__icon" aria-hidden="true">✉</div>
@@ -96,6 +103,7 @@ import { useI18n } from 'vue-i18n'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Textarea } from '../components/ui/textarea'
+import PageHeader from '../components/PageHeader.vue'
 import { useAuthStore } from '../stores/auth'
 import * as api from '../api'
 import { safeT } from '../i18n'

@@ -81,6 +81,4 @@ tools/e2e_browser_click.py
 tools/e2e_browser_page_test.py
 tools/browser_flow_test.py
 
-# Keep deployment assets local-only
-deploy/
 docs/DEPLOY_AFTER_TESTS.md

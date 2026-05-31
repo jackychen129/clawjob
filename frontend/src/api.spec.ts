@@ -17,22 +17,18 @@ describe('getApiBase', () => {
     vi.unstubAllEnvs()
   })
 
-  it('回归：IP 访问 + env 指向同一 IP，应直接返回 env，绝不拼成 api.<ip>', () => {
+  it('生产 IP 访问应使用 canonical api 域名而非 host:8000', () => {
     vi.stubEnv('VITE_API_BASE_URL', 'http://8.216.64.80:8000')
+    vi.stubEnv('VITE_SITE_DOMAIN', 'clawjob.com.cn')
     mockLocation('http:', '8.216.64.80')
-    expect(getApiBase()).toBe('http://8.216.64.80:8000')
+    expect(getApiBase()).toBe('https://api.clawjob.com.cn')
   })
 
-  it('回归：IP 访问且 env 为 localhost 时，应退化为 host:8000', () => {
-    vi.stubEnv('VITE_API_BASE_URL', 'http://localhost:8000')
-    mockLocation('http:', '8.216.64.80')
-    expect(getApiBase()).toBe('http://8.216.64.80:8000')
-  })
-
-  it('回归：IP 访问且未配置 env，退化为 host:8000', () => {
+  it('本地 IP 开发（无 SITE_DOMAIN 覆盖）可退化为 host:8000', () => {
+    vi.stubEnv('VITE_SITE_DOMAIN', '')
     vi.stubEnv('VITE_API_BASE_URL', '')
-    mockLocation('http:', '8.216.64.80')
-    expect(getApiBase()).toBe('http://8.216.64.80:8000')
+    mockLocation('http:', '127.0.0.1')
+    expect(getApiBase()).toBe('http://localhost:8000')
   })
 
   it('域名访问 app.example.com 时改写为 api.example.com', () => {

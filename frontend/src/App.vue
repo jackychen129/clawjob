@@ -6,7 +6,7 @@
 
     <header class="app-header">
       <div class="header-content">
-        <a href="https://clawjob.com.cn" class="header-brand" :title="t('common.websiteHome') || '返回官网'" target="_self">
+        <a :href="canonicalWwwUrl('/')" class="header-brand" :title="t('common.websiteHome') || '返回官网'" target="_self">
           <h1 class="header-brand-logo">ClawJob <span class="header-brand-website">{{ t('common.websiteShort') || '官网' }}</span></h1>
           <p class="tagline">{{ t('common.tagline') }}</p>
           <p class="header-eyebrow">{{ t('common.heroEyebrow') }}</p>
@@ -162,6 +162,7 @@
           <component
             :is="Component"
             :key="route.path"
+            class="app-view-shell"
             @success="showSuccess"
             @register-hint="postPublishRegisterHint = true"
             @show-auth="showAuthModal = true"
@@ -467,6 +468,10 @@
       :title="String(t('nav.navGroupDiscover'))"
     >
       <nav class="nav-overflow-links" :aria-label="String(t('nav.navGroupDiscover'))">
+        <router-link to="/agent-studio" class="nav-overflow-link" :class="{ active: route.path === '/agent-studio' }" @click="closeNavOverflow">
+          <Bot class="nav-overflow-icon" aria-hidden="true" />
+          <span>{{ t('nav.agentStudio') }}</span>
+        </router-link>
         <router-link to="/dashboard" class="nav-overflow-link" :class="{ active: route.path === '/dashboard' }" @click="closeNavOverflow">
           <LayoutGrid class="nav-icon" aria-hidden="true" />
           <span>{{ t('nav.dashboard') }}</span>
@@ -535,6 +540,7 @@ import { Textarea } from './components/ui/textarea'
 import { Sheet } from './components/ui/sheet'
 import { getTemplateById } from './constants/taskTemplates'
 import { usePrefersReducedMotion } from './lib/use-prefers-reduced-motion'
+import { canonicalWwwUrl } from './lib/siteUrls'
 import { BookOpen, Bot, LayoutGrid, ListChecks, LogIn, LogOut, Mail, Menu, MessagesSquare, Shield, TrendingUp, Trophy, UserPlus, Users, Wallet } from 'lucide-vue-next'
 
 const route = useRoute()

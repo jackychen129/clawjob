@@ -495,6 +495,9 @@ def task_extra(t: Task, db: Session) -> dict:
             "payer_confirmed_at": stl.get("payer_confirmed_at"),
             "payee_confirmed_at": stl.get("payee_confirmed_at"),
         }
+    invited = getattr(t, "invited_agent_ids", None) or []
+    out["visibility"] = d.get("visibility") or ("invitees_only" if invited else None)
+    out["invited_agent_ids"] = [int(x) for x in invited if x is not None] if invited else []
     return out
 def task_is_visible_to(task: Task, viewer_user_id: Optional[int], viewer_agent_ids: List[int]) -> bool:
     """定向任务可见性：仅发布者 + 被邀请 Agent 的拥有者可见。
@@ -509,18 +512,59 @@ def task_is_visible_to(task: Task, viewer_user_id: Optional[int], viewer_agent_i
         if (hidden or source == "register_via_skill") and viewer_user_id != task.owner_id:
             return False
     visibility = extra.get("visibility") if isinstance(extra, dict) else None
-    if visibility != "invitees_only":
+    invited = getattr(task, "invited_agent_ids", None) or []
+    invited_ints = {int(x) for x in invited if x is not None}
+    is_directed = visibility == "invitees_only" or bool(invited_ints)
+    if not is_directed:
         return True
     if viewer_user_id is not None and task.owner_id == viewer_user_id:
         return True
-    invited = getattr(task, "invited_agent_ids", None) or []
-    invited_ints = {int(x) for x in invited if x is not None}
     if viewer_agent_ids and invited_ints.intersection(set(viewer_agent_ids)):
         return True
     return False
 
 
 CLAWJOB_SYSTEM_USERNAME = "clawjob_system"
+
+_INTERNAL_TITLE_PREFIXES = ("[internal]",)
+_INTERNAL_TITLE_SUBSTRINGS = (
+    "deploy health probe",
+    "do not pick up",
+    "internal probe",
+    "health probe (do not",
+)
+
+
+def task_title_looks_internal(title: str, description: str = "") -> bool:
+    """部署探活 / 集成测试任务标题特征（即使未写 hidden_from_public 也应隐藏）。"""
+    t = (title or "").strip().lower()
+    d = (description or "").strip().lower()
+    for prefix in _INTERNAL_TITLE_PREFIXES:
+        if t.startswith(prefix.lower()):
+            return True
+    for needle in _INTERNAL_TITLE_SUBSTRINGS:
+        if needle in t or needle in d:
+            return True
+    return False
+
+
+def apply_internal_task_title_sql_exclude(qy, db):
+    """PostgreSQL：SQL 层排除典型内部探活标题（与 task_title_looks_internal 对齐）。"""
+    try:
+        dialect = db.bind.dialect.name if db.bind is not None else ""
+    except Exception:
+        return qy
+    if dialect != "postgresql":
+        return qy
+    try:
+        from sqlalchemy import not_, or_
+        return qy.filter(
+            not_(Task.title.ilike("[internal]%")),
+            not_(Task.title.ilike("%deploy health probe%")),
+            not_(or_(Task.title.ilike("%do not pick up%"), Task.description.ilike("%do not pick up%"))),
+        )
+    except Exception:
+        return qy
 
 
 def task_is_platform_seed_listing(task: Task) -> bool:
@@ -539,11 +583,27 @@ def task_is_public_listing(task: Task, owner: Optional[User]) -> bool:
     if isinstance(extra, dict):
         if extra.get("hidden_from_public"):
             return False
+        if extra.get("internal_probe"):
+            return False
         if (extra.get("source") or "").strip() == "register_via_skill":
             return False
+    if task_title_looks_internal(task.title or "", task.description or ""):
+        return False
     if owner is not None and owner.username == CLAWJOB_SYSTEM_USERNAME:
         return task_is_platform_seed_listing(task)
     return True
+
+
+def count_public_listing_tasks(db, *, status: Optional[str] = None) -> int:
+    """统计应出现在公开大厅的任务数（排除内部/握手/探活）。"""
+    q = db.query(Task, User).join(User, Task.owner_id == User.id)
+    if status:
+        q = q.filter(Task.status == status)
+    n = 0
+    for t, owner in q.yield_per(500):
+        if task_is_public_listing(t, owner):
+            n += 1
+    return n
 
 
 # NOTE: Intent-to-Task 内存限频：每用户 X 次/小时；重启/重部署会重置（正式上线可换 Redis）

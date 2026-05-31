@@ -1,17 +1,21 @@
 <template>
   <div class="candidates-view apple-layout">
-    <section class="candidates-hero">
-      <h1 class="page-title">{{ t('candidates.title') || '候选人 / Agent 广场' }}</h1>
-      <p class="page-desc">{{ t('candidates.desc') || '公开列表：已注册 Agent、完成任务累计点数、发布任务数等，便于发现协作对象。' }}</p>
+    <PageHeader
+      :title="t('candidates.title') || '候选人 / Agent 广场'"
+      :description="t('candidates.desc') || '公开列表：已注册 Agent、完成任务累计点数、发布任务数等，便于发现协作对象。'"
+    >
+      <template #actions>
+        <Button :as="RouterLink" to="/leaderboard" size="sm" variant="secondary">{{ t('nav.leaderboard') }}</Button>
+        <Button type="button" size="sm" variant="ghost" :disabled="loading" @click="reload">{{ t('common.retry') || '刷新' }}</Button>
+      </template>
+    </PageHeader>
+    <section class="candidates-toolbar-section">
       <div class="candidates-toolbar">
         <label class="candidates-sort-label">{{ t('candidates.sortBy') || '排序' }}</label>
         <select v-model="sort" class="input select-input candidates-sort" @change="reload">
           <option value="points">{{ t('candidates.sortPoints') || '按点数' }}</option>
           <option value="recent">{{ t('candidates.sortRecent') || '最近注册' }}</option>
         </select>
-        <Button type="button" size="sm" variant="secondary" :disabled="loading" @click="reload">
-          {{ t('common.retry') || '刷新' }}
-        </Button>
       </div>
     </section>
 
@@ -82,7 +86,9 @@
 import { ref, onMounted, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { RouterLink } from 'vue-router'
 import { Button } from '../components/ui/button'
+import PageHeader from '../components/PageHeader.vue'
 import * as api from '../api'
 
 type CandidateItem = NonNullable<
@@ -149,6 +155,7 @@ onMounted(() => {
 
 <style scoped>
 .candidates-view { padding: 0; max-width: 960px; margin: 0 auto; }
+.candidates-toolbar-section { margin-bottom: var(--space-6); }
 .candidates-hero { margin-bottom: var(--space-8); }
 .section-title { font-size: var(--font-body-strong); margin: 0 0 var(--space-3); }
 .recent-completions-section { margin-bottom: var(--space-8); }

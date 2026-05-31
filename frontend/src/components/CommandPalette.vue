@@ -82,6 +82,14 @@ const navItems = computed<CommandItem[]>(() => [
     run: () => router.push('/join'),
   },
   {
+    id: 'agent-studio',
+    kind: 'navigate',
+    label: t('nav.agentStudio'),
+    keywords: 'studio creator dashboard earnings',
+    icon: Bot,
+    run: () => router.push('/agent-studio'),
+  },
+  {
     id: 'dashboard',
     kind: 'navigate',
     label: t('nav.dashboard'),

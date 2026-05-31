@@ -3,6 +3,7 @@
  * NOTE: translated comment in English.
  */
 import axios from 'axios'
+import { canonicalApiUrl, getSiteDomain } from './lib/siteUrls'
 
 /* NOTE: translated comment in English. */
 function isIpOrLocalhost(host: string): boolean {
@@ -12,15 +13,16 @@ function isIpOrLocalhost(host: string): boolean {
 
 export function getApiBase(): string {
   const fromEnv = (import.meta.env.VITE_API_BASE_URL && String(import.meta.env.VITE_API_BASE_URL).trim()) || ''
+  const siteDomain = getSiteDomain()
   if (typeof window !== 'undefined' && window.location?.hostname) {
     const host = window.location.hostname
     const protocol = window.location.protocol
     const isLocalhost = host === 'localhost' || host === '127.0.0.1'
-    // When visiting via IP (no DNS), `api.<ip>` is not resolvable; always
-    // trust `fromEnv` in that case. Only override to `api.<domain>` when the
-    // current host is a real domain AND env points to a different domain
-    // (typical dev -> prod rewrite where env was baked as localhost).
     const hostIsIp = isIpOrLocalhost(host)
+    // Production: never call API via raw IP when we know the public domain.
+    if (hostIsIp && !isLocalhost && siteDomain && host !== siteDomain) {
+      return canonicalApiUrl()
+    }
     if (!isLocalhost && fromEnv) {
       try {
         const envUrl = new URL(fromEnv)
@@ -1176,6 +1178,8 @@ export interface AgentTemplateItem {
   agent_type?: string
   publisher_username?: string
   publisher_user_id?: number | null
+  agent_id?: number
+  reputation_score?: number
   download_agent_url?: string
   download_skill_url?: string
   created_at?: string | null
@@ -1228,6 +1232,8 @@ export interface SkillMarketItem {
   tasks_completed: number
   publisher_username?: string
   publisher_user_id?: number | null
+  agent_id?: number | null
+  reputation_score?: number
   download_skill_url?: string
   created_at?: string | null
 }
@@ -1293,6 +1299,40 @@ export function fetchAgentEarningsSummary(agentId: number) {
     platform_tasks_open: number
     links: Record<string, string>
   }>(`/agents/${agentId}/earnings-summary`)
+}
+
+export interface CreatorStudioDashboard {
+  summary: {
+    agents_count: number
+    completed_task_count: number
+    reward_points_total: number
+    top_reputation_score: number
+    recent_30d_completed_count: number
+    pending_delivery: number
+    pending_verification: number
+    avg_first_pass_confirm_rate?: number | null
+    avg_dispute_rate?: number | null
+    avg_completion_hours?: number | null
+  }
+  agents: Array<{
+    agent_id: number
+    name: string
+    reputation_score: number
+    completed_task_count: number
+    reward_points_total: number
+    recent_30d_completed_count: number
+    first_pass_confirm_rate?: number | null
+    dispute_rate?: number | null
+    avg_completion_hours?: number | null
+    top_skills?: string[]
+  }>
+  income_series: Array<{ date: string; rewards: number; tasks: number }>
+  days: number
+  cold_start_suggestions: Array<{ key: string; href: string }>
+}
+
+export function fetchCreatorStudio(days = 30) {
+  return api.get<CreatorStudioDashboard>('/agents/mine/studio', { params: { days } })
 }
 
 export function publishSkill(body: {

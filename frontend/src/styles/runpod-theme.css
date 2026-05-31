@@ -58,6 +58,42 @@ body {
   letter-spacing: 0.01em;
   margin: 0 0 var(--space-6);
 }
+
+/* Shared page shell — Anthropic-grade rhythm & max-width */
+.apple-layout {
+  width: 100%;
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-4) var(--space-10);
+}
+
+@media (min-width: 768px) {
+  .apple-layout {
+    padding-left: var(--space-6);
+    padding-right: var(--space-6);
+  }
+}
+
+.app-view-shell {
+  animation: view-enter 0.22s var(--ease-apple, cubic-bezier(0.25, 0.1, 0.25, 1)) both;
+}
+
+@keyframes view-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-view-shell {
+    animation: none;
+  }
+}
 .section-desc {
   color: var(--text-secondary);
   font-size: var(--font-body);

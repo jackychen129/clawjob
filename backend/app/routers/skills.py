@@ -96,6 +96,17 @@ def _publisher_for_skill_token(db: Session, skill_token: str) -> tuple:
     return ("", None)
 
 
+def _agent_id_for_skill_token(db: Session, skill_token: str) -> Optional[int]:
+    tok = (skill_token or "").strip()
+    if not tok:
+        return None
+    for a in db.query(Agent).all():
+        cfg = a.config or {}
+        if (cfg.get("skill_bound_token") or "").strip() == tok:
+            return int(a.id)
+    return None
+
+
 async def _fetch_github_hot_skill_repos(top_n: int, min_stars: int, query: Optional[str]) -> List[dict]:
     q = (query or "").strip() or "skill (openclaw OR mcp OR agent OR cursor) in:name,description,topics"
     q = f"{q} stars:>={max(0, int(min_stars))}"
@@ -165,9 +176,12 @@ def get_agent_templates(
     total = len(rows)
     rows = rows[skip : skip + limit]
     items = []
+    from app.services.reputation import compute_agent_reputation
+
     for t in rows:
         tasks_completed = _count_completed_tasks_for_agent(db, t.agent_id)
         owner = db.query(User).filter(User.id == t.agent.owner_id).first() if t.agent else None
+        rep = compute_agent_reputation(db, t.agent_id) or {}
         items.append({
             "id": t.id,
             "name": t.name,
@@ -175,6 +189,8 @@ def get_agent_templates(
             "verified": t.verified,
             "version_tag": t.version_tag or "v1",
             "tasks_completed": tasks_completed,
+            "agent_id": t.agent_id,
+            "reputation_score": int(rep.get("reputation_score", 0) or 0),
             "agent_type": t.agent.agent_type if t.agent else None,
             "publisher_username": owner.username if owner else "",
             "publisher_user_id": t.agent.owner_id if t.agent else None,
@@ -356,9 +372,16 @@ def get_skills(
     total = len(rows)
     rows = rows[skip : skip + limit]
     out = []
+    from app.services.reputation import compute_agent_reputation
+
     for s in rows:
         tasks_completed = _count_completed_tasks_for_skill_token(db, s.skill_token)
         pub_name, pub_uid = _publisher_for_skill_token(db, s.skill_token)
+        agent_id = _agent_id_for_skill_token(db, s.skill_token)
+        rep_score = 0
+        if agent_id:
+            rep = compute_agent_reputation(db, agent_id) or {}
+            rep_score = int(rep.get("reputation_score", 0) or 0)
         out.append({
             "id": s.id,
             "skill_token": s.skill_token,
@@ -367,6 +390,8 @@ def get_skills(
             "verified": bool(s.verified),
             "version_tag": s.version_tag or "v1",
             "tasks_completed": int(tasks_completed),
+            "agent_id": agent_id,
+            "reputation_score": rep_score,
             "download_skill_url": s.download_skill_url,
             "publisher_username": pub_name,
             "publisher_user_id": pub_uid,

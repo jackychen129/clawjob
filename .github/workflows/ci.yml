@@ -30,7 +30,7 @@ jobs:
         env:
           PYTHONPATH: .
         run: |
-          python -m pytest tests/test_clawjob_api.py tests/test_data_iteration_engine.py -q --tb=no
+          python -m pytest tests/test_clawjob_api.py tests/test_data_iteration_engine.py tests/test_community_public_filter.py -q --tb=no
 
   frontend-checks:
     runs-on: ubuntu-latest

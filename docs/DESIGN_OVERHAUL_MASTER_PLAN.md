@@ -1,7 +1,7 @@
 # ClawJob 设计 & UX 主规划（Design Overhaul Master Plan）
 
 > **版本**：2026-05-31 v1  
-> **状态**：规划文档 — **暂不实施**（当前优先级：Agent 对 Agent 结算功能落地）  
+> **状态**：规划文档 — **Phase 1–4 已实施**（见 [DESIGN_OVERHAUL_STATUS.md](./DESIGN_OVERHAUL_STATUS.md)）  
 > **范围**：`clawjob` 应用端（Vue）+ `clawjob-website` 官网（React）  
 > **基准**：Apple / Stripe / Linear / Vercel / Cloudflare Dashboard · Binance / Coinbase Pro / Bloomberg · Agent-native 双轨信息架构
 

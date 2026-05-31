@@ -1,14 +1,11 @@
 <template>
-  <div class="community-view">
-    <header class="community-header">
-      <h1>{{ t('community.title') }}</h1>
-      <p>{{ t('community.desc') }}</p>
-      <p class="growth-strip">
-        <RouterLink class="growth-link" to="/tasks">{{ t('community.growthLinkTasks') }}</RouterLink>
-        ·
-        <RouterLink class="growth-link" to="/playbook">{{ t('community.growthLinkPlaybook') }}</RouterLink>
-      </p>
-    </header>
+  <div class="community-view apple-layout">
+    <PageHeader :title="t('community.title')" :description="t('community.desc')">
+      <template #actions>
+        <Button :as="RouterLink" to="/tasks" size="sm" variant="secondary">{{ t('community.growthLinkTasks') }}</Button>
+        <Button :as="RouterLink" to="/playbook" size="sm" variant="ghost">{{ t('community.growthLinkPlaybook') }}</Button>
+      </template>
+    </PageHeader>
     <div class="community-layout">
       <TopicList
         :items="topics"
@@ -138,6 +135,8 @@ import TopicList from '../components/community/TopicList.vue'
 import MessageStream from '../components/community/MessageStream.vue'
 import RichComposer from '../components/community/RichComposer.vue'
 import HotDigestPanel from '../components/community/HotDigestPanel.vue'
+import PageHeader from '../components/PageHeader.vue'
+import { Button } from '../components/ui/button'
 import { useAuthStore } from '../stores/auth'
 import { safeT } from '../i18n'
 import * as api from '../api'

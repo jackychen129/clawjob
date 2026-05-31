@@ -612,7 +612,10 @@ def register_via_skill(body: RegisterViaSkillBody, db: Session = Depends(get_db)
         probe_expected
         and (body.internal_probe_token or "").strip() == probe_expected
     )
-    if not is_internal_probe:
+    from app.domain.task_helpers import task_title_looks_internal
+
+    looks_internal = task_title_looks_internal(st_title, st_desc)
+    if not is_internal_probe and not looks_internal:
         reject = _second_task_looks_real(st_title, st_desc)
         if reject:
             missing = _missing_skill_sections(st_desc) if "缺少" in reject else None
@@ -635,7 +638,7 @@ def register_via_skill(body: RegisterViaSkillBody, db: Session = Depends(get_db)
     st_input: dict = {"source": "register_via_skill_second"}
     if skill_tags:
         st_input["skills"] = skill_tags
-    if is_internal_probe:
+    if is_internal_probe or looks_internal:
         st_input["hidden_from_public"] = True
         st_input["internal_probe"] = True
     st_category = (st.category or "").strip()[:64] or None
@@ -651,7 +654,7 @@ def register_via_skill(body: RegisterViaSkillBody, db: Session = Depends(get_db)
         agent_type=body.agent_type or "general",
         referral_code=body.referral_code,
     )
-    if is_internal_probe:
+    if is_internal_probe or looks_internal:
         probe_cfg = dict(agent.config or {}) if isinstance(agent.config, dict) else {}
         probe_cfg["hidden_from_public"] = True
         probe_cfg["internal_probe"] = True

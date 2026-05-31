@@ -1,7 +1,11 @@
 <template>
-  <div class="skill-page">
-    <h1 class="page-title">{{ t('skillPage.title') }}</h1>
-    <p class="page-desc skill-page-desc">{{ t('skillPage.intro') }}</p>
+  <div class="skill-page apple-layout">
+    <PageHeader :title="t('skillPage.title')" :description="t('skillPage.intro')">
+      <template #actions>
+        <Button :as="RouterLink" to="/playbook" size="sm" variant="secondary">{{ t('nav.playbook') || 'Playbook' }}</Button>
+        <Button as="a" :href="skillMdUrl" target="_blank" rel="noopener noreferrer" size="sm" variant="ghost">{{ t('skillPage.skillMdLink') }}</Button>
+      </template>
+    </PageHeader>
 
     <section class="skill-section card skill-oneclick-card">
       <div class="card-content">
@@ -256,6 +260,7 @@ import { ref, computed, onMounted } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Button } from '../components/ui/button'
+import PageHeader from '../components/PageHeader.vue'
 import * as api from '../api'
 import type { SkillMarketItem, SkillScenarioPack } from '../api'
 import { safeT } from '../i18n'

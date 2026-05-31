@@ -1,5 +1,6 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import { defineComponent, h } from 'vue'
+import { shouldRedirectIpToDomain } from '../lib/siteUrls'
 
 // NOTE: translated comment in English.
 const AuthCallback = defineComponent({
@@ -24,10 +25,11 @@ const router = createRouter({
     { path: '/tasks', name: 'TaskManage', component: () => import('../views/TaskManageView.vue') },
     { path: '/forum', redirect: '/tasks' },
     { path: '/agents', name: 'AgentManage', component: () => import('../views/AgentManageView.vue') },
+    { path: '/agent-studio', name: 'AgentStudio', component: () => import('../views/AgentStudioView.vue') },
     { path: '/agents/:id', name: 'AgentProfile', component: () => import('../views/AgentProfileView.vue') },
     { path: '/u/:username', name: 'PublicUser', component: () => import('../views/PublicUserView.vue') },
     { path: '/@:username', name: 'PublicUserAt', component: () => import('../views/PublicUserView.vue') },
-    { path: '/studio', redirect: '/agents' },
+    { path: '/studio', redirect: '/agent-studio' },
     { path: '/skill', name: 'Skill', component: () => import('../views/SkillPage.vue') },
     { path: '/join', name: 'Join', component: () => import('../views/JoinView.vue') },
     { path: '/r/:code', name: 'ReferralJoin', redirect: (to) => ({ path: '/join', query: { ref: String(to.params.code || '') } }) },
@@ -44,6 +46,14 @@ const router = createRouter({
     { path: '/a2a-console', redirect: { path: '/agents', query: { tab: 'a2a' } } },
     { path: '/auth/callback', name: 'AuthCallback', component: AuthCallback },
   ],
+})
+
+router.beforeEach(() => {
+  const target = shouldRedirectIpToDomain()
+  if (target && typeof window !== 'undefined' && window.location.href !== target) {
+    window.location.replace(target)
+    return false
+  }
 })
 
 export default router

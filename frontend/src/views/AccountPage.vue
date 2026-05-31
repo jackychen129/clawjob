@@ -1,13 +1,29 @@
 <template>
-  <div class="account-page">
+  <div class="account-page apple-layout">
     <PageHeader
       :title="t('account.title')"
-      :description="t('account.desc') || t('account.apiTokenHint')"
-    />
+      :description="t('account.descNew') || t('account.desc')"
+    >
+      <template #actions>
+        <Button :as="RouterLink" to="/agent-studio" size="sm" variant="secondary">{{ t('account.navStudio') }}</Button>
+        <Button :as="RouterLink" to="/tasks" size="sm" variant="secondary">{{ t('account.navTasks') }}</Button>
+        <Button :as="RouterLink" to="/agents" size="sm" variant="secondary">{{ t('account.navAgents') }}</Button>
+        <Button :as="RouterLink" to="/inbox" size="sm" variant="ghost">{{ t('account.navInbox') }}</Button>
+      </template>
+    </PageHeader>
     <div v-if="!auth.token" class="card card-content">
       <p>{{ t('auth.pleaseLogin') || '请先登录' }}</p>
     </div>
     <template v-else>
+      <Tabs v-model="accountTab" default-value="wallet" class="account-primary-tabs">
+        <TabList>
+          <Tab value="wallet">{{ t('account.tabWallet') }}</Tab>
+          <Tab value="growth">{{ t('account.tabGrowth') }}</Tab>
+          <Tab value="recharge">{{ t('account.tabRecharge') }}</Tab>
+          <Tab value="developer">{{ t('account.tabDeveloper') }}</Tab>
+        </TabList>
+
+        <TabPanel value="wallet" class="account-tab-panel">
       <section class="card card-content settlement-hero" aria-label="Agent-to-agent settlement wallet">
         <div class="settlement-hero__banner">
           <Badge variant="p2p">{{ t('account.agentDirectBadge') }}</Badge>
@@ -51,36 +67,6 @@
         </div>
       </section>
 
-      <section class="card card-content referral-panel referral-panel--prominent">
-        <h3>{{ t('account.referralTitle') }}</h3>
-        <p class="hint">{{ t('account.referralHint') }}</p>
-        <div v-if="referralLoading" class="account-skel">{{ t('common.loading') }}</div>
-        <template v-else-if="referral">
-          <div class="referral-code-row">
-            <span class="referral-code mono">{{ referral.referral_code }}</span>
-            <Button type="button" size="sm" variant="secondary" @click="copyReferralCode">
-              {{ referralCopyDone === 'code' ? t('account.tokenCopied') : t('account.referralCopyCode') }}
-            </Button>
-            <Button type="button" size="sm" variant="secondary" @click="copyReferralLink">
-              {{ referralCopyDone === 'link' ? t('account.tokenCopied') : t('account.referralCopyLink') }}
-            </Button>
-          </div>
-          <div class="referral-stats">
-            <div><span class="hint">{{ t('account.referralInvited') }}</span><strong>{{ referral.invited_count }}</strong></div>
-            <div><span class="hint">{{ t('account.referralRewarded') }}</span><strong>{{ referral.rewarded_count }}</strong></div>
-            <div><span class="hint">{{ t('account.referralBonusEarned') }}</span><strong>{{ referral.total_bonus_earned }}</strong></div>
-          </div>
-        </template>
-      </section>
-
-      <section class="card card-content">
-        <h3>{{ t('account.apiTokenTitle') }}</h3>
-        <p class="hint">{{ t('account.apiTokenHint') }}</p>
-        <div class="account-actions">
-          <Button type="button" @click="copyToken">{{ copyTokenDone ? t('account.tokenCopied') : t('account.copyToken') }}</Button>
-          <Button type="button" variant="secondary" @click="copyEnvSnippet">{{ copyEnvDone ? t('account.tokenCopied') : t('account.copyEnvSnippet') }}</Button>
-        </div>
-      </section>
       <section class="card card-content payout-hub" aria-label="Earnings summary">
         <h3>{{ t('account.payoutHubTitle') }}</h3>
         <p class="hint">{{ t('account.payoutHubHint') }}</p>
@@ -168,6 +154,30 @@
         <h3>{{ t('account.enterpriseOffTitle') }}</h3>
         <p class="hint">{{ t('account.enterpriseOffHint') }}</p>
       </section>
+        </TabPanel>
+
+        <TabPanel value="growth" class="account-tab-panel">
+      <section class="card card-content referral-panel referral-panel--prominent">
+        <h3>{{ t('account.referralTitle') }}</h3>
+        <p class="hint">{{ t('account.referralHint') }}</p>
+        <div v-if="referralLoading" class="account-skel">{{ t('common.loading') }}</div>
+        <template v-else-if="referral">
+          <div class="referral-code-row">
+            <span class="referral-code mono">{{ referral.referral_code }}</span>
+            <Button type="button" size="sm" variant="secondary" @click="copyReferralCode">
+              {{ referralCopyDone === 'code' ? t('account.tokenCopied') : t('account.referralCopyCode') }}
+            </Button>
+            <Button type="button" size="sm" variant="secondary" @click="copyReferralLink">
+              {{ referralCopyDone === 'link' ? t('account.tokenCopied') : t('account.referralCopyLink') }}
+            </Button>
+          </div>
+          <div class="referral-stats">
+            <div><span class="hint">{{ t('account.referralInvited') }}</span><strong>{{ referral.invited_count }}</strong></div>
+            <div><span class="hint">{{ t('account.referralRewarded') }}</span><strong>{{ referral.rewarded_count }}</strong></div>
+            <div><span class="hint">{{ t('account.referralBonusEarned') }}</span><strong>{{ referral.total_bonus_earned }}</strong></div>
+          </div>
+        </template>
+      </section>
 
       <section class="card card-content referral-panel referral-panel--detail">
         <h3>{{ t('account.referralRecordsTitle') || '邀请明细' }}</h3>
@@ -189,7 +199,9 @@
         </template>
         <p v-else class="hint">{{ t('common.loadFailed') || t('common.retry') }}</p>
       </section>
+        </TabPanel>
 
+        <TabPanel value="recharge" class="account-tab-panel">
       <section class="card card-content recharge-panel">
         <h3>{{ t('account.rechargeTitle') }}</h3>
         <p class="hint">{{ t('account.rechargeHint') }}</p>
@@ -262,6 +274,17 @@
               </div>
             </template>
           </div>
+        </div>
+      </section>
+        </TabPanel>
+
+        <TabPanel value="developer" class="account-tab-panel">
+      <section class="card card-content">
+        <h3>{{ t('account.apiTokenTitle') }}</h3>
+        <p class="hint">{{ t('account.apiTokenHint') }}</p>
+        <div class="account-actions">
+          <Button type="button" @click="copyToken">{{ copyTokenDone ? t('account.tokenCopied') : t('account.copyToken') }}</Button>
+          <Button type="button" variant="secondary" @click="copyEnvSnippet">{{ copyEnvDone ? t('account.tokenCopied') : t('account.copyEnvSnippet') }}</Button>
         </div>
       </section>
       <section class="card card-content">
@@ -417,6 +440,8 @@
           </details>
         </div>
       </section>
+        </TabPanel>
+      </Tabs>
     </template>
     <div class="account-footer-actions">
       <Button :as="RouterLink" to="/" variant="secondary">{{ t('common.home') }}</Button>
@@ -431,12 +456,14 @@ import { useI18n } from 'vue-i18n'
 import { Button } from '../components/ui/button'
 import { Badge } from '../components/ui/badge'
 import PageHeader from '../components/PageHeader.vue'
+import { Tabs, TabList, Tab, TabPanel } from '../components/ui/tabs'
 import * as api from '../api'
 import type { SkillNode } from '../api'
 import { useAuthStore } from '../stores/auth'
 
 const { t } = useI18n()
 const auth = useAuthStore()
+const accountTab = ref('wallet')
 const enterpriseEnabled = ref(false)
 const credits = ref(0)
 const payout = ref<api.PayoutEligibility | null>(null)
@@ -1103,6 +1130,8 @@ onMounted(async () => {
 .withdraw-status.is-rejected { color: rgb(239, 68, 68); }
 .payout-success { color: rgb(34, 197, 94); }
 .hint { color: var(--text-secondary); font-size: var(--font-body); margin: 0; }
+.account-primary-tabs { margin-top: var(--space-2); }
+.account-tab-panel { display: grid; gap: var(--space-4); margin-top: var(--space-4); }
 .account-footer-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-2); }
 .api-key-form { display: grid; grid-template-columns: 1fr; gap: var(--space-2); margin-top: var(--space-3); }
 .api-key-list { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-3); }

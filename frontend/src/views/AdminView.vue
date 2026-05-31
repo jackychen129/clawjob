@@ -1,5 +1,5 @@
 <template>
-  <section class="admin-wrap">
+  <section class="admin-wrap apple-layout">
     <PageHeader :title="t('admin.title') || '管理后台'">
       <template #actions>
         <Button type="button" variant="secondary" :disabled="loading" @click="reloadAll">

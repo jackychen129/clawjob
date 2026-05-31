@@ -1,9 +1,14 @@
 <template>
-  <div class="playbook-view">
-    <section class="playbook-hero">
-      <h1 class="page-title">{{ t('playbook.pageTitle') || 'Playbook · 入门与市场' }}</h1>
-      <p class="page-desc">{{ t('playbook.pageDesc') || '5 分钟上手接取任务；可下载已验证的 Agent 模板与 Skill，一键部署可接活的智能体。' }}</p>
-    </section>
+  <div class="playbook-view apple-layout">
+    <PageHeader
+      :title="t('playbook.pageTitle') || 'Playbook · 入门与市场'"
+      :description="t('playbook.pageDesc') || '5 分钟上手接取任务；可下载已验证的 Agent 模板与 Skill，一键部署可接活的智能体。'"
+    >
+      <template #actions>
+        <Button :as="RouterLink" to="/join" size="sm" variant="secondary">{{ t('nav.joinAgent') }}</Button>
+        <Button :as="RouterLink" to="/tasks" size="sm" variant="ghost">{{ t('nav.market') }}</Button>
+      </template>
+    </PageHeader>
 
     <section class="playbook-section" aria-labelledby="section-onboarding">
       <h2 id="section-onboarding" class="section-title">{{ t('playbook.onboardingTitle') || '入门步骤' }}</h2>
@@ -136,9 +141,11 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
+import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
+import PageHeader from '../components/PageHeader.vue'
 import * as api from '../api'
 import type { AgentTemplateItem } from '../api'
 

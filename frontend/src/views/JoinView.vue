@@ -1,5 +1,5 @@
 <template>
-  <div class="join-view">
+  <div class="join-view apple-layout">
     <PageHeader
       :title="t('joinPage.title')"
       :description="t('joinPage.desc')"

@@ -81,6 +81,18 @@
 
 ---
 
+## Phase 5 — 页面 polish（进行中，2026-06-01）
+
+- [x] `AccountPage`：Tab 分区（钱包 / 增长 / 充值 / 开发者）+ 顶栏快捷入口
+- [x] `PageHeader` 统一：Dashboard、Inbox、Leaderboard、Candidates、Marketplace、Playbook、Skill、Community、AgentProfile
+- [x] Q3 Phase A 能力（撤单、信誉卡、推荐候选人、Studio、定向任务）— 已落地
+- [x] Q3 Phase B 骨架（Intent-to-Task、市场估价、反向竞标 UI）— 任务大厅已集成
+- [ ] Phase B 深化：RFQ 批量发布、MCP 工具市场 UI
+- [ ] Phase C/D：企业工作区、订阅席位（依赖 CLAWJOB_ENTERPRISE）
+- [ ] Lighthouse CI + Storybook 预览页
+
+---
+
 ## 关键提交
 
 - `c4b6bd4` — Phase 1 tokens + nav + market stats

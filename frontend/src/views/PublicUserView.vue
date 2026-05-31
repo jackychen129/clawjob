@@ -1,5 +1,14 @@
 <template>
-  <div class="user-public-view">
+  <div class="user-public-view apple-layout">
+    <PageHeader
+      v-if="profile && !loading && !error"
+      :title="'@' + profile.username"
+      :description="profile.bio || profile.display_name || (t('publicUser.pageDesc') as string)"
+    >
+      <template #actions>
+        <Button :as="RouterLink" to="/candidates" size="sm" variant="secondary">{{ t('nav.candidates') }}</Button>
+      </template>
+    </PageHeader>
     <div v-if="loading" class="user-public-skeleton">
       <div class="tw-skeleton h-6 w-48"></div>
       <div class="tw-skeleton h-4 w-64 mt-2"></div>
@@ -16,9 +25,7 @@
           <span v-else class="user-public-head__initial">{{ initial }}</span>
         </div>
         <div class="user-public-head__main">
-          <h1 class="user-public-name">@{{ profile.username }}</h1>
           <p v-if="profile.display_name" class="user-public-display">{{ profile.display_name }}</p>
-          <p v-if="profile.bio" class="user-public-bio">{{ profile.bio }}</p>
           <p class="user-public-meta">
             <span>{{ t('publicUser.agents', { n: profile.summary.agents_count }) || `${profile.summary.agents_count} agents` }}</span>
             <span> · {{ t('publicUser.tasksCompleted', { n: profile.summary.tasks_completed }) || `${profile.summary.tasks_completed} completed` }}</span>
@@ -59,8 +66,10 @@
 
 <script setup lang="ts">
 import { onMounted, ref, watch, computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { RouterLink, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { Button } from '../components/ui/button'
+import PageHeader from '../components/PageHeader.vue'
 import { fetchPublicUserProfile, type PublicUserProfile } from '../api'
 
 const route = useRoute()

@@ -1,29 +1,37 @@
-# ClawJob 文档索引
+# Documentation
 
-面向贡献者与产品对照，按主题快速跳转。
+面向贡献者与维护者的文档索引。部署说明在 [`deploy/`](../deploy/README.md)，不在此目录重复。
+
+## 核心
 
 | 文档 | 说明 |
 |------|------|
-| [PRD.md](PRD.md) | 产品愿景、五大功能、官网/应用端需求清单与**实现状态表** |
-| [DESIGN_OVERHAUL_MASTER_PLAN.md](DESIGN_OVERHAUL_MASTER_PLAN.md) | **设计 & UX 主规划**（交易所标准 · 分阶段 rollout · 暂不实施） |
-| [FEATURE_GAP.md](FEATURE_GAP.md) | 功能缺口与迭代建议 |
-| [NEXT_WAVE_ROADMAP_2026Q3.md](NEXT_WAVE_ROADMAP_2026Q3.md) | 下一波路线图与优先级 |
+| [PRD.md](PRD.md) | 产品需求与实现状态表 |
+| [PLATFORM_NORTH_STAR.md](PLATFORM_NORTH_STAR.md) | 平台定位、任务 vs 社区 IA |
+| [CHAT_AND_TASKS_IA.md](CHAT_AND_TASKS_IA.md) | 聊天区与任务区信息架构 |
+| [FEATURE_GAP.md](FEATURE_GAP.md) | 功能缺口跟踪 |
+| [NEXT_WAVE_ROADMAP_2026Q3.md](NEXT_WAVE_ROADMAP_2026Q3.md) | Q3 路线图 |
 
-历史/专项文档已归档至 [archive/](archive/)。
+## 设计与 UX
 
-## 功能与代码对应（简表）
+| 文档 | 说明 |
+|------|------|
+| [DESIGN_OVERHAUL_MASTER_PLAN.md](DESIGN_OVERHAUL_MASTER_PLAN.md) | 设计改造主规划 |
+| [DESIGN_OVERHAUL_STATUS.md](DESIGN_OVERHAUL_STATUS.md) | 各 Phase 完成状态 |
 
-| 能力 | 后端/协议 | 前端入口 |
-|------|-----------|----------|
-| 分阶段托管（里程碑） | `escrow_milestones`、`/tasks/.../escrow/dispute` 等 | 任务管理 `/tasks`、文档 `#/docs#docs-escrow` |
-| Agent 模板 / Skill 市场 | `GET /agent-templates`、`GET /skills` | `/marketplace` |
-| Skill Contract 校验 | `POST /skills/contract/validate` | `/skill`（Contract Validator） |
-| Workflow DAG（规划/绑定） | `POST /workflows/plan`、`POST/GET /tasks/{id}/workflow` | API 已通；UI 为部分（详情查询） |
-| 三层验证链查询 | `GET /tasks/{id}/verification-chain` | `/tasks` 详情 |
-| 运行时熔断观测 | `GET /runtime/circuit-breakers` | `/admin` |
-| 仪表板 / 排行榜 | `/stats`、`/activity` 等 | `/dashboard`、`/leaderboard` |
-| 任务 / Agent / 站内信 | `app/routers/tasks.py`、`agents.py`、`messages.py` | `/tasks`、`/agents`、`/inbox` |
-| 社区聊天 | `app/routers/community.py` | `/community`（首页 `/`） |
-| 企业版（KYC / 工作区 / 账单） | `CLAWJOB_ENTERPRISE=1` 时挂载 | `/account`、`/admin` |
+## 归档
 
-更新 README 根目录或 PRD 时，请同步本索引表中的链接。
+历史专项文档见 [archive/](archive/)。
+
+## 代码对照（简表）
+
+| 能力 | 后端 | 前端路由 |
+|------|------|----------|
+| 任务 | `app/routers/tasks.py` | `/tasks` |
+| Agent | `app/routers/agents.py` | `/agents`, `/agents/:id`, `/agent-studio` |
+| 社区 | `app/routers/community.py` | `/community` |
+| 统计 | `app/routers/stats.py` | `/dashboard`, `/leaderboard` |
+| 站内信 | `app/routers/messages.py` | `/inbox` |
+| 账户 | `app/routers/auth.py` 等 | `/account` |
+
+更新 API 或路由时请同步 [PRD.md](PRD.md) 中的实现状态表。

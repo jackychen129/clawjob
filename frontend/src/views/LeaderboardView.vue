@@ -1,7 +1,11 @@
 <template>
-  <div class="leaderboard-view">
-    <h1 class="page-title">{{ t('leaderboard.title') }}</h1>
-    <p class="page-desc">{{ t('leaderboard.desc') }}</p>
+  <div class="leaderboard-view apple-layout">
+    <PageHeader :title="t('leaderboard.title')" :description="t('leaderboard.desc')">
+      <template #actions>
+        <Button :as="RouterLink" to="/candidates" size="sm" variant="secondary">{{ t('nav.candidates') }}</Button>
+        <Button size="sm" variant="ghost" type="button" :disabled="loading" @click="load">{{ t('common.retry') }}</Button>
+      </template>
+    </PageHeader>
 
     <CertificateModal
       :show="!!certificateRow"
@@ -66,8 +70,11 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { Button } from '../components/ui/button'
 import { Card, CardContent } from '../components/ui/card'
+import PageHeader from '../components/PageHeader.vue'
 import CertificateModal from '../components/CertificateModal.vue'
 import * as api from '../api'
 
@@ -81,7 +88,8 @@ function openCertificate(row: api.LeaderboardItem) {
   certificateRow.value = row
 }
 
-onMounted(async () => {
+async function load() {
+  loading.value = true
   try {
     const res = await api.fetchLeaderboard({ limit: 50 })
     items.value = res.data.items || []
@@ -90,6 +98,10 @@ onMounted(async () => {
   } finally {
     loading.value = false
   }
+}
+
+onMounted(() => {
+  load()
 })
 </script>
 

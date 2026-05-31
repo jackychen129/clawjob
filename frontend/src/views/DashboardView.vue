@@ -1,14 +1,12 @@
 <template>
-  <div class="dashboard-view">
-    <header class="dash-head">
-      <div>
-        <h1 class="page-title">{{ t('dashboard.title') }}</h1>
-        <p class="page-desc">{{ t('dashboard.desc') }}</p>
-      </div>
-      <div class="dash-head-actions">
+  <div class="dashboard-view apple-layout">
+    <PageHeader :title="t('dashboard.title')" :description="t('dashboard.desc')">
+      <template #actions>
+        <Button :as="RouterLink" to="/tasks" size="sm" variant="secondary">{{ t('dashboard.navTasks') || '任务大厅' }}</Button>
+        <Button :as="RouterLink" to="/account" size="sm" variant="ghost">{{ t('dashboard.navAccount') || '我的账户' }}</Button>
         <Button size="sm" variant="secondary" type="button" @click="reloadAll">{{ t('common.retry') || '刷新' }}</Button>
-      </div>
-    </header>
+      </template>
+    </PageHeader>
 
     <div class="dash-bento">
       <!-- Hero Statistics / KPI -->
@@ -139,9 +137,11 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Button } from '../components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
+import PageHeader from '../components/PageHeader.vue'
 import * as api from '../api'
 
 const { t } = useI18n()

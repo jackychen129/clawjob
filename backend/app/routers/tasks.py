@@ -31,6 +31,7 @@ from app.domain.task_helpers import (
     intent_rate_check, maybe_auto_confirm, maybe_settle_skill_revenue, normalize_verification_method, owner_display_name,
     pay_task_reward, push_task_to_discord, require_auction_task, serialize_auction_state,
     task_extra, task_is_platform_seed_listing, task_is_public_listing, task_is_visible_to, task_payment_breakdown,
+    apply_internal_task_title_sql_exclude,
     task_verification_hours, validate_verification_submission,
 )
 from app.domain.task_models import (
@@ -261,6 +262,7 @@ def list_tasks_public(
                     )
                 )
         qy = _apply_hidden_filter(qy)
+        qy = apply_internal_task_title_sql_exclude(qy, db)
         return qy
 
     query = _apply_public_filters(db.query(Task))
@@ -332,7 +334,7 @@ def list_tasks_public(
             **task_extra(t, db),
         })
     return JSONResponse(
-        content={"tasks": out, "total": total},
+        content={"tasks": out, "total": len(out)},
         headers={"Cache-Control": "no-store, max-age=0"},
     )
 
@@ -508,6 +510,8 @@ def publish_task(
             raise HTTPException(status_code=400, detail=str(e))
     if bool(getattr(body, "collaborative", False)):
         extra["collaborative"] = True
+    if invited_ids:
+        extra["visibility"] = "invitees_only"
     settlement_mode = (getattr(body, "settlement_mode", None) or "platform_credits").strip()
     if settlement_mode not in ("platform_credits", "agent_direct"):
         raise HTTPException(status_code=400, detail="settlement_mode 须为 platform_credits 或 agent_direct")
@@ -2330,207 +2334,4 @@ def estimate_task_price_sla(
         content=result,
         headers={"Cache-Control": "public, max-age=300"},
     )
-
-
-@router.get("/tasks")
-def list_tasks_public(
-    skip: int = 0,
-    limit: int = 50,
-    status_filter: str = None,
-    category_filter: str = None,
-    creator_agent_id: Optional[int] = None,
-    q: str = None,
-    sort: str = "created_at_desc",
-    reward_min: Optional[int] = None,
-    reward_max: Optional[int] = None,
-    db: Session = Depends(get_db),
-    current_user: Optional[dict] = Depends(get_current_user_optional),
-):
-    """任务大厅：公开列出所有任务（无需登录）；支持分类、关键词、奖励区间、排序；creator_agent_id 可筛选某 Agent 发布的任务。
-
-    若任务是「定向任务」（`input_data.visibility == invitees_only`），仅发布者与被邀请 Agent 的拥有者可见。
-    """
-    # 内部/握手/平台系统账号任务不进入公开大厅与计数。
-    system_owner_ids = [
-        int(u.id)
-        for u in db.query(User.id).filter(User.username == CLAWJOB_SYSTEM_USERNAME).all()
-    ]
-
-    # 尝试在 SQL 层过滤 input_data.hidden_from_public（仅在 PostgreSQL 下生效，
-    # SQLite 测试环境继续依赖 Python 层的 task_is_public_listing 过滤）。
-    def _apply_hidden_filter(qy):
-        try:
-            dialect = db.bind.dialect.name if db.bind is not None else ""
-        except Exception:
-            dialect = ""
-        if dialect != "postgresql":
-            return qy
-        try:
-            from sqlalchemy import or_ as _or
-            hidden_expr = Task.input_data.op("->>")("hidden_from_public")
-            # NULL (字段不存在) 视为未隐藏；仅当显式为 'true'/'1' 时才过滤。
-            return qy.filter(
-                _or(
-                    Task.input_data.is_(None),
-                    hidden_expr.is_(None),
-                    hidden_expr.notin_(("true", "True", "1")),
-                )
-            )
-        except Exception:
-            return qy
-
-    def _apply_public_filters(qy):
-        if status_filter:
-            qy = qy.filter(Task.status == status_filter)
-        else:
-            qy = qy.filter(Task.status != "cancelled_refunded")
-        if category_filter and category_filter.strip():
-            qy = qy.filter(Task.category == category_filter.strip())
-        if creator_agent_id is not None:
-            qy = qy.filter(Task.creator_agent_id == creator_agent_id)
-        if q and q.strip():
-            from sqlalchemy import or_
-            term = f"%{q.strip()}%"
-            qy = qy.filter(or_(Task.title.ilike(term), Task.description.ilike(term)))
-        if reward_min is not None:
-            qy = qy.filter(Task.reward_points >= reward_min)
-        if reward_max is not None:
-            qy = qy.filter(Task.reward_points <= reward_max)
-        if system_owner_ids:
-            try:
-                dialect = db.bind.dialect.name if db.bind is not None else ""
-            except Exception:
-                dialect = ""
-            if dialect == "postgresql":
-                from sqlalchemy import or_ as _or
-                src_expr = Task.input_data.op("->>")("source")
-                showcase_expr = Task.input_data.op("->>")("showcase")
-                qy = qy.filter(
-                    _or(
-                        ~Task.owner_id.in_(system_owner_ids),
-                        src_expr == "seed_open_tasks",
-                        showcase_expr.in_(("true", "True", "1")),
-                    )
-                )
-        qy = _apply_hidden_filter(qy)
-        return qy
-
-    query = _apply_public_filters(db.query(Task))
-    if sort == "comments_desc":
-        query = _apply_public_filters(
-            db.query(Task, func.count(TaskComment.id).label("comment_count")).outerjoin(
-                TaskComment, Task.id == TaskComment.task_id
-            )
-        )
-        query = query.group_by(Task.id).order_by(func.count(TaskComment.id).desc().nullslast(), Task.created_at.desc())
-        total = query.count()
-        rows = query.offset(skip).limit(limit).all()
-        tasks_with_count = [(row[0], row[1]) for row in rows]
-    else:
-        if sort == "reward_desc":
-            query = query.order_by(Task.reward_points.desc().nullslast(), Task.created_at.desc())
-        elif sort == "created_at_asc":
-            query = query.order_by(Task.created_at.asc())
-        elif sort == "deadline_asc":
-            query = query.order_by(Task.verification_deadline_at.asc().nullslast(), Task.created_at.desc())
-        else:
-            query = query.order_by(Task.created_at.desc())
-        total = query.count()
-        tasks = query.offset(skip).limit(limit).all()
-        tasks_with_count = [(t, db.query(TaskComment).filter(TaskComment.task_id == t.id).count()) for t in tasks]
-    viewer_uid: Optional[int] = None
-    viewer_agent_ids: List[int] = []
-    if current_user:
-        try:
-            viewer_uid = int(current_user.get("user_id")) if current_user.get("user_id") is not None else None
-        except (TypeError, ValueError):
-            viewer_uid = None
-        if viewer_uid is not None:
-            viewer_agent_ids = [int(a.id) for a in db.query(Agent.id).filter(Agent.owner_id == viewer_uid).all()]
-
-    cat_completion_counts = _category_completion_counts(db)
-    out = []
-    for t, comment_count in tasks_with_count:
-        maybe_auto_confirm(t, db)
-        db.refresh(t)
-        if not task_is_visible_to(t, viewer_uid, viewer_agent_ids):
-            continue
-        owner = db.query(User).filter(User.id == t.owner_id).first()
-        if not task_is_public_listing(t, owner) and viewer_uid != t.owner_id:
-            continue
-        sub_count = db.query(TaskSubscription).filter(TaskSubscription.task_id == t.id).count()
-        invited = getattr(t, "invited_agent_ids", None)
-        creator_agent = db.query(Agent).filter(Agent.id == t.creator_agent_id).first() if getattr(t, "creator_agent_id", None) else None
-        out.append({
-            "id": t.id,
-            "title": t.title,
-            "description": (t.description or "")[:200],
-            "status": t.status,
-            "priority": t.priority or "medium",
-            "task_type": t.task_type or "general",
-            "owner_id": t.owner_id,
-            "publisher_name": owner.username if owner else "",
-            "agent_id": t.agent_id,
-            "creator_agent_id": getattr(t, "creator_agent_id", None),
-            "creator_agent_name": creator_agent.name if creator_agent else None,
-            "reward_points": getattr(t, "reward_points", 0) or 0,
-            "subscription_count": sub_count,
-            "category_completions": cat_completion_counts.get(str(getattr(t, "category", "") or ""), 0),
-            "comment_count": comment_count,
-            "invited_agent_ids": invited if invited else [],
-            "submitted_at": iso_utc(getattr(t, "submitted_at", None)),
-            "verification_deadline_at": iso_utc(getattr(t, "verification_deadline_at", None)),
-            "created_at": iso_utc(t.created_at),
-            **task_extra(t, db),
-        })
-    return JSONResponse(
-        content={"tasks": out, "total": total},
-        headers={"Cache-Control": "no-store, max-age=0"},
-    )
-
-
-@router.get("/tasks/created-by-me")
-def list_my_created_tasks(
-    skip: int = 0,
-    limit: int = 50,
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
-):
-    """当前用户发布的任务（我创建的任务）。"""
-    uid = int(current_user["user_id"])
-    query = db.query(Task).filter(Task.owner_id == uid).order_by(Task.created_at.desc())
-    tasks = query.offset(skip).limit(limit).all()
-    out = []
-    for t in tasks:
-        maybe_auto_confirm(t, db)
-        db.refresh(t)
-        owner = db.query(User).filter(User.id == t.owner_id).first()
-        sub_count = db.query(TaskSubscription).filter(TaskSubscription.task_id == t.id).count()
-        comment_count = db.query(TaskComment).filter(TaskComment.task_id == t.id).count()
-        invited = getattr(t, "invited_agent_ids", None)
-        creator_agent = db.query(Agent).filter(Agent.id == t.creator_agent_id).first() if getattr(t, "creator_agent_id", None) else None
-        out.append({
-            "id": t.id,
-            "title": t.title,
-            "description": (t.description or "")[:200],
-            "status": t.status,
-            "priority": t.priority or "medium",
-            "task_type": t.task_type or "general",
-            "owner_id": t.owner_id,
-            "publisher_name": owner.username if owner else "",
-            "agent_id": t.agent_id,
-            "creator_agent_id": getattr(t, "creator_agent_id", None),
-            "creator_agent_name": creator_agent.name if creator_agent else None,
-            "reward_points": getattr(t, "reward_points", 0) or 0,
-            "subscription_count": sub_count,
-            "comment_count": comment_count,
-            "invited_agent_ids": invited if invited else [],
-            "submitted_at": iso_utc(getattr(t, "submitted_at", None)),
-            "verification_deadline_at": iso_utc(getattr(t, "verification_deadline_at", None)),
-            "created_at": iso_utc(t.created_at),
-            **task_extra(t, db),
-        })
-    total = db.query(Task).filter(Task.owner_id == uid).count()
-    return {"tasks": out, "total": total}
-
 

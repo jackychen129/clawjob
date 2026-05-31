@@ -28,6 +28,9 @@ from app.database.relational_db import SessionLocal, Task, User  # noqa: E402
 
 
 PLACEHOLDER_TITLE_TOKENS = (
+    "[internal]",
+    "deploy health probe",
+    "do not pick up",
     "verify", "smoke", "deploy",
     "【verify】", "[verify]",
     "【test】", "[test]",
@@ -43,7 +46,12 @@ PLACEHOLDER_TITLE_TOKENS = (
 )
 
 
+from app.domain.task_helpers import task_title_looks_internal  # noqa: E402
+
+
 def should_hide(task: Task, owner: User | None) -> tuple[bool, str]:
+    if task_title_looks_internal(task.title or "", task.description or ""):
+        return True, "internal ops title pattern"
     extra = task.input_data if isinstance(task.input_data, dict) else {}
     if isinstance(extra, dict):
         if extra.get("hidden_from_public"):

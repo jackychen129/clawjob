@@ -1,5 +1,5 @@
 <template>
-  <div class="agent-profile-view">
+  <div class="agent-profile-view apple-layout">
     <div v-if="loading" class="agent-profile-skeleton">
       <div class="tw-skeleton h-6 w-48"></div>
       <div class="tw-skeleton h-4 w-64 mt-2"></div>
@@ -10,23 +10,31 @@
       <router-link to="/" class="link">{{ t('common.home') || '返回首页' }}</router-link>
     </div>
     <template v-else-if="card">
-      <header class="agent-profile-head">
+      <PageHeader
+        :title="card.agent.name"
+        :description="card.agent.description || (t('agentProfile.pageDesc') as string)"
+      >
+        <template #breadcrumbs>
+          <RouterLink to="/candidates" class="link">{{ t('nav.candidates') }}</RouterLink>
+          <span aria-hidden="true"> / </span>
+          <span>{{ card.agent.name }}</span>
+        </template>
+        <template #actions>
+          <Button :as="RouterLink" to="/tasks" size="sm" variant="secondary">{{ t('nav.market') }}</Button>
+          <Badge variant="p2p">{{ t('agentProfile.trustP2pBadge') }}</Badge>
+          <span class="agent-profile-score-inline" :class="scoreClass">{{ card.reputation_score }}</span>
+        </template>
+      </PageHeader>
+
+      <header class="agent-profile-head agent-profile-head--compact">
         <div class="agent-profile-head__main">
-          <h1 class="agent-profile-name">
-            {{ card.agent.name }}
-            <span v-if="!card.agent.is_active" class="agent-profile-inactive">{{ t('agentProfile.inactive') || '未激活' }}</span>
-          </h1>
           <p class="agent-profile-meta">
             <span>{{ t('agentProfile.agentType') || '类型' }}：{{ card.agent.agent_type }}</span>
             <span v-if="card.agent.owner.username"> · {{ t('agentProfile.owner') || '归属' }}：{{ card.agent.owner.username }}</span>
             <span v-if="card.agent.skill_token"> · Skill: <code>{{ card.agent.skill_token }}</code></span>
             <span v-if="card.agent.created_at"> · {{ t('agentProfile.createdAt') || '创建于' }}：{{ formatDate(card.agent.created_at) }}</span>
+            <span v-if="!card.agent.is_active" class="agent-profile-inactive"> · {{ t('agentProfile.inactive') || '未激活' }}</span>
           </p>
-          <p v-if="card.agent.description" class="agent-profile-desc">{{ card.agent.description }}</p>
-        </div>
-        <div class="agent-profile-score" :class="scoreClass">
-          <div class="agent-profile-score__num">{{ card.reputation_score }}</div>
-          <div class="agent-profile-score__label">{{ t('agentProfile.reputationScore') || '信誉评分' }}</div>
         </div>
       </header>
 
@@ -152,7 +160,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { RouterLink, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
   getAgentReputation,
@@ -165,6 +173,8 @@ import {
   type SkillNode,
 } from '../api'
 import { Badge } from '../components/ui/badge'
+import { Button } from '../components/ui/button'
+import PageHeader from '../components/PageHeader.vue'
 
 const route = useRoute()
 const { t } = useI18n()
@@ -293,6 +303,8 @@ function formatDate(iso: string): string {
 
 <style scoped>
 .agent-profile-view { max-width: 960px; margin: 0 auto; padding: 24px 16px; }
+.agent-profile-head--compact { margin-bottom: var(--space-2); }
+.agent-profile-score-inline { font-size: 1.25rem; font-weight: 700; padding: 0.25rem 0.65rem; border-radius: var(--radius-md); }
 .agent-profile-head { display: flex; gap: 24px; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; }
 .agent-profile-head__main { flex: 1 1 320px; min-width: 260px; }
 .agent-profile-name { font-size: 24px; font-weight: 600; margin: 0 0 8px; display: flex; align-items: center; gap: 10px; }

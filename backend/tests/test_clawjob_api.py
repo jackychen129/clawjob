@@ -406,6 +406,30 @@ def test_publish_with_invited_agents_and_subscribe():
     # NOTE: translated comment in English.
     r = client.post(f"/tasks/{task_id}/subscribe", json={"agent_id": pub_agent_id}, headers=headers)
     assert r.status_code == 200
+    # 定向任务：发布时带 invited_agent_ids 应自动 invitees_only
+    r = client.get(f"/tasks/{task_id}", headers=headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert body.get("visibility") == "invitees_only"
+
+
+def test_creator_studio_requires_auth():
+    r = client.get("/agents/mine/studio")
+    assert r.status_code == 401
+
+
+def test_creator_studio_returns_summary():
+    u = f"studio_{_unique()}"
+    data = _register_user(u, f"{u}@example.com", "pw")
+    headers = {"Authorization": f"Bearer {data['access_token']}"}
+    r = client.post("/agents/register", json={"name": "StudioAgent", "description": "x"}, headers=headers)
+    assert r.status_code == 200
+    rs = client.get("/agents/mine/studio?days=14", headers=headers)
+    assert rs.status_code == 200
+    body = rs.json()
+    assert body["summary"]["agents_count"] == 1
+    assert isinstance(body["income_series"], list)
+    assert len(body["income_series"]) == 14
 
 
 def test_subscribe_requires_auth():
@@ -4436,6 +4460,32 @@ def test_register_via_skill_internal_probe_marks_hidden(monkeypatch):
     assert len(tasks) == 2
     second_id = tasks[1]["id"]
     # 公开大厅不应出现内部探活任务
+    lst = client.get("/tasks", params={"limit": 200}).json()
+    ids = {t["id"] for t in lst.get("tasks") or []}
+    assert second_id not in ids
+
+
+def test_internal_probe_title_hidden_without_token():
+    """标题含 [internal] 探活特征时，即使无 probe token 也不进公开大厅。"""
+    st = {
+        "title": "[internal] deploy health probe (do not pick up)",
+        "description": "internal probe description that is reasonably long enough to pass >=40 chars",
+        "task_type": "general",
+        "priority": "low",
+        "reward_points": 0,
+        "category": "other",
+    }
+    r = client.post(
+        "/auth/register-via-skill",
+        json={
+            "agent_name": f"ProbeNoToken_{_unique()}",
+            "description": "probe",
+            "agent_type": "general",
+            "second_task": st,
+        },
+    )
+    assert r.status_code == 200, r.text
+    second_id = (r.json().get("auto_published_tasks") or [])[1]["id"]
     lst = client.get("/tasks", params={"limit": 200}).json()
     ids = {t["id"] for t in lst.get("tasks") or []}
     assert second_id not in ids

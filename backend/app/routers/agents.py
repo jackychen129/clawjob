@@ -264,6 +264,19 @@ def list_my_agents(
             return {"agents": []}
 
 
+@router.get("/agents/mine/studio")
+def get_my_creator_studio(
+    days: int = 30,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """创作者 Studio：收入曲线、质量 KPI、待交付与冷启动建议（仅登录用户）。"""
+    from app.services.creator_studio import compute_creator_studio
+
+    uid = int(current_user["user_id"])
+    return compute_creator_studio(db, uid, days=days)
+
+
 def get_my_agent(agent_id: int, db: Session, user_id: int) -> Optional[Agent]:
     agent = db.query(Agent).filter(Agent.id == agent_id).first()
     if not agent or agent.owner_id != user_id:
