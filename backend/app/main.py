@@ -296,13 +296,16 @@ async def health_check():
 @app.get("/stats")
 def get_public_stats(db: Session = Depends(get_db)):
     """公开统计：任务总数、开放数、已完成数、活跃 Agent、累计发放报酬（供首页/官网 Counters 与 Dashboard）。"""
+    from app.domain.agent_public import count_public_agents, count_total_agents
+
     tasks_count = db.query(Task).count()
     tasks_open = db.query(Task).filter(Task.status == "open").count()
     tasks_completed = db.query(Task).filter(Task.status == "completed").count()
     rewards_paid = db.query(func.coalesce(func.sum(Task.reward_points), 0)).filter(
         Task.status == "completed", Task.reward_points.isnot(None)
     ).scalar() or 0
-    agents_count = db.query(Agent).count()
+    agents_count_public = count_public_agents(db)
+    agents_count_total = count_total_agents(db)
     agents_active = db.query(Agent).filter(Agent.is_active == True).count()
     agents_with_completions = db.query(Task.agent_id).filter(
         Task.status == "completed", Task.agent_id.isnot(None)
@@ -310,7 +313,9 @@ def get_public_stats(db: Session = Depends(get_db)):
     return {
         "tasks_count": tasks_count,
         "tasks_open": tasks_open,
-        "agents_count": agents_count,
+        "agents_count": agents_count_public,
+        "agents_count_public": agents_count_public,
+        "agents_count_total": agents_count_total,
         "tasks_total": tasks_count,
         "tasks_completed": tasks_completed,
         "rewards_paid": int(rewards_paid),
@@ -322,9 +327,14 @@ def get_public_stats(db: Session = Depends(get_db)):
 @app.get("/stats/recent-agents")
 def get_recent_agents_count(db: Session = Depends(get_db)):
     """近 7 天新注册 Agent 数量（无 PII，供 Dashboard 社交证明）。"""
+    from app.domain.agent_public import count_public_agents, count_total_agents
+
     since = datetime.utcnow() - timedelta(days=7)
-    count = db.query(Agent).filter(Agent.created_at >= since).count()
-    return {"recent_agents_7d": int(count), "period_days": 7}
+    return {
+        "recent_agents_7d": int(count_public_agents(db, since=since)),
+        "recent_agents_7d_total": int(count_total_agents(db, since=since)),
+        "period_days": 7,
+    }
 
 
 @app.get("/public/agent-opportunities.json")
@@ -336,15 +346,10 @@ def get_agent_opportunities_feed(db: Session = Depends(get_db)):
 
 
 def _activity_agent_is_internal(agent: Agent, owner: Optional[User]) -> bool:
-    """判断 Agent 是否是内部探活/部署验证生成的，不应进入公开 Live feed。"""
-    name = (getattr(agent, "name", "") or "").strip()
-    lower = name.lower()
-    if lower.startswith("deployprobe") or lower.startswith("verify_") or "registration handshake" in lower:
-        return True
-    owner_name = (owner.username if owner else "") or ""
-    if owner_name == CLAWJOB_SYSTEM_USERNAME:
-        return True
-    return False
+    """判断 Agent 是否不应进入公开 Live feed。"""
+    from app.domain.agent_public import agent_is_public
+
+    return not agent_is_public(agent, owner)
 
 
 @app.get("/activity")
@@ -434,6 +439,8 @@ def get_leaderboard(skip: int = 0, limit: int = 50, db: Session = Depends(get_db
         .filter(Task.agent_id.isnot(None))
         .group_by(Task.agent_id)
     ).subquery()
+    from app.domain.agent_public import apply_public_agent_filters, filter_public_agent_rows
+
     q = (
         db.query(
             Agent,
@@ -445,9 +452,16 @@ def get_leaderboard(skip: int = 0, limit: int = 50, db: Session = Depends(get_db
         .join(User, Agent.owner_id == User.id)
         .outerjoin(completed_subq, Agent.id == completed_subq.c.agent_id)
         .outerjoin(total_subq, Agent.id == total_subq.c.agent_id)
-        .filter(Agent.is_active == True, User.is_active == True)
     )
-    rows = q.order_by(completed_subq.c.earned.desc().nullslast(), Agent.id.desc()).offset(skip).limit(limit).all()
+    q = apply_public_agent_filters(q)
+    fetch_n = max(limit * 3, limit + 20)
+    rows = (
+        q.order_by(completed_subq.c.earned.desc().nullslast(), Agent.id.desc())
+        .offset(skip)
+        .limit(fetch_n)
+        .all()
+    )
+    rows = filter_public_agent_rows(rows)[:limit]
     out = []
     for i, (a, owner, completed_count, earned, total_count) in enumerate(rows):
         total_count = total_count or 0
@@ -898,10 +912,12 @@ def get_clawjob_agent_manifest(db: Session = Depends(get_db)):
     """公开 Agent 发现清单：注册入口、skill.md、场景包与平台统计（供其它 Agent 抓取）。"""
     from app.services.skill_packs import list_scenario_packs
 
+    from app.domain.agent_public import count_public_agents
+
     api_base = os.getenv("CLAWJOB_API_URL", "https://api.clawjob.com.cn").rstrip("/")
     app_base = os.getenv("CLAWJOB_APP_URL", "https://app.clawjob.com.cn").rstrip("/")
     tasks_open = db.query(Task).filter(Task.status == "open").count()
-    agents_count = db.query(Agent).count()
+    agents_count = count_public_agents(db)
     rewards_paid = (
         db.query(func.coalesce(func.sum(Task.reward_points), 0))
         .filter(Task.status == "completed", Task.reward_points.isnot(None))
@@ -964,6 +980,7 @@ def get_clawjob_agent_manifest(db: Session = Depends(get_db)):
         "stats": {
             "tasks_open": int(tasks_open),
             "agents_count": int(agents_count),
+            "agents_count_public": int(agents_count),
             "rewards_paid": int(rewards_paid),
         },
         "skill_packs": [

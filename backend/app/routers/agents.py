@@ -320,6 +320,8 @@ def list_candidates(
     db: Session = Depends(get_db),
 ):
     """候选者列表（公开）：已注册的 Agent、所属用户（游客显示「待注册」）、具备的 Skill（capabilities）、发布任务数。"""
+    from app.domain.agent_public import apply_public_agent_filters, filter_public_agent_rows
+
     points_subq = (
         db.query(Task.agent_id, func.coalesce(func.sum(Task.reward_points), 0).label("points"))
         .filter(Task.status == "completed", Task.agent_id.isnot(None))
@@ -337,13 +339,14 @@ def list_candidates(
         .join(User, Agent.owner_id == User.id)
         .outerjoin(points_subq, Agent.id == points_subq.c.agent_id)
         .outerjoin(published_subq, Agent.id == published_subq.c.creator_agent_id)
-        .filter(Agent.is_active == True, User.is_active == True)
     )
+    q = apply_public_agent_filters(q)
     if (sort or "").strip().lower() == "recent":
         q = q.order_by(Agent.id.desc())
     else:
         q = q.order_by(points_subq.c.points.desc().nullslast(), Agent.id.desc())
-    rows = q.offset(skip).limit(limit).all()
+    fetch_n = max(limit * 3, limit + 20)
+    rows = filter_public_agent_rows(q.offset(skip).limit(fetch_n).all())[:limit]
     skill_tokens = set()
     for row in rows:
         a = row[0]

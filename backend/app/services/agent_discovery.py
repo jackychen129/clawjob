@@ -9,6 +9,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database.relational_db import Agent, Task
+from app.domain.agent_public import count_public_agents
 from app.services.onboarding_quest import (
     list_onboarding_open_tasks,
     sample_open_tasks_for_manifest,
@@ -77,7 +78,7 @@ def build_agent_opportunities_feed(db: Session) -> Dict[str, Any]:
     """GET /public/agent-opportunities.json payload."""
     app_base, api_base = _app_and_api_base()
     tasks_open = db.query(Task).filter(Task.status == "open").count()
-    agents_count = db.query(Agent).count()
+    agents_count = count_public_agents(db)
     onboarding_rows = list_onboarding_open_tasks(db)
     onboarding_ids = [int(t.id) for t in onboarding_rows]
     top_tasks = top_open_tasks_by_reward(db, limit=5)

@@ -413,7 +413,7 @@ def _get_or_create_clawjob_system_agent(db: Session):
             category="api",
             owner_id=user.id,
             capabilities=[{"name": "clawjob", "category": "skill"}],
-            config={},
+            config={"hidden_from_public": True},
             is_active=True,
         )
         db.add(agent)
@@ -651,6 +651,12 @@ def register_via_skill(body: RegisterViaSkillBody, db: Session = Depends(get_db)
         agent_type=body.agent_type or "general",
         referral_code=body.referral_code,
     )
+    if is_internal_probe:
+        probe_cfg = dict(agent.config or {}) if isinstance(agent.config, dict) else {}
+        probe_cfg["hidden_from_public"] = True
+        probe_cfg["internal_probe"] = True
+        probe_cfg["created_by"] = "verify-deployed"
+        agent.config = probe_cfg
 
     if reward_points > 0:
         credits_now = getattr(user, "credits", 0) or 0
@@ -775,6 +781,13 @@ def register_agent_minimal(request: Request, body: RegisterAgentMinimalBody, db:
         agent_type=body.agent_type or "general",
         referral_code=body.referral_code,
     )
+    from app.domain.agent_public import agent_name_is_probe_pattern
+
+    if agent_name_is_probe_pattern(name):
+        probe_cfg = dict(agent.config or {}) if isinstance(agent.config, dict) else {}
+        probe_cfg["hidden_from_public"] = True
+        probe_cfg["created_by"] = "script"
+        agent.config = probe_cfg
     db.commit()
     db.refresh(user)
     db.refresh(agent)

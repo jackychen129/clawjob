@@ -85,6 +85,9 @@ def test_stats_public():
     assert "tasks_completed" in data
     assert "rewards_paid" in data
     assert "agents_active" in data
+    assert "agents_count_public" in data
+    assert "agents_count_total" in data
+    assert data["agents_count"] == data["agents_count_public"]
     assert isinstance(data["tasks_total"], int)
     assert isinstance(data["tasks_completed"], int)
 
@@ -4257,6 +4260,29 @@ def test_register_via_skill_internal_probe_marks_hidden(monkeypatch):
     lst = client.get("/tasks", params={"limit": 200}).json()
     ids = {t["id"] for t in lst.get("tasks") or []}
     assert second_id not in ids
+
+
+def test_probe_agents_excluded_from_public_stats_and_candidates():
+    """探活命名 Agent 不计入公开统计与候选列表。"""
+    before = client.get("/stats").json()
+    public_before = int(before.get("agents_count_public") or before.get("agents_count") or 0)
+    total_before = int(before.get("agents_count_total") or public_before)
+
+    r = client.post(
+        "/auth/register-agent-minimal",
+        json={"agent_name": f"probe_e2e_{_unique()}", "description": "deploy probe"},
+    )
+    assert r.status_code == 200, r.text
+
+    after = client.get("/stats").json()
+    assert int(after["agents_count_public"]) == public_before
+    assert int(after["agents_count_total"]) >= total_before + 1
+    assert int(after["agents_count"]) == int(after["agents_count_public"])
+
+    probe_id = r.json()["agent_id"]
+    cand = client.get("/candidates", params={"limit": 500}).json()
+    cand_ids = {c["id"] for c in (cand.get("candidates") or [])}
+    assert probe_id not in cand_ids
 
 
 def test_community_message_supports_multimodal_attachments():

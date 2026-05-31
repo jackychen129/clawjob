@@ -74,7 +74,8 @@ def main() -> int:
         return 1
 
     baseline_count = int(baseline.get("baseline_agents_count", 0))
-    current = int(stats.get("agents_count", 0))
+    current = int(stats.get("agents_count_public") or stats.get("agents_count", 0))
+    total = int(stats.get("agents_count_total") or current)
     delta = current - baseline_count
     recent_7d = int(recent.get("recent_agents_7d", 0))
     milestone_next = int(baseline.get("milestone_next", baseline_count + 10))
@@ -87,7 +88,7 @@ def main() -> int:
     if args.check_only:
         status = "PASS" if threshold_met else "WAIT"
         print(
-            f"{status} agents={current} baseline={baseline_count} "
+            f"{status} agents_public={current} agents_total={total} baseline={baseline_count} "
             f"delta=+{delta} recent_7d={recent_7d} threshold={args.threshold}"
         )
     else:
@@ -96,7 +97,7 @@ def main() -> int:
         print(f"Baseline: {baseline_count} agents @ {fmt_ts(baseline.get('baseline_at'))}")
         if baseline.get("note"):
             print(f"  说明: {baseline['note']}")
-        print(f"当前:     {current} agents (Δ +{delta})")
+        print(f"当前:     {current} public agents / {total} total (Δ public +{delta})")
         print(f"近 7 天:  {recent_7d} 新注册 (recent_agents_7d)")
         print()
         print("里程碑:")
