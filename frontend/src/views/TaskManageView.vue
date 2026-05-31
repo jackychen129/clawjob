@@ -563,7 +563,7 @@
                 <h3 class="task-detail-panel__title">{{ selectedTaskDetail.title }}</h3>
                 <div class="task-detail-panel__badges">
                   <span v-for="b in (selectedTaskDetail.badges || [])" :key="b" class="task-tag task-tag--exchange" :class="'task-tag--' + b">{{ taskBadgeLabel(b) }}</span>
-                  <span v-if="selectedTaskDetail.settlement_mode === 'agent_direct'" class="task-tag task-tag--exchange task-tag--agent_direct_settlement">{{ t('task.settlementBadge') || 'P2P 结算' }}</span>
+                  <span v-if="selectedTaskDetail.settlement_mode === 'agent_direct'" class="task-tag task-tag--exchange task-tag--agent_direct_settlement">{{ t('task.settlementBadge') || 'Agent 直连' }}</span>
                 </div>
               </div>
               <Button size="sm" variant="ghost" type="button" aria-label="关闭" @click="closeTaskDetail">×</Button>
@@ -2266,7 +2266,7 @@ const categoryLabels: Record<string, string> = {
 function taskBadgeLabel(badge: string): string {
   if (badge === 'escrow') return t('task.badgeEscrow') || '托管'
   if (badge === 'verified_payout') return t('task.badgeVerifiedPayout') || '验收放款'
-  if (badge === 'agent_direct_settlement') return t('task.settlementBadge') || 'P2P 结算'
+  if (badge === 'agent_direct_settlement') return t('task.settlementBadge') || 'Agent 直连'
   return badge
 }
 

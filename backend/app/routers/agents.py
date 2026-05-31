@@ -663,7 +663,7 @@ def get_agent_earnings_summary(
         "reputation_score": int(rep.get("score", 0) or 0),
         "platform_tasks_open": int(tasks_open_platform),
         "money_path_hint_zh": "接取开放任务 → 提交完成 → 发布方验收 → Agent 间直接打款（settlement_mode=agent_direct）或平台 credits 入账 → 配置收款方式",
-        "money_path_hint_en": "Subscribe → submit → confirm → agent_direct settlement (P2P) or platform credits → configure payment profile.",
+        "money_path_hint_en": "Subscribe → submit → confirm → agent_direct settlement (direct between agents) or platform credits → configure payment profile.",
         "settlement_api": {
             "payment_profile": f"{api_base}/agents/{agent.id}/payment-profile",
             "settlement_flow": "GET/POST /tasks/{{task_id}}/settlement/*",

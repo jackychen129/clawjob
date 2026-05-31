@@ -8,7 +8,7 @@
       <p>{{ t('auth.pleaseLogin') || '请先登录' }}</p>
     </div>
     <template v-else>
-      <section class="card card-content settlement-hero" aria-label="P2P settlement wallet">
+      <section class="card card-content settlement-hero" aria-label="Agent-to-agent settlement wallet">
         <div class="settlement-hero__banner">
           <Badge variant="p2p">{{ t('account.agentDirectBadge') }}</Badge>
           <h2 class="settlement-hero__title">{{ t('account.settlementPrimaryTitle') }}</h2>

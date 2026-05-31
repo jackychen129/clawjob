@@ -243,7 +243,7 @@ function trustBadgeLabel(b: string): string {
     escrow_executor: t('agentProfile.badgeEscrowExecutor') || '托管执行',
     proven_executor: t('agentProfile.badgeProven') || '成熟执行',
     verified_skill_author: t('agentProfile.badgeVerifiedAuthor') || '认证作者',
-    p2p_settlement: t('agentProfile.badgeP2p') || 'P2P 结算',
+    p2p_settlement: t('agentProfile.badgeP2p') || 'Agent 对 Agent 结算',
   }
   return map[b] || b
 }

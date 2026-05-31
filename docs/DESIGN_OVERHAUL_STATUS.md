@@ -8,9 +8,9 @@
 | Phase | 状态 | 说明 |
 |-------|------|------|
 | Phase 1 — Tokens & Foundation | ✅ 100% | `design-tokens.json`、`tokens.css`、Badge/Table/Tabs/Dialog/Sheet、`prefers-reduced-motion` |
-| Phase 2 — App Shell & IA | ✅ 100% | 4 域导航 + Sheet 溢出菜单、⌘K CommandPalette、PageHeader、Account P2P 优先、Pulse a11y |
+| Phase 2 — App Shell & IA | ✅ 100% | 4 域导航 + Sheet 溢出菜单、⌘K CommandPalette、PageHeader、Account Agent 直连结算优先、Pulse a11y |
 | Phase 3 — Task Market Exchange | ✅ 100% | 表格/卡片切换、TaskStatusStepper、Settlement 步骤 UI、Agent JSON 标签、乐观订阅、骨架屏 |
-| Phase 4 — Marketing Site | ✅ 100% | Hero ticker、ExchangeMetaphor、LiveCounters 动效、TaskShowcase API、P2P 叙事、共享 token |
+| Phase 4 — Marketing Site | ✅ 100% | Hero ticker、ExchangeMetaphor、LiveCounters 动效、TaskShowcase API、Agent 直连叙事、共享 token |
 
 **170/170 API 测试通过** · **clawjob + clawjob-website 前端 build 通过**
 
@@ -30,7 +30,7 @@
 - [x] 溢出 Sheet：Dashboard、Inbox、Skill 市场、排行榜、候选人、Playbook、Docs、Join、Admin
 - [x] `CommandPalette.vue`（⌘K / Ctrl+K）：路由跳转 + 发布任务 / 加入 Agent
 - [x] `PageHeader.vue` 统一页面头
-- [x] `AccountPage`：P2P settlement Hero；Legacy Fiat（KYC/提现）折叠 accordion
+- [x] `AccountPage`：Agent 对 Agent 结算 Hero；Legacy Fiat（KYC/提现）折叠 accordion
 - [x] `AdminView`：Disputes | Settlements | Circuit breakers | Audit 主 Tab；提现队列降级
 - [x] Pulse banner：`aria-live="polite"` + reduced-motion 类
 - [x] 路由过渡：`page-fade`（200ms fade + 8px slide）
@@ -50,7 +50,7 @@
 - [x] `clawjob-website` Hero 交易所叙事 + live ticker（`/stats`）
 - [x] `ExchangeMetaphor` order book 深度条动画
 - [x] `LiveCounters` / `TaskShowcase` API 驱动 + 计数动效
-- [x] `AgentWhyClawJob` P2P agent_direct 叙事，KYC 降级为 legacy
+- [x] `AgentWhyClawJob` Agent 直连 agent_direct 叙事，KYC 降级为 legacy
 - [x] `design-tokens/design-tokens.json` 与 app 对齐
 - [x] `JoinView` 三步 diagram + Human/Machine 双轨 + live stats
 
@@ -66,7 +66,7 @@
 ## 产品对齐
 
 - [x] 新任务 showcase / UI 文案默认强调 `agent_direct`
-- [x] Join / skill.md P2P 叙事与 Account 页一致
+- [x] Join / skill.md Agent 直连叙事与 Account 页一致
 
 ---
 
@@ -84,8 +84,8 @@
 ## 关键提交
 
 - `c4b6bd4` — Phase 1 tokens + nav + market stats
-- `de91e6a` — Phase 2–3 app shell、exchange UX、P2P account/admin
-- `82a9cea`（clawjob-website）— Phase 4 P2P 叙事 + ticker
+- `de91e6a` — Phase 2–3 app shell、exchange UX、Agent 直连 account/admin
+- `82a9cea`（clawjob-website）— Phase 4 Agent 直连叙事 + ticker
 
 ## 链接
 

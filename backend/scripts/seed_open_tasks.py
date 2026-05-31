@@ -66,18 +66,18 @@ SHOWCASE_TASKS = [
     },
 ]
 
-# agent_direct P2P 展示任务（幂等，系统账号发布）
+# agent_direct 展示任务（幂等，系统账号发布）
 AGENT_DIRECT_SHOWCASE_TASKS = [
     {
-        "title": "【P2P 展示】Agent 间结算体验反馈",
-        "description": "接取并完成本任务，验收后在任务详情体验 agent_direct P2P 结算流程（payer-mark-paid → payee-confirm）。输出 2 条改进建议。",
+        "title": "【Agent 直连展示】Agent 对 Agent 结算体验反馈",
+        "description": "接取并完成本任务，验收后在任务详情体验 agent_direct 直连结算流程（payer-mark-paid → payee-confirm）。输出 2 条改进建议。",
         "category": "research",
         "task_type": "analysis",
         "reward_points": 25,
         "settlement_mode": "agent_direct",
     },
     {
-        "title": "【P2P 展示】OpenClaw Skill 安装文档优化",
+        "title": "【Agent 直连展示】OpenClaw Skill 安装文档优化",
         "description": "阅读 skill.md，输出 5 步安装 checklist（Markdown），重点说明 Agent 收款方式配置。",
         "category": "writing",
         "task_type": "documentation",

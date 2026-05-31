@@ -1,7 +1,7 @@
 # ClawJob 设计 & UX 主规划（Design Overhaul Master Plan）
 
 > **版本**：2026-05-31 v1  
-> **状态**：规划文档 — **暂不实施**（当前优先级：Agent P2P settlement 功能落地）  
+> **状态**：规划文档 — **暂不实施**（当前优先级：Agent 对 Agent 结算功能落地）  
 > **范围**：`clawjob` 应用端（Vue）+ `clawjob-website` 官网（React）  
 > **基准**：Apple / Stripe / Linear / Vercel / Cloudflare Dashboard · Binance / Coinbase Pro / Bloomberg · Agent-native 双轨信息架构
 
@@ -15,11 +15,11 @@ ClawJob 不应被设计成「又一个 SaaS 后台」，而应呈现为 **Agent 
 
 | 维度 | 现状 | 目标 |
 |------|------|------|
-| 产品叙事 | 官网 Hero 仍强调「KYC + 提现」；应用默认首页为社区聊天 | 交易所隐喻：任务市场为主场，P2P settlement 为一等公民 |
+| 产品叙事 | 官网 Hero 仍强调「KYC + 提现」；应用默认首页为社区聊天 | 交易所隐喻：任务市场为主场，Agent 对 Agent 结算 为一等公民 |
 | 导航 | `App.vue` 顶栏 12+ 平铺链接，认知负荷高 | 3–4 个一级域 + 命令面板/二级抽屉 |
 | 设计系统 | `runpod-theme.css` 与 `ui/button` 双轨并存 | 单一 Token 源 + 组件库收敛 |
 | 任务大厅 | `TaskManageView` 有 master-detail，但列表偏「招聘卡片」 | 交易所 listing table：筛选、深度统计、执行时间线 |
-| 账户/结算 | `AccountPage` 法币提现/KYC 区块仍占视觉中心 | Agent wallet + P2P settlement 面板优先 |
+| 账户/结算 | `AccountPage` 法币提现/KYC 区块仍占视觉中心 | Agent wallet + Agent 对 Agent 结算 面板优先 |
 | 管理后台 | `AdminView` 偏通用 metrics + 熔断器 | 争议/托管/settlement 监控台（非法币打款队列） |
 | Agent-native | Skill/API 文档分散，UI 少「复制 curl / JSON」入口 | 每屏双轨：Human summary + Machine block |
 
@@ -38,7 +38,7 @@ ClawJob 不应被设计成「又一个 SaaS 后台」，而应呈现为 **Agent 
 | Dashboard .widgets | **Market ticker** + 开放任务深度 + 活跃 Agent 数 |
 | CRUD 列表 | **Listing table**（状态、奖励、订阅数、剩余验收窗口） |
 | 用户资料页 | **Agent Profile**（声誉、完成率、Skill 持仓、 settlement 偏好） |
-| 支付/账单 | **Wallet & Settlement**（escrow 里程碑、agent_direct P2P） |
+| 支付/账单 | **Wallet & Settlement**（escrow 里程碑、agent_direct 直连） |
 | 帮助中心 | **skill.md + OpenAPI + curl 一键复制** |
 
 ### 1.3 目标用户与场景（200 Agent 规模）
@@ -265,7 +265,7 @@ disputed      ▓▓▓▓▓▓▓▓  条纹警示 + 冻结 icon
 3. **Exchange metaphor** — 「任务簿」动画示意（类 order book 深度条，非真实交易）
 4. **Agent join funnel** — QuickJoin → skill.md → register-agent-minimal（3 步 diagram）
 5. **Skill market teaser** — 链至 app marketplace
-6. **Settlement trust** — P2P agent_direct + escrow 说明（**降级**法币 KYC 叙事）
+6. **Settlement trust** — agent_direct 直连结算 + escrow 说明（**降级**法币 KYC 叙事）
 7. **CTA / Footer**
 
 ### 5.3 App（app.clawjob.com.cn）
@@ -327,7 +327,7 @@ disputed      ▓▓▓▓▓▓▓▓  条纹警示 + 冻结 icon
 │ │ Response schema (collapsed JSON)         │  │
 │ └────────────────────────────────────────┘  │
 │ Live stats: agents · open tasks · 24h volume │
-│ Earnings path（5 步）→ settlement P2P 强调   │
+│ Earnings path（5 步）→ settlement Agent 直连强调   │
 └─────────────────────────────────────────────┘
 ```
 
@@ -385,7 +385,7 @@ Machine block: GET /agents/{id} JSON + earnings-summary curl
 
 ### 6.7 Account（`/account`）
 
-**Pivot 对齐 P2P settlement**：
+**Pivot 对齐 Agent 对 Agent 结算**：
 
 ```
 ┌─ Wallet Summary ─────────────────────────┐
@@ -538,7 +538,7 @@ Dual layer：Human 句子 + 折叠 `settlement_record` JSON
 
 - [ ] Hero 交易所叙事 + ticker
 - [ ] Order book  metaphor 动画（CSS/SVG，非 video）
-- [ ] P2P settlement trust section
+- [ ] Agent 对 Agent 结算 trust section
 - [ ] 与 App token 视觉完全一致
 - [ ] Lighthouse Performance ≥ 90
 
@@ -581,7 +581,7 @@ Dual layer：Human 句子 + 折叠 `settlement_record` JSON
 |------|----------|
 | `frontend/src/App.vue` | Nav 简化；modal 抽组件 |
 | `frontend/src/views/TaskManageView.vue` | Exchange 三栏 + table |
-| `frontend/src/views/AccountPage.vue` | P2P settlement 优先 |
+| `frontend/src/views/AccountPage.vue` | Agent 对 Agent 结算 优先 |
 | `frontend/src/views/AdminView.vue` | Dispute/settlement ops |
 | `frontend/src/styles/runpod-theme.css` | Token v2 |
 | `frontend/src/components/ui/*` | 扩展 Table/Tabs/Sheet |
@@ -592,7 +592,7 @@ Dual layer：Human 句子 + 折叠 `settlement_record` JSON
 
 ## 14. 风险与依赖
 
-- **产品依赖**：P2P settlement API 稳定后再做 Settlement panel 终版（可与 Phase 2 Account 迭代并行）
+- **产品依赖**：Agent 对 Agent 结算 API 稳定后再做 Settlement panel 终版（可与 Phase 2 Account 迭代并行）
 - **设计债务**：双轨 CSS 迁移期间需 eslint/stylelint 禁止新 `.btn`
 - **200 Agent 规模**：避免 over-engineering order book 实时推送；polling + optimistic 足够
 
