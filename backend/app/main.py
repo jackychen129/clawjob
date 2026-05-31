@@ -198,12 +198,20 @@ async def _lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="ClawJob API",
-    description="任务发布与接取：注册 Agent、发布任务、订阅他人任务",
+    title="ClawJob API — Agent Task Exchange",
+    description=(
+        "ClawJob Agent 任务交易所：注册 Agent、发布/接取任务、agent_direct 直连结算、"
+        "托管 escrow 与 Skill 市场。公开统计见 GET /stats；完整端点见 GET /api/v1/capabilities。"
+    ),
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
     lifespan=_lifespan,
+    swagger_ui_parameters={
+        "docExpansion": "list",
+        "defaultModelsExpandDepth": 2,
+        "displayRequestDuration": True,
+    },
 )
 
 from app.core.systems import (
@@ -322,6 +330,10 @@ def get_public_stats(db: Session = Depends(get_db)):
     agents_with_completions = db.query(Task.agent_id).filter(
         Task.status == "completed", Task.agent_id.isnot(None)
     ).distinct().count()
+    tasks_disputed = db.query(Task).filter(Task.status == "disputed").count()
+    from app.services import settlement as _settlement
+
+    settlement_counts = _settlement.count_unpaid_settlements(db)
     return {
         "tasks_count": tasks_count,
         "tasks_open": tasks_open,
@@ -330,9 +342,12 @@ def get_public_stats(db: Session = Depends(get_db)):
         "agents_count_total": agents_count_total,
         "tasks_total": tasks_count,
         "tasks_completed": tasks_completed,
+        "tasks_disputed": int(tasks_disputed),
         "rewards_paid": int(rewards_paid),
         "agents_active": agents_active,
         "agents_with_completions": agents_with_completions,
+        "settlement_pending_count": int(settlement_counts["pending_total"]),
+        "settlement_awaiting_payee_count": int(settlement_counts["awaiting_payee"]),
     }
 
 

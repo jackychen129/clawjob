@@ -22,42 +22,36 @@
       </div>
 
       <div v-else class="admin-metrics">
-        <div class="card admin-metric-card">
-          <div class="admin-metric-title">{{ t('admin.tasks') || '任务' }}</div>
-          <div class="admin-metric-value">{{ metrics?.tasks.total ?? 0 }}</div>
+        <div class="card admin-metric-card admin-metric-card--ops">
+          <div class="admin-metric-title">{{ t('admin.metricPublicAgents') || '公开 Agent' }}</div>
+          <div class="admin-metric-value">{{ metrics?.agents.public ?? metrics?.agents.total ?? 0 }}</div>
           <div class="admin-metric-hint">
-            {{ t('admin.todayNew') || '今日新增' }}：{{ metrics?.tasks.today ?? 0 }} ·
-            {{ t('admin.open') || '进行中' }}：{{ metrics?.tasks.open ?? 0 }} ·
-            {{ t('admin.pendingReview') || '待验收' }}：{{ metrics?.tasks.pending_verification ?? 0 }}
-            · {{ t('admin.disputed') || '托管争议' }}：{{ metrics?.tasks.disputed ?? 0 }}
+            {{ t('admin.active') || '活跃' }}：{{ metrics?.agents.active ?? 0 }} ·
+            {{ t('admin.todayNew') || '今日新增' }}：{{ metrics?.agents.new_today ?? 0 }}
           </div>
         </div>
-        <div class="card admin-metric-card">
-          <div class="admin-metric-title">{{ t('admin.users') || '用户' }}</div>
-          <div class="admin-metric-value">{{ metrics?.users.total ?? 0 }}</div>
+        <div class="card admin-metric-card admin-metric-card--ops">
+          <div class="admin-metric-title">{{ t('admin.metricOpenTasks') || '开放任务' }}</div>
+          <div class="admin-metric-value">{{ metrics?.tasks.open ?? 0 }}</div>
           <div class="admin-metric-hint">
-            {{ t('admin.todayNew') || '今日新增' }}：{{ metrics?.users.new_today ?? 0 }} ·
-            {{ t('admin.active') || '活跃' }}：{{ metrics?.users.active ?? 0 }}
+            {{ t('admin.pendingReview') || '待验收' }}：{{ metrics?.tasks.pending_verification ?? 0 }} ·
+            {{ t('admin.tasks') || '任务' }} {{ t('admin.total') || '总计' }}：{{ metrics?.tasks.total ?? 0 }}
           </div>
         </div>
-        <div class="card admin-metric-card">
-          <div class="admin-metric-title">{{ t('admin.agents') || 'Agent' }}</div>
-          <div class="admin-metric-value">{{ metrics?.agents.total ?? 0 }}</div>
+        <div class="card admin-metric-card admin-metric-card--ops">
+          <div class="admin-metric-title">{{ t('admin.metricPendingSettlements') || '待结算' }}</div>
+          <div class="admin-metric-value">{{ metrics?.pending_settlements?.pending_total ?? 0 }}</div>
           <div class="admin-metric-hint">
-            {{ t('admin.todayNew') || '今日新增' }}：{{ metrics?.agents.new_today ?? 0 }} ·
-            {{ t('admin.active') || '活跃' }}：{{ metrics?.agents.active ?? 0 }}
+            {{ t('admin.settlementAwaitingPayer') || '待打款' }}：{{ metrics?.pending_settlements?.awaiting_payer ?? 0 }} ·
+            {{ t('admin.settlementAwaitingPayee') || '待确认' }}：{{ metrics?.pending_settlements?.awaiting_payee ?? 0 }}
           </div>
         </div>
-        <div class="card admin-metric-card">
-          <div class="admin-metric-title">{{ t('admin.rewardsPaid') || '累计发放' }}</div>
-          <div class="admin-metric-value">{{ metrics?.rewards_paid ?? 0 }}</div>
+        <div class="card admin-metric-card admin-metric-card--ops">
+          <div class="admin-metric-title">{{ t('admin.metricDisputes') || '托管争议' }}</div>
+          <div class="admin-metric-value">{{ metrics?.tasks.disputed ?? 0 }}</div>
           <div class="admin-metric-hint">
-            {{ t('admin.generatedAt') || '更新时间' }}：{{ (metrics?.generated_at || '').slice(0, 19).replace('T', ' ') }}
-            <template v-if="metrics?.observability">
-              <br />
-              {{ t('admin.requestsLastHour') || '近1h请求' }}：{{ metrics.observability.requests_last_hour }} ·
-              {{ t('admin.errorsLastHour') || '近1h错误' }}：{{ metrics.observability.errors_last_hour }}
-            </template>
+            {{ t('admin.rewardsPaid') || '累计发放' }}：{{ metrics?.rewards_paid ?? 0 }} ·
+            {{ t('admin.generatedAt') || '更新' }}：{{ (metrics?.generated_at || '').slice(0, 19).replace('T', ' ') }}
           </div>
         </div>
       </div>
@@ -110,6 +104,43 @@
         </TabPanel>
 
         <TabPanel value="settlements">
+          <div class="card admin-card">
+            <div class="admin-logs-head">
+              <h3 class="admin-logs-title">{{ t('admin.settlementQueueTitle') || 'Agent 直连结算队列' }}</h3>
+              <Button size="sm" variant="secondary" type="button" :disabled="pendingSettlementsLoading" @click="reloadPendingSettlements">
+                {{ t('common.retry') || '刷新' }}
+              </Button>
+            </div>
+            <p class="hint">{{ t('admin.settlementQueueHint') || 'agent_direct 任务验收后进入此队列；发布方打款 → 执行方确认。' }}</p>
+            <div v-if="pendingSettlementsLoading && pendingSettlements.length === 0" class="admin-logs-skeleton">
+              <div v-for="i in 4" :key="'psk-'+i" class="tw-skeleton admin-log-skel-row"></div>
+            </div>
+            <div v-else class="admin-log-table">
+              <div class="admin-log-row admin-log-row--head admin-settlement-row">
+                <div>{{ t('admin.disputeColTask') || '任务' }}</div>
+                <div>{{ t('admin.settlementColReward') || '奖励' }}</div>
+                <div>{{ t('admin.settlementColPhase') || '阶段' }}</div>
+                <div>{{ t('admin.settlementColUpdated') || '更新时间' }}</div>
+              </div>
+              <div v-for="it in pendingSettlements" :key="it.task_id" class="admin-log-row admin-settlement-row">
+                <div>
+                  <router-link :to="`/tasks?task=${it.task_id}`" class="admin-log-msg-main admin-settlement-link">
+                    #{{ it.task_id }} {{ it.title }}
+                  </router-link>
+                  <div class="admin-log-time">{{ it.task_status }} · agent#{{ it.payee_agent_id ?? '-' }}</div>
+                </div>
+                <div class="admin-log-level">{{ it.reward_points }}</div>
+                <div>
+                  <Badge :variant="it.phase === 'awaiting_payee' ? 'settlement' : 'p2p'">
+                    {{ settlementPhaseLabel(it.phase) }}
+                  </Badge>
+                </div>
+                <div class="admin-log-time">{{ (it.updated_at || it.created_at || '').slice(0, 19).replace('T', ' ') }}</div>
+              </div>
+              <p v-if="!pendingSettlements.length && !pendingSettlementsLoading" class="empty">{{ t('admin.settlementQueueEmpty') || '暂无待结算任务' }}</p>
+            </div>
+          </div>
+
           <div class="card admin-card">
             <div class="admin-logs-head">
               <h3 class="admin-logs-title">{{ t('admin.clearingTitle') }}</h3>
@@ -369,6 +400,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Button } from '../components/ui/button'
+import { Badge } from '../components/ui/badge'
 import { Tabs, TabList, Tab, TabPanel } from '../components/ui/tabs'
 import PageHeader from '../components/PageHeader.vue'
 import { safeT } from '../i18n'
@@ -419,6 +451,22 @@ const kycLoading = ref(false)
 const kycRecords = ref<api.KycRecord[]>([])
 const kycDecideLoading = ref<number | null>(null)
 const adminTab = ref('disputes')
+const pendingSettlementsLoading = ref(false)
+const pendingSettlements = ref<api.AdminPendingSettlementItem[]>([])
+
+function settlementPhaseLabel(phase: string) {
+  if (phase === 'awaiting_payee') return t('admin.settlementAwaitingPayee') || '待确认到账'
+  if (phase === 'awaiting_payer') return t('admin.settlementAwaitingPayer') || '待打款'
+  return phase
+}
+
+function reloadPendingSettlements() {
+  pendingSettlementsLoading.value = true
+  api.getAdminPendingSettlements({ skip: 0, limit: 50 })
+    .then((res) => { pendingSettlements.value = res.data.items || [] })
+    .catch(() => { pendingSettlements.value = [] })
+    .finally(() => { pendingSettlementsLoading.value = false })
+}
 
 const filteredCbRows = computed(() => {
   const hostQ = cbHostFilter.value.toLowerCase()
@@ -446,6 +494,7 @@ function reloadAll() {
   reloadClearing()
   reloadWithdrawals()
   reloadKyc()
+  reloadPendingSettlements()
 }
 
 function reloadWithdrawals() {
@@ -694,6 +743,7 @@ onMounted(() => {
   transition: box-shadow var(--duration-m) var(--ease-apple), border-color var(--duration-m) var(--ease-apple);
 }
 .admin-metric-card:hover { box-shadow: var(--shadow-card-hover); border-color: rgba(255,255,255,0.08); }
+.admin-metric-card--ops { border-color: rgba(99, 102, 241, 0.18); background: linear-gradient(180deg, rgba(99,102,241,0.06) 0%, var(--card-background) 100%); }
 .admin-metric-title { color: var(--text-secondary); font-size: var(--font-caption); font-weight: 600; letter-spacing: var(--tracking-normal); }
 .admin-metric-value { font-size: 1.75rem; font-weight: 700; margin-top: var(--space-2); letter-spacing: var(--tracking-tight); color: var(--text-primary); }
 .admin-metric-hint { margin-top: var(--space-2); font-size: var(--font-caption); color: var(--text-secondary); line-height: 1.4; }
@@ -737,6 +787,9 @@ onMounted(() => {
 .admin-pagination { display: flex; justify-content: flex-end; align-items: center; gap: var(--space-3); margin-top: var(--space-4); }
 .admin-page-meta { color: var(--text-secondary); font-size: var(--font-caption); }
 .admin-dispute-row { grid-template-columns: 1.2fr 6rem 1.2fr 14rem; }
+.admin-settlement-row { grid-template-columns: 1.4fr 5rem 8rem 10rem; }
+.admin-settlement-link { color: var(--primary-color); text-decoration: none; }
+.admin-settlement-link:hover { text-decoration: underline; }
 .admin-dispute-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
 .admin-cb-history { margin-top: var(--space-4); border-top: var(--border-hairline); padding-top: var(--space-3); }
 .admin-cb-history__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }

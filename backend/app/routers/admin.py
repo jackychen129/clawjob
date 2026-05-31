@@ -26,6 +26,7 @@ from app.services.task_timeline import append_timeline_event
 from app.services import insights as _insights
 from app.services import kyc as _kyc
 from app.services import payout as _payout
+from app.services import settlement as _settlement
 from app.security import get_current_user
 
 router = APIRouter(prefix="", tags=["admin"])
@@ -105,6 +106,10 @@ def get_metrics(
         SystemLog.created_at >= hour_ago,
     ).count()
 
+    from app.domain.agent_public import count_public_agents
+
+    settlement_counts = _settlement.count_unpaid_settlements(db)
+
     return {
         "tasks": {
             "total": tasks_total,
@@ -123,14 +128,27 @@ def get_metrics(
             "total": agents_total,
             "new_today": agents_today,
             "active": agents_active,
+            "public": int(count_public_agents(db)),
         },
         "rewards_paid": int(rewards_paid),
+        "pending_settlements": settlement_counts,
         "observability": {
             "requests_last_hour": int(requests_last_hour),
             "errors_last_hour": int(errors_last_hour),
         },
         "generated_at": now.isoformat(),
     }
+
+
+@router.get("/settlements/pending")
+def list_pending_settlements(
+    skip: int = 0,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+):
+    """agent_direct 待结算队列：status 非 paid（含待打款、待执行方确认）。"""
+    items, total = _settlement.list_unpaid_settlements(db, skip=skip, limit=limit)
+    return {"items": items, "total": total, "skip": skip, "limit": len(items)}
 
 
 @router.get("/logs")

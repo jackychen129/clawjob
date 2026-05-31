@@ -4890,7 +4890,7 @@ def test_sync_skills_from_github_hot(monkeypatch):
             }
         ]
 
-    monkeypatch.setattr(app_main, "_fetch_github_hot_skill_repos", _fake_fetch)
+    monkeypatch.setattr("app.routers.skills._fetch_github_hot_skill_repos", _fake_fetch)
     u = f"sync_skill_{_unique()}"
     token = _register_user(u, f"{u}@example.com", "pass123")["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
@@ -4981,3 +4981,80 @@ def test_agent_direct_settlement_flow():
     assert pc.status_code == 200, pc.text
     assert pc.json()["settlement"]["status"] == "paid"
     assert pc.json()["settlement"].get("payee_confirmed_at")
+
+
+def test_admin_pending_settlements_and_stats_fields():
+    """Admin 结算队列与 /stats settlement 计数字段。"""
+    pub = f"adm_set_pub_{_unique()}"
+    exe = f"adm_set_exe_{_unique()}"
+    admin = f"adm_set_admin_{_unique()}"
+    _register_user(pub, f"{pub}@example.com", "pub")
+    _register_user(exe, f"{exe}@example.com", "exe")
+    _register_user(admin, f"{admin}@example.com", "adminpw")
+    pub_headers = {"Authorization": f"Bearer {client.post('/auth/login', json={'username': pub, 'password': 'pub'}).json()['access_token']}"}
+    exe_headers = {"Authorization": f"Bearer {client.post('/auth/login', json={'username': exe, 'password': 'exe'}).json()['access_token']}"}
+    admin_token = client.post("/auth/login", json={"username": admin, "password": "adminpw"}).json()["access_token"]
+    from app.database.relational_db import SessionLocal, User as UserModel
+
+    db = SessionLocal()
+    try:
+        u = db.query(UserModel).filter(UserModel.username == admin).first()
+        assert u is not None
+        u.is_superuser = True
+        db.commit()
+    finally:
+        db.close()
+    admin_headers = {"Authorization": f"Bearer {admin_token}"}
+
+    reward = 55
+    client.post("/account/recharge", json={"amount": reward + 10}, headers=pub_headers)
+    ar = client.post("/agents/register", json={"name": "QueueAgent", "description": ""}, headers=exe_headers)
+    agent_id = ar.json()["id"]
+    client.put(
+        f"/agents/{agent_id}/payment-profile",
+        json={"methods": [{"type": "alipay", "label": "支付宝", "account_masked": "138****0000", "details_for_counterparty": "alipay:test"}]},
+        headers=exe_headers,
+    )
+    tr = client.post(
+        "/tasks",
+        json={"title": "Admin queue task", "reward_points": reward, "completion_webhook_url": "https://example.com/cb", "settlement_mode": "agent_direct"},
+        headers=pub_headers,
+    )
+    task_id = tr.json()["id"]
+    client.post(f"/tasks/{task_id}/subscribe", json={"agent_id": agent_id}, headers=exe_headers)
+    with patch("app.main.httpx") as m:
+        m.Client.return_value.__enter__.return_value.post.return_value.status_code = 200
+        client.post(f"/tasks/{task_id}/submit-completion", json={"result_summary": "done"}, headers=exe_headers)
+    client.post(f"/tasks/{task_id}/confirm", headers=pub_headers)
+
+    stats = client.get("/stats")
+    assert stats.status_code == 200
+    body = stats.json()
+    assert "settlement_pending_count" in body
+    assert int(body["settlement_pending_count"]) >= 1
+
+    metrics = client.get("/admin/metrics", headers=admin_headers)
+    assert metrics.status_code == 200
+    mbody = metrics.json()
+    assert int(mbody.get("pending_settlements", {}).get("pending_total", 0)) >= 1
+    assert "public" in mbody.get("agents", {})
+
+    pending = client.get("/admin/settlements/pending", headers=admin_headers)
+    assert pending.status_code == 200
+    items = pending.json().get("items") or []
+    assert any(it.get("task_id") == task_id for it in items)
+    row = next(it for it in items if it.get("task_id") == task_id)
+    assert row.get("phase") == "awaiting_payer"
+
+    client.post(
+        f"/tasks/{task_id}/settlement/payer-mark-paid",
+        json={"proof_links": ["https://example.com/p.png"]},
+        headers=pub_headers,
+    )
+    pending2 = client.get("/admin/settlements/pending", headers=admin_headers)
+    row2 = next(it for it in (pending2.json().get("items") or []) if it.get("task_id") == task_id)
+    assert row2.get("phase") == "awaiting_payee"
+
+    client.post(f"/tasks/{task_id}/settlement/payee-confirm", headers=exe_headers)
+    pending3 = client.get("/admin/settlements/pending", headers=admin_headers)
+    assert not any(it.get("task_id") == task_id for it in (pending3.json().get("items") or []))

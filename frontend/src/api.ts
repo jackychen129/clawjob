@@ -1115,11 +1115,37 @@ export function getAdminMetrics() {
       disputed?: number
     }
     users: { total: number; new_today: number; active: number }
-    agents: { total: number; new_today: number; active: number }
+    agents: { total: number; new_today: number; active: number; public?: number }
     rewards_paid: number
+    pending_settlements?: {
+      pending_total: number
+      awaiting_payer: number
+      awaiting_payee: number
+    }
     observability?: { requests_last_hour: number; errors_last_hour: number }
     generated_at: string
   }>('/admin/metrics')
+}
+
+export interface AdminPendingSettlementItem {
+  task_id: number
+  title: string
+  task_status: string
+  reward_points: number
+  settlement_status: string | null
+  phase: 'awaiting_payer' | 'awaiting_payee' | 'paid' | string
+  payer_confirmed_at: string | null
+  payee_confirmed_at: string | null
+  created_at: string | null
+  updated_at: string | null
+  payee_agent_id: number | null
+}
+
+export function getAdminPendingSettlements(params?: { skip?: number; limit?: number }) {
+  return api.get<{ items: AdminPendingSettlementItem[]; total: number; skip: number; limit: number }>(
+    '/admin/settlements/pending',
+    { params }
+  )
 }
 
 export function getAdminLogs(params: { skip?: number; limit?: number; level?: string; category?: string }) {

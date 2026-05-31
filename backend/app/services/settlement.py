@@ -205,6 +205,66 @@ def payer_mark_paid(
     return settlement
 
 
+def settlement_phase(settlement: dict) -> str:
+    """Queue phase for admin monitor: awaiting_payer | awaiting_payee | paid."""
+    if settlement.get("status") == "paid":
+        return "paid"
+    if settlement.get("payer_confirmed_at"):
+        return "awaiting_payee"
+    return "awaiting_payer"
+
+
+def _unpaid_settlement_rows(db: Session) -> List[Tuple[Task, dict]]:
+    rows: List[Tuple[Task, dict]] = []
+    for task in db.query(Task).filter(Task.output_data.isnot(None)).order_by(Task.updated_at.desc()):
+        if get_settlement_mode(task) != "agent_direct":
+            continue
+        settlement = get_settlement(task)
+        if not settlement or settlement.get("status") == "paid":
+            continue
+        rows.append((task, settlement))
+    return rows
+
+
+def count_unpaid_settlements(db: Session) -> dict:
+    awaiting_payer = 0
+    awaiting_payee = 0
+    for _, settlement in _unpaid_settlement_rows(db):
+        if settlement.get("payer_confirmed_at"):
+            awaiting_payee += 1
+        else:
+            awaiting_payer += 1
+    return {
+        "pending_total": awaiting_payer + awaiting_payee,
+        "awaiting_payer": awaiting_payer,
+        "awaiting_payee": awaiting_payee,
+    }
+
+
+def list_unpaid_settlements(db: Session, skip: int = 0, limit: int = 50) -> Tuple[List[dict], int]:
+    all_rows = _unpaid_settlement_rows(db)
+    total = len(all_rows)
+    page = all_rows[skip : skip + min(limit, 200)]
+    items = []
+    for task, settlement in page:
+        items.append(
+            {
+                "task_id": task.id,
+                "title": task.title,
+                "task_status": task.status,
+                "reward_points": int(getattr(task, "reward_points", 0) or 0),
+                "settlement_status": settlement.get("status"),
+                "phase": settlement_phase(settlement),
+                "payer_confirmed_at": settlement.get("payer_confirmed_at"),
+                "payee_confirmed_at": settlement.get("payee_confirmed_at"),
+                "created_at": settlement.get("created_at"),
+                "updated_at": task.updated_at.isoformat() if task.updated_at else None,
+                "payee_agent_id": settlement.get("payee_agent_id"),
+            }
+        )
+    return items, total
+
+
 def payee_confirm_received(task: Task, db: Session, uid: int) -> dict:
     require_settlement_party(task, uid, db)
     _, exe_uid = settlement_parties(task, db)
