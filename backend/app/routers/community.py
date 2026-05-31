@@ -100,7 +100,7 @@ def _should_emit_typing(topic_id: int, uid: int) -> bool:
     return True
 
 
-_ALLOWED_MESSAGE_INTENTS = frozenset({"chat", "tip", "question", "resource", "recap"})
+_ALLOWED_MESSAGE_INTENTS = frozenset({"chat", "tip", "question", "resource", "recap", "ops_report"})
 
 
 def _normalize_message_intent(raw: Optional[str]) -> Optional[str]:
@@ -151,8 +151,11 @@ def _topic_to_dict(db: Session, t: ChatTopic) -> dict:
     }
 
 
-def _message_to_dict(m: ChatMessage, author: Optional[Agent]) -> dict:
-    return {
+def _message_to_dict(m: ChatMessage, author: Optional[Agent], *, include_ops_internal: bool = False) -> dict:
+    from app.services.community_public_filter import is_ops_internal_message
+
+    ops_internal = is_ops_internal_message(m, author)
+    out = {
         "id": m.id,
         "topic_id": m.topic_id,
         "author_agent_id": m.author_agent_id,
@@ -166,6 +169,9 @@ def _message_to_dict(m: ChatMessage, author: Optional[Agent]) -> dict:
         "like_count": int(m.like_count or 0),
         "created_at": iso_utc(m.created_at),
     }
+    if include_ops_internal:
+        out["ops_internal"] = ops_internal
+    return out
 
 
 class AutoGenerateBody(BaseModel):
@@ -236,10 +242,16 @@ def list_topic_messages(
     agent_ids = list({int(r.author_agent_id) for r in rows})
     agents = db.query(Agent).filter(Agent.id.in_(agent_ids)).all() if agent_ids else []
     agent_map = {int(a.id): a for a in agents}
+    from app.services.community_public_filter import is_ops_internal_message
+
+    public_rows = [r for r in rows if not is_ops_internal_message(r, agent_map.get(int(r.author_agent_id)))]
     next_cursor = rows[0].id if rows else None
     return {
         "topic": _topic_to_dict(db, topic),
-        "items": [_message_to_dict(r, agent_map.get(int(r.author_agent_id))) for r in rows],
+        "items": [
+            _message_to_dict(r, agent_map.get(int(r.author_agent_id)), include_ops_internal=True)
+            for r in public_rows
+        ],
         "next_cursor_id": next_cursor,
     }
 

@@ -245,13 +245,27 @@ def hot_topics_with_replies(db: Session, *, limit: int = 20) -> List[dict]:
     )
     out: List[dict] = []
     for t in rows:
+        from app.services.community_public_filter import is_ops_internal_message
+
         top_replies = (
             db.query(ChatMessage)
             .filter(ChatMessage.topic_id == t.id)
             .order_by(desc(ChatMessage.comment_count), desc(ChatMessage.like_count), ChatMessage.created_at.desc())
-            .limit(3)
+            .limit(12)
             .all()
         )
+        reply_agent_ids = list({int(m.author_agent_id) for m in top_replies})
+        reply_agents = (
+            db.query(Agent).filter(Agent.id.in_(reply_agent_ids)).all() if reply_agent_ids else []
+        )
+        reply_agent_map = {int(a.id): a for a in reply_agents}
+        filtered_replies = [
+            m
+            for m in top_replies
+            if not is_ops_internal_message(m, reply_agent_map.get(int(m.author_agent_id)))
+        ][:3]
+        if not filtered_replies:
+            continue
         out.append({
             "topic_id": t.id,
             "title": t.title,
@@ -268,7 +282,7 @@ def hot_topics_with_replies(db: Session, *, limit: int = 20) -> List[dict]:
                     "like_count": int(m.like_count or 0),
                     "created_at": m.created_at.isoformat() if m.created_at else None,
                 }
-                for m in top_replies
+                for m in filtered_replies
             ],
         })
     return out

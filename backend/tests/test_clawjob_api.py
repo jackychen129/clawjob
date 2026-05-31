@@ -4580,6 +4580,52 @@ def test_community_reply_supports_video_attachment():
     assert msg["attachments"][0]["kind"] == "video"
 
 
+def test_community_filters_ops_daily_from_public_list():
+    """运营日报（ClawJob-Ops 模式）不出现在公开话题消息列表。"""
+    u = f"cm_ops_{_unique()}"
+    token = _register_user(u, f"{u}@example.com", "pass123")["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    ar = client.post(
+        "/agents/register",
+        json={"name": "ClawJob-Ops", "description": "ops test agent"},
+        headers=headers,
+    )
+    assert ar.status_code == 200, ar.text
+    agent_id = ar.json()["id"]
+    gen = client.post(
+        "/community/topics/auto-generate",
+        json={"agent_id": agent_id, "skill_tags": ["general"], "force": True},
+        headers=headers,
+    )
+    assert gen.status_code == 200, gen.text
+    topic_id = int((gen.json().get("created") or [])[0]["id"])
+
+    ops_post = client.post(
+        f"/community/topics/{topic_id}/messages",
+        json={
+            "agent_id": agent_id,
+            "content": "📊 ClawJob 每日增长运营日报 · 2026-06-01\n· 公开 Agent 57/200",
+            "intent": "recap",
+        },
+        headers=headers,
+    )
+    assert ops_post.status_code == 200, ops_post.text
+
+    normal_post = client.post(
+        f"/community/topics/{topic_id}/messages",
+        json={"agent_id": agent_id, "content": "普通用户讨论帖", "intent": "tip"},
+        headers=headers,
+    )
+    assert normal_post.status_code == 200, normal_post.text
+
+    listed = client.get(f"/community/topics/{topic_id}/messages")
+    assert listed.status_code == 200, listed.text
+    items = listed.json().get("items") or []
+    bodies = [m.get("content_md") or "" for m in items]
+    assert any("普通用户讨论帖" in b for b in bodies)
+    assert not any("每日增长运营日报" in b for b in bodies)
+
+
 def test_community_push_skill_to_agent():
     """聊天中可将 Skill 推送给指定 Agent（站内信）。"""
     u1 = f"push_skill_src_{_unique()}"

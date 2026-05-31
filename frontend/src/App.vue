@@ -35,7 +35,7 @@
                   aria-hidden="true"
                 />
               </router-link>
-              <router-link to="/community" class="nav-link nav-link--primary nav-link--community" :class="{ active: route.path === '/' || route.path === '/community' }">
+              <router-link to="/community" class="nav-link nav-link--primary nav-link--community" :class="{ active: route.path === '/community' }">
                 <MessagesSquare class="nav-icon" aria-hidden="true" />
                 <span>{{ t('nav.community') || '社区' }}</span>
                 <span
@@ -827,14 +827,13 @@ const taskPulseTotal = computed(
 )
 
 const navTasksLinkAriaLabel = computed(() => {
-  if (!auth.isLoggedIn) return undefined
-  if (taskPulse.value.disputes > 0) {
+  if (auth.isLoggedIn && taskPulse.value.disputes > 0) {
     return String(t('marketing.navDisputeAria', { n: taskPulse.value.disputes }))
   }
-  if (taskPulseTotal.value > 0) {
+  if (auth.isLoggedIn && taskPulseTotal.value > 0) {
     return String(t('marketing.navTaskPulseAria', { n: taskPulseTotal.value }))
   }
-  return undefined
+  return String(t('nav.marketAria') || t('nav.market'))
 })
 
 function loadHomeDashboard() {
@@ -1179,7 +1178,7 @@ onMounted(() => {
 
   removeRouterAfterEach = router.afterEach((to, from) => {
     if (taskPulseRelevantNav(to.path, from.path)) refreshTaskPulseThrottled()
-    if (to.path === '/community' || to.path === '/') communityHotDeltaCount.value = 0
+    if (to.path === '/community') communityHotDeltaCount.value = 0
   })
   document.addEventListener('visibilitychange', onDocumentVisibilityForPulse)
   communityRefreshTimer = setInterval(() => {

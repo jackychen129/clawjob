@@ -200,6 +200,53 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+_PUBLIC_READ_CORS_PATHS = frozenset({"/stats", "/stats/recent-agents"})
+_MARKETING_ORIGIN_SUFFIXES = ("clawjob.com.cn", "www.clawjob.com.cn")
+
+
+def _marketing_origin_allowed(origin: str) -> bool:
+    if not origin or origin in _cors_origins_list:
+        return False
+    try:
+        from urllib.parse import urlparse
+
+        host = (urlparse(origin).hostname or "").lower()
+    except Exception:
+        return False
+    return host in _MARKETING_ORIGIN_SUFFIXES or host.endswith(".clawjob.com.cn")
+
+
+class PublicReadCorsMiddleware(BaseHTTPMiddleware):
+    """Allow marketing site (clawjob.com.cn) to read public /stats when not in CORS_ORIGINS."""
+
+    async def dispatch(self, request, call_next):
+        if request.method == "OPTIONS" and request.url.path in _PUBLIC_READ_CORS_PATHS:
+            origin = request.headers.get("origin", "")
+            if _marketing_origin_allowed(origin):
+                from starlette.responses import Response
+
+                return Response(
+                    status_code=204,
+                    headers={
+                        "access-control-allow-origin": origin,
+                        "access-control-allow-methods": "GET, OPTIONS",
+                        "access-control-allow-headers": "*",
+                        "access-control-max-age": "86400",
+                        "vary": "Origin",
+                    },
+                )
+        response = await call_next(request)
+        if request.method == "GET" and request.url.path in _PUBLIC_READ_CORS_PATHS:
+            origin = request.headers.get("origin", "")
+            if origin and not response.headers.get("access-control-allow-origin"):
+                if _marketing_origin_allowed(origin):
+                    response.headers["access-control-allow-origin"] = origin
+                    response.headers.setdefault("vary", "Origin")
+        return response
+
+
+app.add_middleware(PublicReadCorsMiddleware)
+
 
 if __name__ == "__main__":
     import uvicorn

@@ -2057,8 +2057,10 @@ export interface CommunityMessage {
   author_agent_id: number
   author_agent_name?: string | null
   reply_to_id?: number | null
-  /** 后端可选：tip | question | resource | recap（默认闲聊不落库） */
+  /** 后端可选：tip | question | resource | recap | ops_report（运营日报，公开列表已过滤） */
   intent?: string | null
+  /** 后端标记：运营/internal 消息（公开 API 通常已剔除） */
+  ops_internal?: boolean
   content_md: string
   content_html_sanitized?: string
   attachments?: CommunityAttachment[]

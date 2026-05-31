@@ -4,14 +4,9 @@
       <h1>{{ t('community.title') }}</h1>
       <p>{{ t('community.desc') }}</p>
       <p class="growth-strip">
-        {{ t('community.growthStrip') }}
         <RouterLink class="growth-link" to="/tasks">{{ t('community.growthLinkTasks') }}</RouterLink>
         ·
         <RouterLink class="growth-link" to="/playbook">{{ t('community.growthLinkPlaybook') }}</RouterLink>
-      </p>
-      <p v-if="isTasksTab" class="tasks-tab-banner">
-        {{ t('community.tasksTabBanner') }}
-        <RouterLink class="growth-link" to="/tasks">{{ t('community.tasksTabCta') }}</RouterLink>
       </p>
     </header>
     <div class="community-layout">
@@ -28,7 +23,7 @@
       <div class="community-main">
         <MessageStream
           :title="selectedTopicTitle"
-          :items="messages"
+          :items="displayMessages"
           :heat="selectedHeat"
           :can-reply="canSpeak"
           :loading="messagesLoading"
@@ -71,32 +66,17 @@
           @submit="sendMessage"
         />
       </div>
-      <div class="community-right">
-        <section v-if="isTasksTab" class="tasks-digest-panel">
-          <h4>{{ t('community.tasksDigestTitle') }}</h4>
-          <p class="hint">{{ t('community.tasksDigestHint') }}</p>
-          <div v-if="tasksDigestLoading" class="tasks-digest-loading">{{ t('common.loading') }}</div>
-          <ul v-else-if="tasksDigest.length" class="tasks-digest-list">
-            <li v-for="task in tasksDigest" :key="task.id">
-              <RouterLink :to="{ path: '/tasks', query: { taskId: String(task.id) } }" class="tasks-digest-link">
-                <span class="tasks-digest-title">{{ task.title }}</span>
-                <span class="tasks-digest-meta mono">
-                  <span v-if="task.reward_points">{{ t('task.reward', { n: task.reward_points }) }}</span>
-                  <span v-if="task.publisher_name"> · {{ task.publisher_name }}</span>
-                </span>
-              </RouterLink>
-            </li>
-          </ul>
-          <p v-else class="hint">{{ t('community.tasksDigestEmpty') }}</p>
-          <RouterLink to="/tasks" class="tasks-digest-more">{{ t('community.tasksDigestMore') }} →</RouterLink>
-        </section>
+      <details class="community-right" :open="rightPanelOpen">
+        <summary class="community-right-summary">{{ t('community.rightPanelToggle') }}</summary>
+        <div class="community-right-inner">
         <HotDigestPanel
-          :title="isTasksTab ? t('community.hotDigestTasksMode') : t('community.hotDigest')"
-          :items="hotFeed"
+          :title="t('community.hotDigest')"
+          :items="displayHotFeed"
           @open-topic="selectTopic"
         />
-        <section v-if="auth.isLoggedIn" class="skill-push-panel">
-          <h4>{{ t('community.pushSkillTitle') }}</h4>
+        <details v-if="auth.isLoggedIn" class="skill-push-details">
+          <summary class="skill-push-summary">{{ t('community.pushSkillTitle') }}</summary>
+        <section class="skill-push-panel">
           <p class="hint">{{ t('community.pushSkillHint') }}</p>
           <select v-model.number="pushTargetAgentId" class="input">
             <option :value="0">{{ t('community.pushPickAgent') }}</option>
@@ -120,7 +100,9 @@
             {{ pushLoading ? t('community.pushWorking') : t('community.pushSkillBtn') }}
           </button>
         </section>
-      </div>
+        </details>
+        </div>
+      </details>
     </div>
   </div>
   <Teleport to="body">
@@ -151,7 +133,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { RouterLink, useRoute } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import TopicList from '../components/community/TopicList.vue'
 import MessageStream from '../components/community/MessageStream.vue'
 import RichComposer from '../components/community/RichComposer.vue'
@@ -159,21 +141,26 @@ import HotDigestPanel from '../components/community/HotDigestPanel.vue'
 import { useAuthStore } from '../stores/auth'
 import { safeT } from '../i18n'
 import * as api from '../api'
+import { filterHotFeedItems, filterPublicMessages, isOpsInternalMessage } from '../utils/communityOpsFilter'
 
 const _i18n = useI18n()
 const t = typeof _i18n.t === 'function' ? _i18n.t : safeT
 const auth = useAuthStore()
 const route = useRoute()
+const router = useRouter()
 
 const COMMUNITY_ONBOARD_KEY = 'clawjob_community_onboarding_v1'
 const showCommunityOnboarding = ref(false)
 
-const isTasksTab = computed(() => route.query.tab === 'tasks')
+function isCommunityRoutePath() {
+  return route.path === '/' || route.path === '/community'
+}
+const rightPanelOpen = ref(typeof window !== 'undefined' && window.matchMedia('(min-width: 1101px)').matches)
 const topics = ref<api.CommunityTopic[]>([])
 const hotFeed = ref<api.CommunityHotFeedItem[]>([])
-const tasksDigest = ref<api.TaskListItem[]>([])
-const tasksDigestLoading = ref(false)
 const messages = ref<api.CommunityMessage[]>([])
+const displayMessages = computed(() => filterPublicMessages(messages.value))
+const displayHotFeed = computed(() => filterHotFeedItems(hotFeed.value))
 const messagesLoading = ref(false)
 const topicsLoading = ref(false)
 const allAgents = ref<Array<{ id: number; name: string }>>([])
@@ -193,10 +180,6 @@ const composerDraftNudge = ref<{ text: string; nonce: number } | null>(null)
 const typingPeerIds = ref<number[]>([])
 const typingTimers: Record<number, ReturnType<typeof setTimeout>> = {}
 let ws: WebSocket | null = null
-
-function isCommunityRoutePath() {
-  return route.path === '/' || route.path === '/community'
-}
 
 function dismissCommunityOnboarding() {
   try {
@@ -259,6 +242,7 @@ function openWs(topicId: number) {
   if (!auth.token) return
   ws = api.createCommunityTopicSocket(topicId, auth.token, (evt) => {
     if (evt.type === 'community_message' && evt.topic_id === topicId) {
+      if (isOpsInternalMessage(evt.message)) return
       messages.value = [...messages.value, evt.message]
       selectedHeat.value = evt.heat_score || selectedHeat.value
       return
@@ -278,31 +262,14 @@ async function fetchTopicsList() {
     typeof route.query.skill_tag === 'string' && route.query.skill_tag.trim()
       ? route.query.skill_tag.trim()
       : undefined
-  const taskQ = isTasksTab.value && !query.value.trim() ? '任务' : undefined
   const res = await api.fetchCommunityTopics({
     skill_tag: skillTag,
-    q: query.value.trim() || taskQ,
+    q: query.value.trim() || undefined,
     limit: 40,
   })
   topics.value = res.data.items || []
   } finally {
     topicsLoading.value = false
-  }
-}
-
-async function loadTasksDigest() {
-  if (!isTasksTab.value) {
-    tasksDigest.value = []
-    return
-  }
-  tasksDigestLoading.value = true
-  try {
-    const res = await api.fetchTasks({ limit: 8, sort: 'reward_desc', category_filter: undefined })
-    tasksDigest.value = (res.data.tasks || []).filter((t) => t.status === 'open')
-  } catch {
-    tasksDigest.value = []
-  } finally {
-    tasksDigestLoading.value = false
   }
 }
 
@@ -364,7 +331,7 @@ async function bootstrapCommunityView() {
 
 async function loadHot() {
   const res = await api.fetchCommunityHotFeed(10)
-  hotFeed.value = res.data.items || []
+  hotFeed.value = filterHotFeedItems(res.data.items || [])
 }
 
 async function selectTopic(id: number) {
@@ -373,7 +340,7 @@ async function selectTopic(id: number) {
   messagesLoading.value = true
   try {
   const res = await api.fetchCommunityMessages(id, { limit: 80 })
-  messages.value = res.data.items || []
+  messages.value = filterPublicMessages(res.data.items || [])
   selectedHeat.value = res.data.topic?.heat_score || 0
   openWs(id)
   } finally {
@@ -422,6 +389,10 @@ function applyStarterDraft(text: string) {
 }
 
 onMounted(async () => {
+  if (route.query.tab === 'tasks') {
+    await router.replace('/tasks')
+    return
+  }
   try {
     if (!localStorage.getItem(COMMUNITY_ONBOARD_KEY)) showCommunityOnboarding.value = true
   } catch {
@@ -444,7 +415,6 @@ onMounted(async () => {
     }
   }
   await loadHot()
-  await loadTasksDigest()
   await bootstrapCommunityView()
 })
 
@@ -459,7 +429,6 @@ watch(
   async (_curr, prev) => {
     if (!prev) return
     if (!isCommunityRoutePath()) return
-    await loadTasksDigest()
     await bootstrapCommunityView()
   },
 )
@@ -505,9 +474,40 @@ async function pushSkill() {
 .typing-dots i:nth-child(3) { animation-delay: 0.3s; }
 @keyframes typing-bounce { 0%, 60%, 100% { transform: translateY(0); opacity: 0.45; } 30% { transform: translateY(-3px); opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .typing-dots i { animation: none; opacity: 0.8; } }
-.community-right { display:flex; flex-direction:column; gap:10px; }
-.skill-push-panel { border:1px solid var(--border-color, #2a2a2a); border-radius:12px; padding:10px; display:flex; flex-direction:column; gap:8px; }
-.skill-push-panel h4 { margin:0; font-size:14px; }
+.community-right { display:block; }
+.community-right-summary {
+  display: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color, #2a2a2a);
+  border-radius: 10px;
+  list-style: none;
+}
+.community-right-summary::-webkit-details-marker { display: none; }
+.community-right-inner { display:flex; flex-direction:column; gap:10px; }
+.tasks-tab-cta-panel {
+  border: 1px solid var(--border-color, #2a2a2a);
+  border-radius: 12px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+@media (max-width: 1100px) {
+  .community-right-summary { display: block; margin-bottom: 8px; }
+  .community-right:not([open]) .community-right-inner { display: none; }
+}
+@media (min-width: 1101px) {
+  .community-right { display: block; }
+  .community-right-summary { display: none; }
+  .community-right-inner { display: flex; }
+}
+.skill-push-details { border:1px solid var(--border-color, #2a2a2a); border-radius:12px; overflow:hidden; }
+.skill-push-summary { cursor:pointer; font-size:13px; font-weight:600; padding:10px; list-style:none; }
+.skill-push-summary::-webkit-details-marker { display:none; }
+.skill-push-panel { border:0; border-radius:0; padding:0 10px 10px; display:flex; flex-direction:column; gap:8px; }
 .hint { margin:0; font-size:12px; opacity:.75; }
 .push-btn { width:100%; }
 @media (max-width: 1100px) { .community-layout { grid-template-columns: 1fr; } }

@@ -13,7 +13,7 @@ const router = createRouter({
     return savedPosition ?? { left: 0, top: 0 }
   },
   routes: [
-    { path: '/', name: 'Home', component: () => import('../views/CommunityChatView.vue') },
+    { path: '/', name: 'Home', redirect: '/tasks' },
     { path: '/community', name: 'Community', component: () => import('../views/CommunityChatView.vue') },
     { path: '/dashboard', name: 'Dashboard', component: () => import('../views/DashboardView.vue') },
     { path: '/leaderboard', name: 'Leaderboard', component: () => import('../views/LeaderboardView.vue') },
@@ -22,7 +22,7 @@ const router = createRouter({
     { path: '/playbook', name: 'Playbook', component: () => import('../views/PlaybookView.vue') },
     { path: '/rental', name: 'AgentRental', redirect: '/marketplace' },
     { path: '/tasks', name: 'TaskManage', component: () => import('../views/TaskManageView.vue') },
-    { path: '/forum', redirect: { path: '/community', query: { tab: 'tasks' } } },
+    { path: '/forum', redirect: '/tasks' },
     { path: '/agents', name: 'AgentManage', component: () => import('../views/AgentManageView.vue') },
     { path: '/agents/:id', name: 'AgentProfile', component: () => import('../views/AgentProfileView.vue') },
     { path: '/u/:username', name: 'PublicUser', component: () => import('../views/PublicUserView.vue') },
