@@ -28,6 +28,7 @@ from app.security import get_password_hash, create_access_token, verify_password
 from app.services import referrals as _rf
 from app.services import community as _community
 from app.services.onboarding_quest import onboarding_tasks_for_register
+from app.services.agent_discovery import highest_reward_open_task
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -160,6 +161,48 @@ def _second_task_looks_real(title: str, description: str) -> Optional[str]:
 def _missing_skill_sections(description: str) -> List[str]:
     lowered = (description or "").strip().lower()
     return [s for s in _SKILL_REQUIRED_SECTIONS if s.lower() not in lowered]
+
+
+def _send_first_subscribe_nudge(db: Session, user: User, agent: Agent) -> None:
+    """注册后若 Agent 尚无任务订阅，站内信推送最高奖励开放任务深链（Growth v5）。"""
+    try:
+        sub_count = (
+            db.query(TaskSubscription)
+            .filter(TaskSubscription.agent_id == agent.id)
+            .count()
+        )
+        if sub_count > 0:
+            return
+        top = highest_reward_open_task(db)
+        if not top:
+            return
+        _, _ = _get_or_create_clawjob_system_agent(db)
+        sys_user = db.query(User).filter(User.username == CLAWJOB_SYSTEM_USERNAME).first()
+        if not sys_user:
+            return
+        app_base = os.getenv("CLAWJOB_APP_URL", "https://app.clawjob.com.cn").rstrip("/")
+        api_base = os.getenv("CLAWJOB_API_URL", "https://api.clawjob.com.cn").rstrip("/")
+        task_url = f"{app_base}/#/tasks?taskId={top.id}"
+        reward = int(getattr(top, "reward_points", 0) or 0)
+        body = (
+            f"你好 {agent.name}，你还没有接取任何任务。\n\n"
+            f"推荐从当前最高奖励开放任务开始：\n"
+            f"「{top.title}」— {reward} 点\n"
+            f"任务大厅：{task_url}\n\n"
+            f"接取：POST {api_base}/tasks/{top.id}/subscribe\n"
+            f'Body: {{"agent_id": {agent.id}}}'
+        )
+        db.add(
+            InternalMessage(
+                sender_user_id=int(sys_user.id),
+                recipient_user_id=int(user.id),
+                title="接取你的第一个任务",
+                content=body[:8000],
+                related_task_id=int(top.id),
+            )
+        )
+    except Exception:
+        pass
 
 
 def _send_register_welcome_inbox(db: Session, user: User, agent: Agent, next_steps: dict) -> None:
@@ -680,6 +723,7 @@ def register_via_skill(body: RegisterViaSkillBody, db: Session = Depends(get_db)
     next_steps = _register_minimal_next_steps(db, agent.id)
     try:
         _send_register_welcome_inbox(db, user, agent, next_steps)
+        _send_first_subscribe_nudge(db, user, agent)
         db.commit()
     except Exception:
         db.rollback()
@@ -737,6 +781,7 @@ def register_agent_minimal(request: Request, body: RegisterAgentMinimalBody, db:
     next_steps = _register_minimal_next_steps(db, agent.id)
     try:
         _send_register_welcome_inbox(db, user, agent, next_steps)
+        _send_first_subscribe_nudge(db, user, agent)
         db.add(
             SystemLog(
                 level="info",

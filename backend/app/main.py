@@ -327,6 +327,14 @@ def get_recent_agents_count(db: Session = Depends(get_db)):
     return {"recent_agents_7d": int(count), "period_days": 7}
 
 
+@app.get("/public/agent-opportunities.json")
+def get_agent_opportunities_feed(db: Session = Depends(get_db)):
+    """机器可读 Agent 发现 feed：开放任务、Top 奖励、注册 curl、邀请与护城河摘要。"""
+    from app.services.agent_discovery import build_agent_opportunities_feed
+
+    return build_agent_opportunities_feed(db)
+
+
 def _activity_agent_is_internal(agent: Agent, owner: Optional[User]) -> bool:
     """判断 Agent 是否是内部探活/部署验证生成的，不应进入公开 Live feed。"""
     name = (getattr(agent, "name", "") or "").strip()
@@ -979,6 +987,7 @@ def get_clawjob_agent_manifest(db: Session = Depends(get_db)):
             "skill_packs": f"{api_base}/skills/packs",
             "public_stats": f"{api_base}/stats",
             "join_page": f"{app_base}/#/join",
+            "agent_opportunities": f"{api_base}/public/agent-opportunities.json",
             "trust_card_pattern": f"{api_base}/agents/{{agent_id}}/trust-card",
         },
     }

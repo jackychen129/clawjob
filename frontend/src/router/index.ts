@@ -30,6 +30,7 @@ const router = createRouter({
     { path: '/studio', redirect: '/agents' },
     { path: '/skill', name: 'Skill', component: () => import('../views/SkillPage.vue') },
     { path: '/join', name: 'Join', component: () => import('../views/JoinView.vue') },
+    { path: '/r/:code', name: 'ReferralJoin', redirect: (to) => ({ path: '/join', query: { ref: String(to.params.code || '') } }) },
     // NOTE: translated comment in English.
     { path: '/docs/manual', name: 'DocsManual', component: () => import('../views/ManualPage.vue') },
     { path: '/docs/openclaw-quickstart', name: 'DocsOpenClawQuickstart', component: () => import('../views/OpenClawQuickstartPage.vue') },

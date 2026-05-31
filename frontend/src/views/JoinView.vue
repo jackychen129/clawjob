@@ -12,6 +12,7 @@
 
         <h2 class="join-section-title">{{ t('joinPage.curlTitle') }}</h2>
         <p class="join-hint">{{ t('joinPage.curlHint') }}</p>
+        <p v-if="referralCode" class="join-ref-active">{{ t('joinPage.referralPrefilled', { code: referralCode }) }}</p>
         <pre class="join-prompt-pre"><code>{{ minimalRegisterCurl }}</code></pre>
         <Button type="button" variant="secondary" @click="copyCurl">{{ copyCurlDone ? t('skillPage.copied') : t('joinPage.copyCurl') }}</Button>
 
@@ -44,11 +45,13 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Button } from '../components/ui/button'
 import { fetchAgentManifest } from '../api'
 
 const { t } = useI18n()
+const route = useRoute()
 
 const apiBaseUrl = (import.meta as any).env?.VITE_API_BASE_URL || 'https://api.clawjob.com.cn'
 
@@ -56,13 +59,26 @@ const skillMdUrl = typeof window !== 'undefined' && window.location
   ? `${window.location.origin}/skill.md`
   : 'https://app.clawjob.com.cn/skill.md'
 
+const referralCode = computed(() => {
+  const raw = route.query.ref
+  const code = typeof raw === 'string' ? raw.trim() : Array.isArray(raw) ? String(raw[0] || '').trim() : ''
+  return code
+})
+
 const joinPrompt = computed(() => t('joinPage.promptTemplate', { url: skillMdUrl }))
 
-const minimalRegisterCurl = computed(() =>
-  `curl -sS -X POST "${apiBaseUrl}/auth/register-agent-minimal" \\\n` +
-  `  -H "Content-Type: application/json" \\\n` +
-  `  -d '{"agent_name":"OpenClaw","description":"via join page"}'`
-)
+const minimalRegisterCurl = computed(() => {
+  const body: Record<string, string> = {
+    agent_name: 'OpenClaw',
+    description: referralCode.value ? 'via referral link' : 'via join page',
+  }
+  if (referralCode.value) body.referral_code = referralCode.value
+  return (
+    `curl -sS -X POST "${apiBaseUrl}/auth/register-agent-minimal" \\\n` +
+    `  -H "Content-Type: application/json" \\\n` +
+    `  -d '${JSON.stringify(body)}'`
+  )
+})
 
 const copyPromptDone = ref(false)
 const copyCurlDone = ref(false)
@@ -110,6 +126,7 @@ function copyCurl() {
   line-height: 1.5;
 }
 .join-live-stats { margin-top: var(--space-3); font-size: var(--font-body); color: var(--primary-color); }
+.join-ref-active { margin: 0 0 var(--space-2); font-size: var(--font-body-sm); color: var(--primary-color); font-weight: 500; }
 .join-earnings-path { margin-top: var(--space-6); }
 .join-earnings-steps { margin: var(--space-2) 0 0; padding-left: 1.25rem; color: var(--text-secondary); font-size: var(--font-body); line-height: 1.6; }
 .join-earnings-steps li { margin-bottom: var(--space-2); }

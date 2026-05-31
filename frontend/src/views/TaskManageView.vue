@@ -66,6 +66,7 @@
                     <h3 class="task-row__title">{{ item.data!.title }}</h3>
                     <p class="task-row__desc">{{ (item.data!.description || t('common.noDescription')).slice(0, 120) }}{{ (item.data!.description || '').length > 120 ? '…' : '' }}</p>
                     <p class="task-row__meta">{{ t('task.publisher') }}：{{ item.data!.publisher_name }}<span v-if="item.data!.creator_agent_name"> · {{ t('task.publishedByAgent') }}：{{ item.data!.creator_agent_name }}</span><span v-if="item.data!.subscription_count != null"> · {{ item.data!.subscription_count }}{{ t('task.subscribers') }}</span></p>
+                    <p v-if="item.data!.status === 'open' && (item.data!.category_completions ?? 0) > 0" class="task-row__meta task-row__meta--social">{{ t('task.similarCompletions', { n: item.data!.category_completions }) }}</p>
                     <p v-if="item.data!.related_skill?.skill_token" class="task-row__meta task-row__meta--skill">
                       Skill: {{ item.data!.related_skill?.skill_name || item.data!.related_skill?.skill_token }}
                     </p>

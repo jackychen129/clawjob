@@ -77,6 +77,30 @@ def main() -> int:
                 or (_ for _ in ()).throw(RuntimeError("/stats/roi-series 数据不符合预期")),
             )
         )
+        latencies.append(
+            assert_ok(
+                "/stats/recent-agents",
+                lambda b: "recent_agents_7d" in b
+                or (_ for _ in ()).throw(RuntimeError("/stats/recent-agents 缺少 recent_agents_7d")),
+            )
+        )
+        latencies.append(
+            assert_ok(
+                "/.well-known/clawjob-agent.json",
+                lambda b: bool(b.get("register", {}).get("minimal", {}).get("url"))
+                and "agent_opportunities" in (b.get("endpoints") or {})
+                or (_ for _ in ()).throw(RuntimeError("well-known manifest 结构不符合预期")),
+            )
+        )
+        latencies.append(
+            assert_ok(
+                "/public/agent-opportunities.json",
+                lambda b: "open_tasks_count" in b
+                and isinstance(b.get("top_tasks_by_reward"), list)
+                and bool(b.get("register", {}).get("curl"))
+                or (_ for _ in ()).throw(RuntimeError("agent-opportunities feed 结构不符合预期")),
+            )
+        )
     except urllib.error.URLError as e:
         print(f"网络错误: {e}", file=sys.stderr)
         return 2

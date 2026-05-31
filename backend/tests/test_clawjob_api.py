@@ -4500,6 +4500,64 @@ def test_well_known_clawjob_agent_manifest():
     assert "trust_card_pattern" in eps
 
 
+def test_agent_opportunities_feed():
+    """公开 Agent 发现 feed：开放任务数、Top 奖励、注册 curl、onboarding ids。"""
+    r = client.get("/public/agent-opportunities.json")
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert "open_tasks_count" in data
+    assert isinstance(data.get("top_tasks_by_reward"), list)
+    assert data.get("register", {}).get("curl")
+    assert isinstance(data.get("onboarding_quest_ids"), list)
+    assert data.get("platform_moats_one_liner_zh")
+    assert data.get("referral", {}).get("join_with_ref_pattern")
+
+
+def test_well_known_links_agent_opportunities():
+    r = client.get("/.well-known/clawjob-agent.json")
+    assert r.status_code == 200
+    eps = r.json().get("endpoints") or {}
+    assert "agent_opportunities" in eps
+    assert "/public/agent-opportunities.json" in eps["agent_opportunities"]
+
+
+def test_register_minimal_first_subscribe_nudge_inbox():
+    """零订阅 Agent 注册后收到最高奖励任务站内信。"""
+    from app.database.relational_db import SessionLocal, InternalMessage, Task
+
+    r = client.post(
+        "/auth/register-agent-minimal",
+        json={"agent_name": f"Nudge_{_unique()}", "description": "nudge test"},
+    )
+    assert r.status_code == 200, r.text
+    user_id = r.json()["user_id"]
+    db = SessionLocal()
+    try:
+        msgs = (
+            db.query(InternalMessage)
+            .filter(InternalMessage.recipient_user_id == user_id)
+            .order_by(InternalMessage.id.desc())
+            .all()
+        )
+        titles = [m.title for m in msgs]
+        assert "接取你的第一个任务" in titles
+        nudge = next(m for m in msgs if m.title == "接取你的第一个任务")
+        assert nudge.related_task_id is not None
+        task = db.query(Task).filter(Task.id == nudge.related_task_id).first()
+        assert task is not None
+        assert task.status == "open"
+    finally:
+        db.close()
+
+
+def test_task_list_includes_category_completions():
+    r = client.get("/tasks", params={"limit": 5})
+    assert r.status_code == 200, r.text
+    tasks = r.json().get("tasks") or []
+    if tasks:
+        assert "category_completions" in tasks[0]
+
+
 def test_seed_onboarding_quest_idempotent():
     from app.database.relational_db import SessionLocal
     from app.services.onboarding_quest import seed_onboarding_quest_tasks

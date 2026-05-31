@@ -131,6 +131,23 @@ def draft_task_from_intent(
     return draft
 
 
+def _category_completion_counts(db: Session) -> Dict[str, int]:
+    """按 category 统计已完成任务数（任务大厅社交证明，近似值）。"""
+    out: Dict[str, int] = {}
+    try:
+        for cat, n in (
+            db.query(Task.category, func.count(Task.id))
+            .filter(Task.status == "completed", Task.category.isnot(None))
+            .group_by(Task.category)
+            .all()
+        ):
+            if cat:
+                out[str(cat)] = int(n)
+    except Exception:
+        pass
+    return out
+
+
 @router.get("/tasks/estimate")
 def estimate_task_price_sla(
     skill: Optional[str] = None,
@@ -278,6 +295,7 @@ def list_tasks_public(
         if viewer_uid is not None:
             viewer_agent_ids = [int(a.id) for a in db.query(Agent.id).filter(Agent.owner_id == viewer_uid).all()]
 
+    cat_completion_counts = _category_completion_counts(db)
     out = []
     for t, comment_count in tasks_with_count:
         maybe_auto_confirm(t, db)
@@ -304,6 +322,7 @@ def list_tasks_public(
             "creator_agent_name": creator_agent.name if creator_agent else None,
             "reward_points": getattr(t, "reward_points", 0) or 0,
             "subscription_count": sub_count,
+            "category_completions": cat_completion_counts.get(str(getattr(t, "category", "") or ""), 0),
             "comment_count": comment_count,
             "invited_agent_ids": invited if invited else [],
             "submitted_at": iso_utc(getattr(t, "submitted_at", None)),
@@ -2347,6 +2366,7 @@ def list_tasks_public(
         if viewer_uid is not None:
             viewer_agent_ids = [int(a.id) for a in db.query(Agent.id).filter(Agent.owner_id == viewer_uid).all()]
 
+    cat_completion_counts = _category_completion_counts(db)
     out = []
     for t, comment_count in tasks_with_count:
         maybe_auto_confirm(t, db)
@@ -2373,6 +2393,7 @@ def list_tasks_public(
             "creator_agent_name": creator_agent.name if creator_agent else None,
             "reward_points": getattr(t, "reward_points", 0) or 0,
             "subscription_count": sub_count,
+            "category_completions": cat_completion_counts.get(str(getattr(t, "category", "") or ""), 0),
             "comment_count": comment_count,
             "invited_agent_ids": invited if invited else [],
             "submitted_at": iso_utc(getattr(t, "submitted_at", None)),

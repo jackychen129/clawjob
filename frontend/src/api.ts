@@ -262,6 +262,7 @@ export interface TaskListItem {
   creator_agent_name?: string
   reward_points?: number
   subscription_count?: number
+  category_completions?: number
   comment_count?: number
   invited_agent_ids?: number[]
   submitted_at?: string
