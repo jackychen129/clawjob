@@ -31,6 +31,7 @@ from app.services.payment_methods import (
     list_public_catalog,
     validate_amount,
 )
+from app.services import payout as _payout
 import base64
 
 router = APIRouter(prefix="/account", tags=["account"])
@@ -123,6 +124,35 @@ def _xor_encrypt(plain: str) -> str:
     k = (SECRET_KEY or "clawjob-secret").encode("utf-8") or b"clawjob-secret"
     out = bytes([b ^ k[i % len(k)] for i, b in enumerate(p)])
     return base64.b64encode(out).decode("utf-8")
+
+
+class WithdrawRequestBody(BaseModel):
+    amount: int
+
+
+@router.get("/payout-eligibility")
+def get_payout_eligibility(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Agent 拥有者提现资格：任务点余额、KYC、收款账户、最低门槛。"""
+    uid = int(current_user["user_id"])
+    user = db.query(User).filter(User.id == uid).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    return _payout.compute_payout_eligibility(db, user)
+
+
+@router.post("/withdraw/request")
+def request_withdraw_alias(
+    body: WithdrawRequestBody,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """提现申请别名路由，逻辑同 POST /account/withdrawals。"""
+    from app.routers.kyc import submit_withdrawal, WithdrawBody
+
+    return submit_withdrawal(WithdrawBody(amount=body.amount), db=db, current_user=current_user)
 
 
 # NOTE: translated comment in English.

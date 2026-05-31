@@ -3610,6 +3610,59 @@ def test_kyc_personal_submit_and_approve_unblocks_withdrawal():
     assert me2["kyc_status"] == "approved"
 
 
+def test_payout_eligibility_reflects_credits_and_kyc():
+    """提现资格：任务奖励在 credits，KYC + 收款账户决定 blockers。"""
+    user = f"payel_{_unique()}"
+    tk = _register_user(user, f"{user}@example.com", "pw")["access_token"]
+    h = {"Authorization": f"Bearer {tk}"}
+    r0 = client.get("/account/payout-eligibility", headers=h)
+    assert r0.status_code == 200, r0.text
+    body = r0.json()
+    assert "withdrawable_balance" in body
+    assert "kyc_required" in body.get("blockers", [])
+    assert body["eligible"] is False
+    from app.database.relational_db import SessionLocal, User as UserModel
+
+    db = SessionLocal()
+    try:
+        u = db.query(UserModel).filter(UserModel.username == user).first()
+        u.credits = 150
+        u.kyc_status = "approved"
+        u.receiving_account_type = "alipay"
+        u.receiving_account_name = "Test"
+        u.receiving_account_number = "***@a.com"
+        db.commit()
+    finally:
+        db.close()
+    r1 = client.get("/account/payout-eligibility", headers=h)
+    assert r1.status_code == 200
+    b1 = r1.json()
+    assert b1["eligible"] is True
+    assert b1["withdrawable_balance"] == 150
+
+
+def test_withdraw_request_alias_matches_withdrawals():
+    user = f"wdalias_{_unique()}"
+    tk = _register_user(user, f"{user}@example.com", "pw")["access_token"]
+    h = {"Authorization": f"Bearer {tk}"}
+    from app.database.relational_db import SessionLocal, User as UserModel
+
+    db = SessionLocal()
+    try:
+        u = db.query(UserModel).filter(UserModel.username == user).first()
+        u.credits = 80
+        u.kyc_status = "approved"
+        u.receiving_account_type = "alipay"
+        u.receiving_account_name = "T"
+        u.receiving_account_number = "***@a.com"
+        db.commit()
+    finally:
+        db.close()
+    sub = client.post("/account/withdraw/request", json={"amount": 50}, headers=h)
+    assert sub.status_code == 200, sub.text
+    assert sub.json()["status"] == "pending"
+
+
 def test_kyc_reject_blocks_withdrawal_and_records_reason():
     """C-14：管理员驳回后，用户 kyc_status=rejected，仍无法提现。"""
     user = f"kycr_{_unique()}"
@@ -3672,7 +3725,7 @@ def test_withdrawal_after_approval_deducts_commission_and_admin_can_pay():
     db = SessionLocal()
     try:
         u = db.query(UserModel).filter(UserModel.username == user).first()
-        u.commission_balance = 200
+        u.credits = 200
         u.kyc_status = "approved"
         u.receiving_account_type = "alipay"
         u.receiving_account_name = "Test"
@@ -3684,7 +3737,7 @@ def test_withdrawal_after_approval_deducts_commission_and_admin_can_pay():
     assert sub.status_code == 200, sub.text
     body = sub.json()
     assert body["status"] == "pending"
-    assert body["commission_balance"] == 120
+    assert body["withdrawable_balance"] == 120
     # 管理员标记已打款
     tk_a = _make_admin_token(f"wdrawadm_{_unique()}")
     h_a = {"Authorization": f"Bearer {tk_a}"}
@@ -3706,7 +3759,7 @@ def test_withdrawal_rejection_refunds_balance():
     db = SessionLocal()
     try:
         u = db.query(UserModel).filter(UserModel.username == user).first()
-        u.commission_balance = 100
+        u.credits = 100
         u.kyc_status = "approved"
         u.receiving_account_type = "alipay"
         u.receiving_account_name = "Test"
@@ -3726,7 +3779,7 @@ def test_withdrawal_rejection_refunds_balance():
     db = SessionLocal()
     try:
         u = db.query(UserModel).filter(UserModel.username == user).first()
-        assert u.commission_balance == 100  # 已退回
+        assert u.credits == 100  # 已退回
     finally:
         db.close()
 

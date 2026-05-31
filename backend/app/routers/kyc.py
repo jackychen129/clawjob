@@ -11,11 +11,11 @@ from app.database.relational_db import (
     KycRecord,
     User,
     WithdrawalRequest,
-    UserCommissionRecord,
     get_db,
 )
 from app.security import get_current_user
 from app.services import kyc as _kyc
+from app.services import payout as _payout
 
 router = APIRouter(prefix="/account/kyc", tags=["kyc"])
 
@@ -147,13 +147,15 @@ def submit_withdrawal(
         u = db.query(User).filter(User.id == user.id).with_for_update().first()
     except Exception:
         u = db.query(User).filter(User.id == user.id).first()
-    balance = int(getattr(u, "commission_balance", 0) or 0)
+    if u is None:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    balance = _payout.withdrawable_balance(u)
     if amount > balance:
         raise HTTPException(
             status_code=400,
-            detail=f"佣金余额不足：当前 {balance}，申请 {amount}",
+            detail=f"可提现余额不足：当前 {balance}，申请 {amount}",
         )
-    u.commission_balance = balance - amount
+    from_credits, from_commission = _payout.apply_withdrawal_hold(u, amount)
     req = WithdrawalRequest(
         user_id=u.id,
         amount=amount,
@@ -161,20 +163,25 @@ def submit_withdrawal(
         receiving_account_type=u.receiving_account_type,
         receiving_account_name=u.receiving_account_name,
         receiving_account_number=u.receiving_account_number,
+        remark=_payout.encode_hold(from_credits, from_commission),
     )
     db.add(req)
-    db.add(
-        UserCommissionRecord(
-            user_id=u.id,
-            amount=-amount,
-            remark=f"提现申请 -{amount}（待审核）",
-        )
+    db.flush()
+    _payout.record_withdrawal_hold(
+        db,
+        u,
+        withdrawal_id=req.id,
+        from_credits=from_credits,
+        from_commission=from_commission,
     )
     db.commit()
     db.refresh(req)
     return {
         "withdrawal_id": req.id,
         "status": req.status,
+        "credits_balance": u.credits,
         "commission_balance": u.commission_balance,
-        "message": "提现申请已提交，等待管理员审核",
+        "withdrawable_balance": _payout.withdrawable_balance(u),
+        "processing_time_hint_zh": _payout.processing_time_hint_zh(),
+        "message": "提现申请已提交，等待管理员审核（人工打款）",
     }

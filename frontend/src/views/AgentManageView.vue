@@ -33,8 +33,24 @@
               <span class="earnings-card__label">{{ t('agentManage.earningsOpenTasks') || '平台开放任务' }}</span>
             </div>
             <div class="earnings-card">
-              <span class="earnings-card__num">{{ earningsSummary.credits_balance }}</span>
-              <span class="earnings-card__label">{{ t('agentManage.earningsCredits') || '账户点数' }}</span>
+              <span class="earnings-card__num">{{ earningsSummary.withdrawable_balance ?? earningsSummary.credits_balance }}</span>
+              <span class="earnings-card__label">{{ t('agentManage.earningsWithdrawable') || '可提现' }}</span>
+            </div>
+          </div>
+          <div v-if="earningsSummary.payout" class="earnings-payout-cta">
+            <p v-if="!earningsSummary.payout.kyc_approved" class="hint">
+              <RouterLink to="/account">{{ t('agentManage.payoutCtaKyc') || '完成 KYC 后可提现 → 账户页' }}</RouterLink>
+            </p>
+            <p v-else-if="!earningsSummary.payout.receiving_account_configured" class="hint">
+              <RouterLink to="/account">{{ t('agentManage.payoutCtaReceiving') || '绑定收款账户 → 账户页' }}</RouterLink>
+            </p>
+            <p v-else-if="earningsSummary.payout.eligible" class="hint">
+              <RouterLink to="/account">{{ t('agentManage.payoutCtaWithdraw') || '申请提现 → 账户页' }}</RouterLink>
+            </p>
+            <p v-else class="hint">{{ t('agentManage.payoutCtaEarn') || '继续接任务累积可提现余额' }}</p>
+            <div class="earnings-payout-links">
+              <RouterLink to="/tasks">{{ t('agentManage.goAccept') }}</RouterLink>
+              <RouterLink to="/account">{{ t('agentManage.payoutHubLink') || '赚钱与提现' }}</RouterLink>
             </div>
           </div>
         </section>
@@ -423,6 +439,8 @@ const earningsSummary = ref<{
   pending_verification: number
   platform_tasks_open: number
   credits_balance: number
+  withdrawable_balance?: number
+  payout?: api.PayoutEligibility | null
 } | null>(null)
 
 const studioSummary = computed(() => {
@@ -517,6 +535,8 @@ function loadEarningsSummary(agentId: number) {
         pending_verification: d.pending_verification ?? 0,
         platform_tasks_open: d.platform_tasks_open ?? 0,
         credits_balance: d.credits_balance ?? 0,
+        withdrawable_balance: d.withdrawable_balance ?? d.credits_balance ?? 0,
+        payout: d.payout ?? null,
       }
     })
     .catch(() => { earningsSummary.value = null })
@@ -858,6 +878,8 @@ function copySkillExportBlurb() {
 .agent-skill-box__loading { margin-top: var(--space-3); }
 
 .earnings-summary { margin-bottom: var(--space-6); }
+.earnings-payout-cta { margin-top: var(--space-3); display: grid; gap: var(--space-2); }
+.earnings-payout-links { display: flex; flex-wrap: wrap; gap: var(--space-3); font-size: var(--font-caption); }
 .earnings-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: var(--space-3); margin-top: var(--space-4); }
 .earnings-card { padding: var(--space-3); border: var(--border-hairline); border-radius: var(--radius-md); text-align: center; }
 .earnings-card__num { display: block; font-size: var(--font-section-title); font-weight: 650; color: var(--primary-color); }

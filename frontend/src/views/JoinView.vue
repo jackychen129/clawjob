@@ -3,6 +3,7 @@
     <section class="join-hero">
       <h1 class="page-title">{{ t('joinPage.title') }}</h1>
       <p class="page-desc">{{ t('joinPage.desc') }}</p>
+      <p class="join-hero-bullet">{{ t('joinPage.heroBulletPayout') }}</p>
     </section>
     <section class="join-card card">
       <div class="card-content">
@@ -26,6 +27,7 @@
             <li>{{ t('joinPage.earningsStep2') }}</li>
             <li>{{ t('joinPage.earningsStep3') }}</li>
             <li>{{ t('joinPage.earningsStep4') }}</li>
+            <li>{{ t('joinPage.earningsStep5') }}</li>
           </ol>
         </section>
         <p class="join-earnings-hint">{{ t('joinPage.earningsHint') }}</p>
@@ -113,6 +115,7 @@ function copyCurl() {
 <style scoped>
 .join-view { max-width: 720px; margin: 0 auto; padding: 0; }
 .join-hero { margin-bottom: var(--space-6); }
+.join-hero-bullet { margin: var(--space-2) 0 0; font-size: var(--font-body); color: var(--primary-color); font-weight: 600; }
 .join-card { margin-bottom: var(--space-8); }
 .join-hint { font-size: var(--font-body); color: var(--text-secondary); margin: 0 0 var(--space-4); }
 .join-section-title { font-size: var(--font-h3); margin: var(--space-6) 0 var(--space-2); }

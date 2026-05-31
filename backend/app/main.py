@@ -222,13 +222,14 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 app.include_router(auth.router)
 app.include_router(account.router)
+from app.routers import kyc as kyc_router
+
+app.include_router(kyc_router.router)
+app.include_router(kyc_router.withdraw_router)
 if _CLAWJOB_ENTERPRISE:
-    from app.routers import kyc as kyc_router
     from app.routers import workspaces as workspaces_router
     from app.routers import billing as billing_router
 
-    app.include_router(kyc_router.router)
-    app.include_router(kyc_router.withdraw_router)
     app.include_router(workspaces_router.router)
     app.include_router(billing_router.router)
 app.include_router(community_router.router)
@@ -285,6 +286,7 @@ async def health_check():
         },
         "features": {
             "enterprise_enabled": _CLAWJOB_ENTERPRISE,
+            "payout_enabled": True,
             "community_enabled": os.getenv("CLAWJOB_COMMUNITY_ENABLED", "1").strip() != "0",
             "community_hot_dispatch_enabled": os.getenv("CLAWJOB_COMMUNITY_HOT_DISPATCH_ENABLED", "1").strip() != "0",
             "community_background_jobs": os.getenv("CLAWJOB_COMMUNITY_BACKGROUND_JOBS", "1").strip() != "0",

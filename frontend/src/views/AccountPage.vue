@@ -41,6 +41,90 @@
         <p><strong>{{ credits }}</strong> {{ t('account.points') }}</p>
       </section>
 
+      <section class="card card-content payout-hub" aria-label="Earnings and payout">
+        <h3>{{ t('account.payoutHubTitle') }}</h3>
+        <p class="hint">{{ t('account.payoutHubHint') }}</p>
+        <div v-if="payoutLoading" class="account-skel">{{ t('common.loading') }}</div>
+        <template v-else-if="payout">
+          <div class="payout-stats">
+            <div class="payout-stat">
+              <span class="payout-stat__label">{{ t('account.payoutTaskEarnings') }}</span>
+              <strong class="payout-stat__num">{{ payout.task_reward_earned }}</strong>
+            </div>
+            <div class="payout-stat">
+              <span class="payout-stat__label">{{ t('account.payoutWithdrawable') }}</span>
+              <strong class="payout-stat__num">{{ payout.withdrawable_balance }}</strong>
+            </div>
+            <div class="payout-stat">
+              <span class="payout-stat__label">{{ t('account.payoutMin') }}</span>
+              <strong class="payout-stat__num">{{ payout.min_withdraw_amount }}+</strong>
+            </div>
+          </div>
+          <p v-if="payout.manual_review" class="hint payout-manual-hint">{{ t('account.payoutManualHint', { hint: payout.processing_time_hint_zh }) }}</p>
+          <ul v-if="payoutBlockers.length" class="payout-blockers">
+            <li v-for="b in payoutBlockers" :key="b">{{ t('account.payoutBlocker.' + b) }}</li>
+          </ul>
+          <div class="payout-actions-row">
+            <Button :as="RouterLink" to="/tasks" size="sm" variant="secondary">{{ t('account.payoutGoTasks') }}</Button>
+            <Button :as="RouterLink" to="/agents" size="sm" variant="secondary">{{ t('account.payoutGoAgents') }}</Button>
+          </div>
+
+          <div class="payout-subsection">
+            <h4>{{ t('account.receivingAccountTitle') }}</h4>
+            <p class="hint">{{ t('account.receivingAccountHint') }}</p>
+            <div class="payout-form-grid">
+              <select v-model="receivingForm.account_type" class="input">
+                <option value="alipay">{{ t('account.receivingAlipay') }}</option>
+                <option value="bank_card">{{ t('account.receivingBank') }}</option>
+              </select>
+              <input v-model="receivingForm.account_name" class="input" :placeholder="t('account.receivingAccountName')" />
+              <input v-model="receivingForm.account_number" class="input" :placeholder="t('account.receivingAccountNumber')" />
+              <Button type="button" size="sm" :disabled="receivingSaving" @click="saveReceivingAccount">{{ t('account.saveReceivingAccount') }}</Button>
+            </div>
+            <p v-if="receivingError" class="error-msg">{{ receivingError }}</p>
+          </div>
+
+          <div class="payout-subsection">
+            <h4>{{ t('account.kycTitle') }}</h4>
+            <p class="hint">{{ t('account.kycHint') }}</p>
+            <p class="mono hint">{{ t('account.kycStatus') }}: {{ payout.kyc_status }}</p>
+            <div v-if="payout.kyc_status !== 'approved'" class="payout-form-grid">
+              <input v-model="kycForm.legal_name" class="input" :placeholder="t('account.kycLegalName')" />
+              <select v-model="kycForm.id_type" class="input">
+                <option value="id_card">{{ t('account.kycIdCard') }}</option>
+                <option value="passport">{{ t('account.kycPassport') }}</option>
+              </select>
+              <input v-model="kycForm.id_number" class="input" :placeholder="t('account.kycIdNumber')" />
+              <Button type="button" size="sm" :disabled="kycSubmitting" @click="submitKyc">{{ t('account.kycSubmit') }}</Button>
+            </div>
+            <p v-if="kycError" class="error-msg">{{ kycError }}</p>
+          </div>
+
+          <div class="payout-subsection">
+            <h4>{{ t('account.withdrawTitle') }}</h4>
+            <p class="hint">{{ t('account.withdrawHint') }}</p>
+            <div class="payout-form-grid payout-form-grid--withdraw">
+              <input v-model.number="withdrawAmount" class="input" type="number" :min="payout.min_withdraw_amount" :placeholder="t('account.withdrawAmount')" />
+              <Button type="button" :disabled="withdrawBusy || !payout.eligible" @click="submitWithdraw">{{ withdrawBusy ? '…' : t('account.submitWithdraw') }}</Button>
+            </div>
+            <p v-if="withdrawError" class="error-msg">{{ withdrawError }}</p>
+            <p v-if="withdrawSuccess" class="hint payout-success">{{ withdrawSuccess }}</p>
+          </div>
+
+          <div v-if="withdrawals.length" class="payout-subsection">
+            <h4>{{ t('account.withdrawHistoryTitle') }}</h4>
+            <ul class="withdraw-history">
+              <li v-for="w in withdrawals" :key="w.id" class="withdraw-history__row">
+                <span class="mono">#{{ w.id }}</span>
+                <strong>{{ w.amount }}</strong>
+                <span :class="['withdraw-status', 'is-' + w.status]">{{ w.status }}</span>
+                <span class="hint mono">{{ formatDateTimeLocal(w.submitted_at || '') }}</span>
+              </li>
+            </ul>
+          </div>
+        </template>
+      </section>
+
       <section v-if="!enterpriseEnabled" class="card card-content enterprise-off-hint">
         <h3>{{ t('account.enterpriseOffTitle') }}</h3>
         <p class="hint">{{ t('account.enterpriseOffHint') }}</p>
@@ -302,7 +386,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Button } from '../components/ui/button'
@@ -314,6 +398,20 @@ const { t } = useI18n()
 const auth = useAuthStore()
 const enterpriseEnabled = ref(false)
 const credits = ref(0)
+const payout = ref<api.PayoutEligibility | null>(null)
+const payoutLoading = ref(false)
+const withdrawals = ref<api.WithdrawalRequest[]>([])
+const receivingForm = ref({ account_type: 'alipay', account_name: '', account_number: '' })
+const receivingSaving = ref(false)
+const receivingError = ref('')
+const kycForm = ref({ legal_name: '', id_type: 'id_card', id_number: '' })
+const kycSubmitting = ref(false)
+const kycError = ref('')
+const withdrawAmount = ref<number>(50)
+const withdrawBusy = ref(false)
+const withdrawError = ref('')
+const withdrawSuccess = ref('')
+const payoutBlockers = computed(() => payout.value?.blockers || [])
 const copyTokenDone = ref(false)
 const copyEnvDone = ref(false)
 const apiKeys = ref<api.UserApiKeyItem[]>([])
@@ -467,6 +565,77 @@ function formatDateTimeLocal(isoLike: string): string {
   const d = new Date(isoLike)
   if (Number.isNaN(d.getTime())) return isoLike
   return d.toLocaleString()
+}
+
+function loadPayoutHub() {
+  if (!auth.token) return
+  payoutLoading.value = true
+  Promise.all([
+    api.fetchPayoutEligibility(),
+    api.getReceivingAccount(),
+    api.fetchMyWithdrawals().catch(() => ({ data: { withdrawals: [] } })),
+    api.fetchMyKyc().catch(() => null),
+  ])
+    .then(([elig, recv, wd, kycRes]) => {
+      payout.value = elig.data
+      const r = recv.data as { account_type?: string; account_name?: string; account_number?: string }
+      receivingForm.value = {
+        account_type: r.account_type || 'alipay',
+        account_name: r.account_name || '',
+        account_number: r.account_number || '',
+      }
+      withdrawals.value = wd.data?.withdrawals || []
+      if (kycRes?.data?.latest?.legal_name) {
+        kycForm.value.legal_name = kycRes.data.latest.legal_name
+      }
+      credits.value = elig.data.credits_balance ?? credits.value
+    })
+    .catch(() => { payout.value = null })
+    .finally(() => { payoutLoading.value = false })
+}
+
+function saveReceivingAccount() {
+  receivingError.value = ''
+  receivingSaving.value = true
+  api.updateReceivingAccount({ ...receivingForm.value })
+    .then(() => loadPayoutHub())
+    .catch((e: any) => {
+      receivingError.value = e?.response?.data?.detail || t('common.loadFailed')
+    })
+    .finally(() => { receivingSaving.value = false })
+}
+
+function submitKyc() {
+  kycError.value = ''
+  if (!kycForm.value.legal_name.trim() || !kycForm.value.id_number.trim()) {
+    kycError.value = t('account.kycValidation')
+    return
+  }
+  kycSubmitting.value = true
+  api.submitPersonalKyc({ ...kycForm.value, country: 'CN' })
+    .then(() => loadPayoutHub())
+    .catch((e: any) => {
+      kycError.value = e?.response?.data?.detail || t('common.loadFailed')
+    })
+    .finally(() => { kycSubmitting.value = false })
+}
+
+function submitWithdraw() {
+  withdrawError.value = ''
+  withdrawSuccess.value = ''
+  const amt = Math.floor(Number(withdrawAmount.value) || 0)
+  if (!amt) return
+  withdrawBusy.value = true
+  api.submitWithdrawal(amt)
+    .then((res) => {
+      withdrawSuccess.value = res.data.message || t('account.withdrawSubmitted')
+      credits.value = res.data.credits_balance ?? credits.value
+      loadPayoutHub()
+    })
+    .catch((e: any) => {
+      withdrawError.value = e?.response?.data?.detail || t('account.withdrawFailed')
+    })
+    .finally(() => { withdrawBusy.value = false })
 }
 
 function loadMe() {
@@ -757,6 +926,7 @@ onMounted(async () => {
   const features = await api.loadAppFeatures()
   enterpriseEnabled.value = !!features.enterprise_enabled
   loadMe()
+  loadPayoutHub()
   loadApiKeys()
   loadSkillTree()
   loadMyAgentsForTools()
@@ -827,6 +997,27 @@ onMounted(async () => {
   font-size: var(--font-caption);
 }
 .recharge-link { color: var(--primary-color); font-weight: 500; }
+.payout-hub { display: grid; gap: var(--space-3); }
+.payout-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: var(--space-2); }
+.payout-stat { padding: var(--space-2) var(--space-3); border: var(--border-hairline); border-radius: var(--radius-md); display: grid; gap: 2px; }
+.payout-stat__label { font-size: var(--font-caption); color: var(--text-secondary); }
+.payout-stat__num { font-size: 1.25rem; }
+.payout-manual-hint { color: rgb(245, 158, 11); }
+.payout-blockers { margin: 0; padding-left: 1.2rem; color: var(--text-secondary); font-size: var(--font-caption); }
+.payout-actions-row { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.payout-subsection { margin-top: var(--space-3); padding-top: var(--space-3); border-top: var(--border-hairline); display: grid; gap: var(--space-2); }
+.payout-subsection h4 { margin: 0; font-size: var(--font-body); font-weight: 650; }
+.payout-form-grid { display: grid; gap: var(--space-2); }
+@media (min-width: 560px) {
+  .payout-form-grid { grid-template-columns: repeat(2, 1fr); }
+  .payout-form-grid--withdraw { grid-template-columns: 1fr auto; align-items: center; }
+}
+.withdraw-history { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+.withdraw-history__row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); font-size: var(--font-caption); border: var(--border-hairline); border-radius: var(--radius-md); padding: var(--space-2) var(--space-3); }
+.withdraw-status.is-pending { color: rgb(245, 158, 11); }
+.withdraw-status.is-paid { color: rgb(34, 197, 94); font-weight: 600; }
+.withdraw-status.is-rejected { color: rgb(239, 68, 68); }
+.payout-success { color: rgb(34, 197, 94); }
 .hint { color: var(--text-secondary); font-size: var(--font-body); margin: 0; }
 .account-footer-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-2); }
 .api-key-form { display: grid; grid-template-columns: 1fr; gap: var(--space-2); margin-top: var(--space-3); }

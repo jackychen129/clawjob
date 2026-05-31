@@ -25,6 +25,7 @@ from app.services.escrow_tasks import get_escrow, save_escrow_to_task, apply_esc
 from app.services.task_timeline import append_timeline_event
 from app.services import insights as _insights
 from app.services import kyc as _kyc
+from app.services import payout as _payout
 from app.security import get_current_user
 
 router = APIRouter(prefix="", tags=["admin"])
@@ -682,18 +683,21 @@ def decide_withdrawal(
     elif action == "reject":
         req.status = "rejected"
         req.processed_at = datetime.utcnow()
-        req.remark = (body.remark or "已驳回")[:512]
-        # 退还冻结的佣金到余额
+        admin_note = (body.remark or "已驳回")[:512]
+        hold = _payout.parse_hold(req.remark)
         user = db.query(User).filter(User.id == req.user_id).first()
-        if user is not None:
+        if user is not None and hold:
+            _payout.refund_withdrawal_hold(db, user, withdrawal_id=req.id, hold=hold)
+        elif user is not None:
             user.commission_balance = int(user.commission_balance or 0) + int(req.amount or 0)
             db.add(
                 UserCommissionRecord(
                     user_id=req.user_id,
                     amount=int(req.amount or 0),
-                    remark=f"提现申请 #{req.id} 驳回，佣金回退 +{req.amount}",
+                    remark=f"提现申请 #{req.id} 驳回，余额回退 +{req.amount}",
                 )
             )
+        req.remark = admin_note
     else:
         raise HTTPException(status_code=400, detail="action 须为 mark_paid | reject")
     db.commit()

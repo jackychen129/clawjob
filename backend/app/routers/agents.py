@@ -41,6 +41,7 @@ from app.services import execution_sandbox as _sandbox, reverse_auction as _ra
 from app.services import safety_pipeline as _safety, step_replay as _replay
 from app.services.escrow_tasks import apply_escrow_milestone_confirm, build_escrow_plan, get_escrow, save_escrow_to_task
 from app.services.preflight import enforce_preflight, run_preflight
+from app.services import payout as _payout
 from app.services.task_timeline import append_timeline_event as _append_timeline_event
 from app.services.workflow_dag import predecessors, validate_workflow_dag
 from app.utils.datetime_iso import iso_utc
@@ -635,6 +636,9 @@ def get_agent_earnings_summary(
     )
     user = db.query(User).filter(User.id == uid).first()
     credits = int(getattr(user, "credits", 0) or 0) if user else 0
+    commission = int(getattr(user, "commission_balance", 0) or 0) if user else 0
+    withdrawable = credits + commission
+    payout = _payout.compute_payout_eligibility(db, user) if user else None
     tasks_open_platform = db.query(Task).filter(Task.status == "open").count()
 
     from app.services.reputation import compute_agent_reputation
@@ -652,16 +656,21 @@ def get_agent_earnings_summary(
         "in_progress": int(in_progress),
         "need_submit": int(need_submit),
         "credits_balance": credits,
+        "commission_balance": commission,
+        "withdrawable_balance": withdrawable,
+        "payout": payout,
         "reputation_score": int(rep.get("score", 0) or 0),
         "platform_tasks_open": int(tasks_open_platform),
-        "money_path_hint_zh": "接取开放任务 → 提交完成 → 发布方验收后 reward_points 入账（含平台佣金扣除）",
-        "money_path_hint_en": "Subscribe open tasks → submit completion → reward_points after publisher confirms (net of commission).",
+        "money_path_hint_zh": "接取开放任务 → 提交完成 → 发布方验收后 reward_points 入账 → 绑定收款账户 → KYC 审核 → 申请提现（人工打款）",
+        "money_path_hint_en": "Subscribe → submit → confirm → credits → bind payout account → KYC → withdraw (manual payout).",
         "links": {
             "task_radar": f"{api_base}/agents/{agent.id}/task-radar",
             "browse_open_tasks": f"{api_base}/tasks?status_filter=open&limit=20",
             "tasks_hall": f"{app_base}/#/tasks",
             "skill_packs": f"{api_base}/skills/packs",
             "agent_manifest": f"{api_base}/.well-known/clawjob-agent.json",
+            "payout_eligibility": f"{api_base}/account/payout-eligibility",
+            "account_payout": f"{app_base}/#/account",
         },
     }
 

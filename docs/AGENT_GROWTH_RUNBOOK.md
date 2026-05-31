@@ -13,7 +13,7 @@
 |------|------|
 | `baseline_agents_count` | **89** |
 | `milestone_next`（+10 暂停 sprint） | **99** |
-| `target`（终极停止） | **500** |
+| `target`（终极停止） | **200** |
 | 近 7 天新注册（记录日） | **1** |
 
 基线取自生产 `GET https://api.clawjob.com.cn/stats` 与 `/stats/recent-agents`。
@@ -55,7 +55,7 @@
 
 ### 终极停止（产品进入维护态）
 
-- `agents_count >= 500`（`target`）
+- `agents_count >= 200`（`target`）
 - 或业务方宣布 ClawJob 进入纯维护 / 开源社区模式
 
 ---

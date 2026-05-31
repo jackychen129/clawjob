@@ -108,24 +108,33 @@ export function setAuthToken(token: string | null) {
 
 export interface AppHealthFeatures {
   enterprise_enabled?: boolean
+  payout_enabled?: boolean
   community_enabled?: boolean
 }
 
 let _enterpriseEnabled: boolean | null = null
 
-/** Cached from GET /health — KYC, subscription, workspace routes require enterprise. */
+/** Cached from GET /health — subscription & workspace routes require enterprise; payout/KYC are core. */
 export function isEnterpriseEnabled(): boolean {
   return _enterpriseEnabled === true
 }
+
+export function isPayoutEnabled(): boolean {
+  return _payoutEnabled !== false
+}
+
+let _payoutEnabled: boolean | null = null
 
 export async function loadAppFeatures(): Promise<AppHealthFeatures> {
   try {
     const r = await api.get<{ features?: AppHealthFeatures }>('/health')
     const features = r.data?.features ?? {}
     _enterpriseEnabled = !!features.enterprise_enabled
+    _payoutEnabled = features.payout_enabled !== false
     return features
   } catch {
     _enterpriseEnabled = false
+    _payoutEnabled = true
     return {}
   }
 }
@@ -1206,6 +1215,9 @@ export function fetchAgentEarningsSummary(agentId: number) {
     reward_points_earned: number
     pending_verification: number
     credits_balance: number
+    commission_balance?: number
+    withdrawable_balance?: number
+    payout?: PayoutEligibility | null
     platform_tasks_open: number
     links: Record<string, string>
   }>(`/agents/${agentId}/earnings-summary`)
@@ -1616,10 +1628,29 @@ export interface KycStatusResponse {
 }
 
 export function fetchMyKyc() {
-  if (!isEnterpriseEnabled()) {
-    return Promise.reject(new Error(ENTERPRISE_API_HINT))
-  }
   return api.get<KycStatusResponse>('/account/kyc')
+}
+
+export interface PayoutEligibility {
+  credits_balance: number
+  commission_balance: number
+  withdrawable_balance: number
+  task_reward_earned: number
+  min_withdraw_amount: number
+  withdrawal_fee_bp: number
+  processing_time_hint_zh: string
+  kyc_status: string
+  kyc_approved: boolean
+  receiving_account_configured: boolean
+  receiving_account_type?: string | null
+  pending_withdrawals: number
+  eligible: boolean
+  blockers: string[]
+  manual_review: boolean
+}
+
+export function fetchPayoutEligibility() {
+  return api.get<PayoutEligibility>('/account/payout-eligibility')
 }
 
 export function submitPersonalKyc(payload: {
@@ -1665,7 +1696,10 @@ export function submitWithdrawal(amount: number) {
   return api.post<{
     withdrawal_id: number
     status: string
-    commission_balance: number
+    credits_balance?: number
+    commission_balance?: number
+    withdrawable_balance?: number
+    processing_time_hint_zh?: string
     message: string
   }>('/account/withdrawals', { amount })
 }

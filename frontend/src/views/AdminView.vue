@@ -274,6 +274,71 @@
           <p v-if="!disputes.length && !disputesLoading" class="empty">{{ t('admin.noDisputes') || '暂无争议任务' }}</p>
         </div>
       </div>
+
+      <div class="card admin-card">
+        <div class="admin-logs-head">
+          <h3 class="admin-logs-title">{{ t('admin.withdrawalsTitle') || '提现审核队列' }}</h3>
+          <Button size="sm" variant="secondary" type="button" :disabled="withdrawalsLoading" @click="reloadWithdrawals">
+            {{ t('common.retry') || '刷新' }}
+          </Button>
+        </div>
+        <p class="hint">{{ t('admin.withdrawalsHint') || '人工审核后标记已打款；驳回将退回冻结余额。' }}</p>
+        <div class="admin-log-table">
+          <div class="admin-log-row admin-log-row--head admin-dispute-row">
+            <div>ID</div>
+            <div>{{ t('admin.withdrawColUser') || '用户' }}</div>
+            <div>{{ t('admin.withdrawColAmount') || '金额' }}</div>
+            <div>{{ t('admin.withdrawColAccount') || '收款账户' }}</div>
+            <div>{{ t('admin.disputeColActions') || '操作' }}</div>
+          </div>
+          <div v-for="w in withdrawals" :key="w.id" class="admin-log-row admin-dispute-row">
+            <div class="mono">#{{ w.id }}<br /><span class="admin-log-time">{{ (w.submitted_at || '').slice(0, 16).replace('T', ' ') }}</span></div>
+            <div class="mono">uid={{ w.user_id }}</div>
+            <div><strong>{{ w.amount }}</strong><br /><span class="admin-log-level">{{ w.status }}</span></div>
+            <div class="mono">{{ w.receiving_account_type }} {{ w.receiving_account_number }}</div>
+            <div class="admin-dispute-actions">
+              <Button v-if="w.status === 'pending'" size="sm" type="button" :disabled="withdrawDecideLoading === w.id" @click="decideWithdraw(w.id, 'mark_paid')">
+                {{ t('admin.withdrawMarkPaid') || '已打款' }}
+              </Button>
+              <Button v-if="w.status === 'pending'" size="sm" variant="secondary" type="button" :disabled="withdrawDecideLoading === w.id" @click="decideWithdraw(w.id, 'reject')">
+                {{ t('admin.withdrawReject') || '驳回' }}
+              </Button>
+            </div>
+          </div>
+          <p v-if="!withdrawals.length && !withdrawalsLoading" class="empty">{{ t('admin.withdrawalsEmpty') || '暂无待审提现' }}</p>
+        </div>
+      </div>
+
+      <div class="card admin-card">
+        <div class="admin-logs-head">
+          <h3 class="admin-logs-title">{{ t('admin.kycTitle') || 'KYC 审核' }}</h3>
+          <Button size="sm" variant="secondary" type="button" :disabled="kycLoading" @click="reloadKyc">
+            {{ t('common.retry') || '刷新' }}
+          </Button>
+        </div>
+        <div class="admin-log-table">
+          <div class="admin-log-row admin-log-row--head admin-dispute-row">
+            <div>ID</div>
+            <div>{{ t('admin.kycColName') || '姓名' }}</div>
+            <div>{{ t('admin.kycColKind') || '类型' }}</div>
+            <div>{{ t('admin.disputeColActions') || '操作' }}</div>
+          </div>
+          <div v-for="k in kycRecords" :key="k.id" class="admin-log-row admin-dispute-row">
+            <div class="mono">#{{ k.id }} · uid={{ k.user_id }}</div>
+            <div>{{ k.legal_name }}<br /><span class="hint mono">{{ k.id_number_masked }}</span></div>
+            <div>{{ k.kind }} · {{ k.status }}</div>
+            <div class="admin-dispute-actions">
+              <Button v-if="k.status === 'pending'" size="sm" type="button" :disabled="kycDecideLoading === k.id" @click="approveKyc(k.id)">
+                {{ t('admin.kycApprove') || '通过' }}
+              </Button>
+              <Button v-if="k.status === 'pending'" size="sm" variant="secondary" type="button" :disabled="kycDecideLoading === k.id" @click="rejectKyc(k.id)">
+                {{ t('admin.kycReject') || '驳回' }}
+              </Button>
+            </div>
+          </div>
+          <p v-if="!kycRecords.length && !kycLoading" class="empty">{{ t('admin.kycEmpty') || '暂无待审 KYC' }}</p>
+        </div>
+      </div>
     </template>
   </section>
 </template>
@@ -323,6 +388,12 @@ const clearingRecords = ref<api.PlatformClearingRecord[]>([])
 const communityDispatchLoading = ref(false)
 const communityDispatchResult = ref('')
 const communityDispatchError = ref('')
+const withdrawalsLoading = ref(false)
+const withdrawals = ref<(api.WithdrawalRequest & { user_id?: number })[]>([])
+const withdrawDecideLoading = ref<number | null>(null)
+const kycLoading = ref(false)
+const kycRecords = ref<api.KycRecord[]>([])
+const kycDecideLoading = ref<number | null>(null)
 
 const filteredCbRows = computed(() => {
   const hostQ = cbHostFilter.value.toLowerCase()
@@ -348,6 +419,47 @@ function reloadAll() {
   reloadDisputes()
   reloadCircuitBreakers()
   reloadClearing()
+  reloadWithdrawals()
+  reloadKyc()
+}
+
+function reloadWithdrawals() {
+  withdrawalsLoading.value = true
+  api.adminListWithdrawals({ status: 'pending', limit: 50 })
+    .then((res) => { withdrawals.value = res.data.items || [] })
+    .catch(() => { withdrawals.value = [] })
+    .finally(() => { withdrawalsLoading.value = false })
+}
+
+function decideWithdraw(id: number, action: 'mark_paid' | 'reject') {
+  withdrawDecideLoading.value = id
+  const remark = action === 'mark_paid' ? '支付宝/银行已转账' : '账户信息不符'
+  api.adminDecideWithdrawal(id, action, remark)
+    .then(() => reloadWithdrawals())
+    .finally(() => { withdrawDecideLoading.value = null })
+}
+
+function reloadKyc() {
+  kycLoading.value = true
+  api.adminListKycRecords({ status: 'pending', limit: 50 })
+    .then((res) => { kycRecords.value = res.data.items || [] })
+    .catch(() => { kycRecords.value = [] })
+    .finally(() => { kycLoading.value = false })
+}
+
+function approveKyc(id: number) {
+  kycDecideLoading.value = id
+  api.adminApproveKyc(id)
+    .then(() => reloadKyc())
+    .finally(() => { kycDecideLoading.value = null })
+}
+
+function rejectKyc(id: number) {
+  const reason = window.prompt(t('admin.kycRejectReason') || '驳回原因', '资料不完整') || '资料不完整'
+  kycDecideLoading.value = id
+  api.adminRejectKyc(id, reason)
+    .then(() => reloadKyc())
+    .finally(() => { kycDecideLoading.value = null })
 }
 
 function reloadLogs(reset = false) {
