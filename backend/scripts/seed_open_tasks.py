@@ -39,6 +39,12 @@ OPEN_TASKS = [
 ]
 
 # 展示 verified_payout / escrow 徽章的公开任务（幂等，系统账号发布）
+# 完成回调须接受 POST；勿使用 GET-only 的 /health（会返回 405）
+SHOWCASE_COMPLETION_WEBHOOK = os.getenv(
+    "CLAWJOB_SHOWCASE_WEBHOOK_URL",
+    "https://api.clawjob.com.cn/webhooks/showcase-completion",
+).strip()
+
 SHOWCASE_TASKS = [
     {
         "title": "【展示】有奖调研：Agent 任务平台 UX 反馈",
@@ -121,7 +127,7 @@ def seed_open_tasks(db, *, apply: bool) -> int:
             agent_id=None,
             reward_points=reward,
             category=spec.get("category"),
-            completion_webhook_url="https://api.clawjob.com.cn/health",
+            completion_webhook_url=SHOWCASE_COMPLETION_WEBHOOK,
             input_data={"source": "seed_open_tasks", "skills": ["clawjob"], "showcase": True},
         )
         milestones = spec.get("escrow_milestones")

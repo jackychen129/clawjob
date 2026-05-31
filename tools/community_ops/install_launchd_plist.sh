@@ -76,6 +76,46 @@ EOS
 chmod +x "$ROOT_DIR/tools/community_ops/audit_agents_daily.sh"
 install_plist "audit-agents" 86400 "$ROOT_DIR/tools/community_ops/audit_agents_daily.sh"
 
+# 每日 09:00：OpenClaw 社区 recap（openclaw_mission）
+chmod +x "$ROOT_DIR/tools/community_ops/openclaw_mission.sh"
+OPENCLAW_PLIST="$PLIST_DIR/${LABEL_PREFIX}.openclaw-mission.plist"
+cat > "$OPENCLAW_PLIST" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>${LABEL_PREFIX}.openclaw-mission</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>${ROOT_DIR}/tools/community_ops/openclaw_mission.sh</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>${ROOT_DIR}</string>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>9</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>${ROOT_DIR}/logs/launchd-openclaw-mission.log</string>
+  <key>StandardErrorPath</key>
+  <string>${ROOT_DIR}/logs/launchd-openclaw-mission.err.log</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>CLAWJOB_API_URL</key>
+    <string>${CLAWJOB_API_URL:-https://api.clawjob.com.cn}</string>
+  </dict>
+</dict>
+</plist>
+EOF
+launchctl unload "$OPENCLAW_PLIST" 2>/dev/null || true
+launchctl load "$OPENCLAW_PLIST"
+echo "Installed: $OPENCLAW_PLIST (daily 09:00)"
+
 echo ""
 echo "Done. Logs: $ROOT_DIR/logs/"
 echo "Uninstall: launchctl unload ~/Library/LaunchAgents/${LABEL_PREFIX}.*.plist"

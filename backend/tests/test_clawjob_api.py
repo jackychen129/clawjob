@@ -51,6 +51,16 @@ def test_health():
     assert data["service"] == "clawjob-backend"
 
 
+def test_showcase_completion_webhook_accepts_post():
+    """展示任务完成回调端点接受 POST（避免 /health 405）"""
+    r = client.post(
+        "/webhooks/showcase-completion",
+        json={"task_id": 1, "result_summary": "test"},
+    )
+    assert r.status_code == 200
+    assert r.json().get("ok") is True
+
+
 def test_tasks_list_public():
     """任务大厅：无需登录即可获取任务列表"""
     r = client.get("/tasks")

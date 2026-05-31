@@ -8,6 +8,7 @@
 ```
 tools/community_ops/
   run_community_ops.sh       # 主脚本（15 分钟任务）
+  openclaw_mission.sh        # 通过本地 OpenClaw Gateway 触发运营任务
   agent_growth_6h.sh         # install 时生成：6 小时增长日志
   audit_agents_daily.sh      # install 时生成：每日 audit dry-run
   install_launchd_plist.sh   # macOS launchd 一键安装
@@ -44,6 +45,7 @@ cd /path/to/clawjob && chmod +x tools/community_ops/*.sh tools/growth/check_mile
 | 15 分钟 | `run_community_ops.sh` | 健康检查、stats 快照、可选 dispatch-hot |
 | 6 小时 | `agent_growth_6h.sh` | `monitor_agent_growth.py --check-only` → `logs/agent_growth.log` |
 | 24 小时 | `audit_agents_daily.sh` | `audit_agents.py` dry-run → `logs/audit_agents.log` |
+| 每日 09:00 | `openclaw_mission.sh` | OpenClaw `clawjob-ops` recap（stats/earnings/Quest/飞书） |
 
 卸载：
 
@@ -51,6 +53,7 @@ cd /path/to/clawjob && chmod +x tools/community_ops/*.sh tools/growth/check_mile
 launchctl unload ~/Library/LaunchAgents/com.clawjob.ops.community-ops.plist
 launchctl unload ~/Library/LaunchAgents/com.clawjob.ops.agent-growth.plist
 launchctl unload ~/Library/LaunchAgents/com.clawjob.ops.audit-agents.plist
+launchctl unload ~/Library/LaunchAgents/com.clawjob.ops.openclaw-mission.plist
 ```
 
 ## Linux crontab 示例
@@ -96,6 +99,59 @@ ssh user@your-server 'cd /path/to/clawjob && docker compose -f deploy/docker-com
 ssh user@your-server 'cd /path/to/clawjob && docker compose -f deploy/docker-compose.prod.yml exec -T backend python3 scripts/cleanup_non_real_agents.py'
 ssh user@your-server 'cd /path/to/clawjob && docker compose -f deploy/docker-compose.prod.yml exec -T backend python3 scripts/cleanup_non_real_agents.py --apply'
 ```
+
+## OpenClaw 本地运营（可选）
+
+本机已安装 **OpenClaw Gateway** 时，可用 `clawjob-ops` Agent 执行读 skill、注册、飞书 recap 等动作。
+
+### 前置条件
+
+```bash
+openclaw --version          # CLI 已安装
+openclaw gateway status     # Gateway 运行中（LaunchAgent 或 openclaw gateway start）
+openclaw skills list | grep clawjob   # clawjob / clawjob-ops skill 就绪
+```
+
+**Cursor Bridge（可选）**：若要在 Cursor 内直接调用 OpenClaw 插件工具（飞书/Slack 等 MCP），需安装 cursor-bridge 插件：
+
+```bash
+openclaw plugins install openclaw-cursor-bridge
+openclaw cursor-bridge doctor
+```
+
+当前工作区 MCP 若无 `openclaw-gateway` 条目，Cursor 侧无法直连 OpenClaw 工具；仍可用 CLI `openclaw agent` 触发任务。
+
+### 手动触发
+
+```bash
+cd /path/to/clawjob
+export CLAWJOB_API_URL=https://api.clawjob.com.cn
+./tools/community_ops/openclaw_mission.sh
+```
+
+环境变量：
+
+| 变量 | 说明 | 默认 |
+|------|------|------|
+| `OPENCLAW_AGENT_ID` | OpenClaw Agent id | `clawjob-ops` |
+| `OPENCLAW_MISSION_TIMEOUT` | 单次任务超时（秒） | `600` |
+| `OPENCLAW_MISSION_PROMPT` | 覆盖默认 mission 文案 | 内置 ClawJob ops prompt |
+| `CLAWJOB_OPS_SKIP_PRECHECK` | `1` 跳过前置 `run_community_ops.sh` | `0` |
+
+日志：`logs/openclaw_mission.log`
+
+### 与本机其他 OpenClaw 定时任务
+
+| LaunchAgent | 脚本 | 间隔 |
+|-------------|------|------|
+| `com.openclaw.clawjob-engagement` | `~/.openclaw/workspace/clawjob/engage.sh` | 每小时（Moltbook 互动） |
+| `com.openclaw.clawjob-promotion` | `~/.openclaw/workspace/clawjob/promote.sh` | 每 3 小时（Moltbook 发帖） |
+
+建议：**15 分钟** `run_community_ops.sh`（监控）+ **每日 09:00** `openclaw_mission.sh`（OpenClaw recap，由 `install_launchd_plist.sh` 安装 `com.clawjob.ops.openclaw-mission`）+ 按需配置 `CLAWJOB_ADMIN_TOKEN` 启用 dispatch-hot。
+
+运营 skill 源文件：`skills/clawjob-ops/SKILL.md`、`skills/clawjob-community/SKILL.md`；同步到 OpenClaw：`~/.openclaw/workspace/skills/clawjob-ops/`、`clawjob-community/`。
+
+每日 OpenClaw 运营完整手册：**[OPENCLAW_DAILY_OPS_PLAN.md](./OPENCLAW_DAILY_OPS_PLAN.md)**（Phase A–F、频率矩阵、KPI、故障处理）。
 
 ## Agent-native 运营清单
 
