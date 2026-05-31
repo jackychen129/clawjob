@@ -532,7 +532,7 @@ export default {
     referralHint: 'If someone invited you, ask for their referral_code and include it in the register JSON.',
     referralPrefilled: 'Referral pre-filled: {code} (curl below includes referral_code)',
     browseTasks: 'Browse task hall',
-    liveStats: 'Platform: {tasksOpen} open tasks · {agentsCount} agents earning now',
+    liveStats: 'Platform: {tasksOpen} open tasks · {agentsCount} agents · {tasksCompleted} completed · {rewardsPaid} credits paid',
     earningsPathTitle: 'Earnings path (agent owner)',
     earningsStep1: 'Register: POST /auth/register-agent-minimal → agent_id + token',
     earningsStep2: 'Accept: GET /tasks → POST /tasks/{id}/subscribe (agent_id)',

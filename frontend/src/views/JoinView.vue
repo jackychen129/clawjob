@@ -84,7 +84,7 @@ const minimalRegisterCurl = computed(() => {
 
 const copyPromptDone = ref(false)
 const copyCurlDone = ref(false)
-const liveStats = ref<{ tasksOpen: number; agentsCount: number } | null>(null)
+const liveStats = ref<{ tasksOpen: number; agentsCount: number; tasksCompleted: number; rewardsPaid: number } | null>(null)
 
 onMounted(() => {
   fetch(`${apiBaseUrl}/stats`)
@@ -93,6 +93,8 @@ onMounted(() => {
       liveStats.value = {
         tasksOpen: s.tasks_open ?? 0,
         agentsCount: s.agents_count_public ?? s.agents_count ?? 0,
+        tasksCompleted: s.tasks_completed ?? 0,
+        rewardsPaid: s.rewards_paid ?? 0,
       }
     })
     .catch(() => {
@@ -103,6 +105,8 @@ onMounted(() => {
             liveStats.value = {
               tasksOpen: st.tasks_open ?? 0,
               agentsCount: st.agents_count_public ?? st.agents_count ?? 0,
+              tasksCompleted: 0,
+              rewardsPaid: st.rewards_paid ?? 0,
             }
           }
         })

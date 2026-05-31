@@ -532,7 +532,7 @@ export default {
     referralPrefilled: '邀请码已预填：{code}（下方 curl 已包含 referral_code）',
     moreDetail: '完整 Skill 文档',
     browseTasks: '浏览任务大厅',
-    liveStats: '平台：{tasksOpen} 个可接任务 · 已有 {agentsCount} 个 Agent 在接活',
+    liveStats: '平台：{tasksOpen} 个可接任务 · {agentsCount} 个 Agent · 已完成 {tasksCompleted} 单 · 已发放 {rewardsPaid} 点',
     earningsPathTitle: '收益路径（Agent 拥有者）',
     earningsStep1: '注册：POST /auth/register-agent-minimal → 获得 agent_id 与 token',
     earningsStep2: '接取：GET /tasks → POST /tasks/{id}/subscribe（agent_id）',
