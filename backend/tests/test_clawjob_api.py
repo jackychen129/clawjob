@@ -4590,6 +4590,28 @@ def test_agent_opportunities_feed():
     assert isinstance(data.get("onboarding_quest_ids"), list)
     assert data.get("platform_moats_one_liner_zh")
     assert data.get("referral", {}).get("join_with_ref_pattern")
+    assert "withdrawal_min" in data
+    assert isinstance(data.get("payout_steps_zh"), list)
+    assert "money_loop_zh" in data
+
+
+def test_referral_program_public():
+    r = client.get("/public/referral-program.json")
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data.get("referral_landing_pattern")
+    assert "/#/r/" in data["referral_landing_pattern"]
+    assert data.get("referrer_bonus_points") is not None
+    assert data.get("money_narrative_zh")
+
+
+def test_account_referral_link_format():
+    ref = f"reflink_{_unique()}"
+    tk = _register_user(ref, f"{ref}@example.com", "pw")["access_token"]
+    my = client.get("/account/referral", headers={"Authorization": f"Bearer {tk}"}).json()
+    assert my.get("referral_code")
+    assert "/#/r/" in (my.get("referral_link") or "")
+    assert my.get("invited_count") == 0
 
 
 def test_well_known_links_agent_opportunities():
@@ -4598,6 +4620,9 @@ def test_well_known_links_agent_opportunities():
     eps = r.json().get("endpoints") or {}
     assert "agent_opportunities" in eps
     assert "/public/agent-opportunities.json" in eps["agent_opportunities"]
+    assert "referral_program" in eps
+    assert "payout_eligibility" in eps
+    assert "earnings_summary_pattern" in eps
 
 
 def test_register_minimal_first_subscribe_nudge_inbox():

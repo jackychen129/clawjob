@@ -704,12 +704,22 @@ def get_my_referral(
     rewarded = [r for r in rels if r.first_task_reward_at is not None]
     total_reward_points = int(sum(r.referrer_bonus_points or 0 for r in rewarded))
     pending = total_invited - len(rewarded)
+    app_base = (os.getenv("CLAWJOB_APP_URL", "https://app.clawjob.com.cn") or "").rstrip("/")
     frontend_url = (os.getenv("FRONTEND_URL", "") or "").rstrip("/")
-    share_link = f"{frontend_url}/register?ref={code}" if frontend_url else f"/register?ref={code}"
+    referral_link = f"{app_base}/#/r/{code}" if app_base else f"/#/r/{code}"
+    share_link = referral_link
+    if frontend_url and not app_base:
+        share_link = f"{frontend_url}/#/r/{code}"
     return {
         "user_id": uid,
         "referral_code": code,
+        "referral_link": referral_link,
         "share_link": share_link,
+        "invited_count": total_invited,
+        "rewarded_count": len(rewarded),
+        "total_bonus_earned": total_reward_points,
+        "referrer_bonus_points": _rf.referrer_bonus_points(),
+        "invitee_bonus_points": _rf.invitee_bonus_points(),
         "total_invited": total_invited,
         "completed_first_task": len(rewarded),
         "pending_first_task": pending,
@@ -747,6 +757,7 @@ def list_my_referral_records(
             "first_task_reward_at": r.first_task_reward_at.isoformat() + "Z" if r.first_task_reward_at else None,
             "referrer_bonus_points": int(r.referrer_bonus_points or 0),
             "invitee_bonus_points": int(r.invitee_bonus_points or 0),
+            "rewarded": r.first_task_reward_at is not None,
             "status": "rewarded" if r.first_task_reward_at else "pending",
         })
-    return {"records": out, "total": len(out)}
+    return {"records": out, "items": out, "total": len(out)}

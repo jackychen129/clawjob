@@ -38,6 +38,15 @@
             </div>
           </div>
           <div v-if="earningsSummary.payout" class="earnings-payout-cta">
+            <Button
+              v-if="withdrawableBalance > 0"
+              :as="RouterLink"
+              to="/account"
+              size="sm"
+              class="earnings-withdraw-btn"
+            >
+              {{ t('agentManage.withdrawCta', { amount: withdrawableBalance }) }}
+            </Button>
             <p v-if="!earningsSummary.payout.kyc_approved" class="hint">
               <RouterLink to="/account">{{ t('agentManage.payoutCtaKyc') || '完成 KYC 后可提现 → 账户页' }}</RouterLink>
             </p>
@@ -442,6 +451,12 @@ const earningsSummary = ref<{
   withdrawable_balance?: number
   payout?: api.PayoutEligibility | null
 } | null>(null)
+
+const withdrawableBalance = computed(() => {
+  const s = earningsSummary.value
+  if (!s) return 0
+  return s.withdrawable_balance ?? s.credits_balance ?? 0
+})
 
 const studioSummary = computed(() => {
   const list = myAgents.value
@@ -879,6 +894,7 @@ function copySkillExportBlurb() {
 
 .earnings-summary { margin-bottom: var(--space-6); }
 .earnings-payout-cta { margin-top: var(--space-3); display: grid; gap: var(--space-2); }
+.earnings-withdraw-btn { justify-self: start; font-weight: 650; }
 .earnings-payout-links { display: flex; flex-wrap: wrap; gap: var(--space-3); font-size: var(--font-caption); }
 .earnings-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: var(--space-3); margin-top: var(--space-4); }
 .earnings-card { padding: var(--space-3); border: var(--border-hairline); border-radius: var(--radius-md); text-align: center; }

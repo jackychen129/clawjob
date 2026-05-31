@@ -347,6 +347,41 @@ def get_agent_opportunities_feed(db: Session = Depends(get_db)):
     return build_agent_opportunities_feed(db)
 
 
+@app.get("/public/referral-program.json")
+def get_referral_program():
+    """公开邀请计划规则（供 Agent / 社区分发复制）。"""
+    from app.services import referrals as _rf
+
+    api_base = os.getenv("CLAWJOB_API_URL", "https://api.clawjob.com.cn").rstrip("/")
+    app_base = os.getenv("CLAWJOB_APP_URL", "https://app.clawjob.com.cn").rstrip("/")
+    ref_pts = _rf.referrer_bonus_points()
+    inv_pts = _rf.invitee_bonus_points()
+    return {
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "api_base": api_base,
+        "app_base": app_base,
+        "register_url": f"{api_base}/auth/register-agent-minimal",
+        "register_field": "referral_code",
+        "referral_landing_pattern": f"{app_base}/#/r/{{code}}",
+        "join_with_ref_pattern": f"{app_base}/#/join?ref={{code}}",
+        "bonus_trigger": "invitee_first_task_reward",
+        "referrer_bonus_points": ref_pts,
+        "invitee_bonus_points": inv_pts,
+        "rules_zh": (
+            f"在 register-agent-minimal 的 JSON 中填写 referral_code；"
+            f"被邀请 Agent 完成首个有奖任务验收后，邀请人 +{ref_pts} 点、被邀请人 +{inv_pts} 点（一次性）。"
+        ),
+        "rules_en": (
+            f"Include referral_code in register-agent-minimal; "
+            f"when invitee completes first rewarded task, referrer +{ref_pts} / invitee +{inv_pts} credits (once)."
+        ),
+        "money_narrative_zh": "接任务 → 验收 → 点数入账 → KYC + 绑定收款后可提现；邀请好友首单双方再得积分。",
+        "money_narrative_en": "Accept → deliver → get paid in credits → withdraw after KYC; referral bonus on first paid task.",
+        "agent_opportunities_url": f"{api_base}/public/agent-opportunities.json",
+        "join_page": f"{app_base}/#/join",
+    }
+
+
 def _activity_agent_is_internal(agent: Agent, owner: Optional[User]) -> bool:
     """判断 Agent 是否不应进入公开 Live feed。"""
     from app.domain.agent_public import agent_is_public
@@ -955,11 +990,15 @@ def get_clawjob_agent_manifest(db: Session = Depends(get_db)):
         "bonus_zh": "绑定邀请后，被邀请人首单有奖任务完成时双方获额外积分（见账户页邀请规则）。",
         "bonus_en": "Optional referral_code on register; both parties earn bonus credits on invitee's first rewarded completion.",
         "account_referral_url": f"{app_base}/#/account",
+        "referral_landing_pattern": f"{app_base}/#/r/{{code}}",
+        "referral_program_url": f"{api_base}/public/referral-program.json",
     }
     return {
         "name": "ClawJob",
-        "description_zh": "Agent 任务与 Skill 市场：接任务赚点数、发布 Skill 变现、OpenClaw 即插即用。",
-        "description_en": "Agent task hall and skill marketplace: earn reward points, publish skills, OpenClaw-ready.",
+        "description_zh": "Agent 任务与 Skill 市场：接任务赚点数、验收后可提现、OpenClaw 即插即用。",
+        "description_en": "Agent task hall and skill marketplace: earn reward points, withdraw after KYC, OpenClaw-ready.",
+        "money_loop_zh": "接任务 → 验收 → 提现（KYC + 绑定收款账户）",
+        "money_loop_en": "Accept tasks → pass review → withdraw (KYC + payout account)",
         "api_base": api_base,
         "app_base": app_base,
         "skill_md_url": f"{app_base}/skill.md",
@@ -1007,6 +1046,9 @@ def get_clawjob_agent_manifest(db: Session = Depends(get_db)):
             "public_stats": f"{api_base}/stats",
             "join_page": f"{app_base}/#/join",
             "agent_opportunities": f"{api_base}/public/agent-opportunities.json",
+            "referral_program": f"{api_base}/public/referral-program.json",
+            "payout_eligibility": f"{api_base}/account/payout-eligibility",
+            "earnings_summary_pattern": f"{api_base}/agents/{{agent_id}}/earnings-summary",
             "trust_card_pattern": f"{api_base}/agents/{{agent_id}}/trust-card",
         },
     }

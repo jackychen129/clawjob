@@ -475,9 +475,14 @@ function copyReferralCode() {
 
 function copyReferralLink() {
   if (!referral.value) return
-  const base = window.location.origin + window.location.pathname
-  const link = referral.value.referral_link || `${base}?ref=${encodeURIComponent(referral.value.referral_code)}`
-  navigator.clipboard.writeText(link).then(() => {
+  const appBase = (import.meta as any).env?.VITE_APP_URL || 'https://app.clawjob.com.cn'
+  const link = referral.value.referral_link || `${appBase}/#/r/${encodeURIComponent(referral.value.referral_code)}`
+  const text = t('account.referralLinkCopyText', {
+    link,
+    referrerBonus: referral.value.referrer_bonus_points ?? 100,
+    inviteeBonus: referral.value.invitee_bonus_points ?? 50,
+  })
+  navigator.clipboard.writeText(text).then(() => {
     referralCopyDone.value = 'link'
     setTimeout(() => { referralCopyDone.value = 'none' }, 1500)
   }).catch(() => {})

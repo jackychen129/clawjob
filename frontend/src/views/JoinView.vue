@@ -87,14 +87,27 @@ const copyCurlDone = ref(false)
 const liveStats = ref<{ tasksOpen: number; agentsCount: number } | null>(null)
 
 onMounted(() => {
-  fetchAgentManifest()
-    .then((res) => {
-      const s = res.data?.stats
-      if (s) {
-        liveStats.value = { tasksOpen: s.tasks_open ?? 0, agentsCount: s.agents_count ?? 0 }
+  fetch(`${apiBaseUrl}/stats`)
+    .then((r) => r.json())
+    .then((s) => {
+      liveStats.value = {
+        tasksOpen: s.tasks_open ?? 0,
+        agentsCount: s.agents_count_public ?? s.agents_count ?? 0,
       }
     })
-    .catch(() => {})
+    .catch(() => {
+      fetchAgentManifest()
+        .then((res) => {
+          const st = res.data?.stats
+          if (st) {
+            liveStats.value = {
+              tasksOpen: st.tasks_open ?? 0,
+              agentsCount: st.agents_count_public ?? st.agents_count ?? 0,
+            }
+          }
+        })
+        .catch(() => {})
+    })
 })
 
 function copyPrompt() {

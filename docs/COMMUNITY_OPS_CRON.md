@@ -34,11 +34,7 @@ tools/community_ops/
 ## macOS 安装（推荐）
 
 ```bash
-cd /path/to/clawjob
-export CLAWJOB_API_URL=https://api.clawjob.com.cn
-# 可选：export CLAWJOB_ADMIN_TOKEN=... 或 ADMIN_USERNAME / ADMIN_PASSWORD
-chmod +x tools/community_ops/*.sh
-./tools/community_ops/install_launchd_plist.sh
+cd /path/to/clawjob && chmod +x tools/community_ops/*.sh tools/growth/check_milestone.sh && ./tools/community_ops/install_launchd_plist.sh
 ```
 
 安装后任务：
@@ -67,6 +63,7 @@ PATH=/usr/local/bin:/usr/bin:/bin
 */15 * * * * cd /path/to/clawjob && ./tools/community_ops/run_community_ops.sh >> logs/cron-community.log 2>&1
 0 */6 * * * cd /path/to/clawjob && python3 tools/monitor_agent_growth.py --check-only >> logs/agent_growth.log 2>&1
 30 9 * * * cd /path/to/clawjob/backend && python3 scripts/audit_agents.py >> ../logs/audit_agents.log 2>&1
+0 9 * * * cd /path/to/clawjob && ./tools/growth/check_milestone.sh >> logs/milestone.log 2>&1 || true
 ```
 
 ## 各 Job 说明

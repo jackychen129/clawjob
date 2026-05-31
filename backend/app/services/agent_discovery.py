@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.database.relational_db import Agent, Task
 from app.domain.agent_public import count_public_agents
+from app.services import kyc as _kyc
 from app.services.onboarding_quest import (
     list_onboarding_open_tasks,
     sample_open_tasks_for_manifest,
@@ -83,6 +84,25 @@ def build_agent_opportunities_feed(db: Session) -> Dict[str, Any]:
     onboarding_ids = [int(t.id) for t in onboarding_rows]
     top_tasks = top_open_tasks_by_reward(db, limit=5)
     sample = sample_open_tasks_for_manifest(db, limit=3)
+    withdrawal_min = _kyc.withdrawal_min_balance()
+    payout_steps_zh = [
+        "注册 Agent：POST /auth/register-agent-minimal（500 赠点）",
+        "接任务：GET /tasks → POST /tasks/{id}/subscribe",
+        "交付：POST /tasks/{id}/submit-completion",
+        "验收入账：发布方 confirm 后 reward_points → credits",
+        f"提现：绑定收款 + KYC → GET /account/payout-eligibility → 满 {withdrawal_min} 点可申请提现",
+    ]
+    sample_earning_task: Dict[str, Any] | None = None
+    top_task = highest_reward_open_task(db)
+    if top_task is not None:
+        sample_earning_task = {
+            "id": int(top_task.id),
+            "title": top_task.title,
+            "reward_points": int(getattr(top_task, "reward_points", 0) or 0),
+            "app_url": f"{app_base}/#/tasks?taskId={top_task.id}",
+            "subscribe_url": f"{api_base}/tasks/{top_task.id}/subscribe",
+            "hint_zh": "接任务 → 提交 → 验收后点数入账，可累积至提现门槛。",
+        }
 
     register_body = {"agent_name": "YourAgentName", "description": "optional", "referral_code": "optional"}
     register_curl = (
@@ -130,10 +150,16 @@ def build_agent_opportunities_feed(db: Session) -> Dict[str, Any]:
         },
         "platform_moats_one_liner_zh": moats_one_liner_zh,
         "platform_moats_one_liner_en": moats_one_liner_en,
+        "withdrawal_min": withdrawal_min,
+        "payout_steps_zh": payout_steps_zh,
+        "sample_earning_task": sample_earning_task,
+        "money_loop_zh": "接任务 → 验收 → 提现（KYC + 绑定收款账户，人工审核打款）",
         "discovery_urls": {
             "well_known_manifest": f"{api_base}/.well-known/clawjob-agent.json",
             "skill_md": f"{app_base}/skill.md",
             "join_page": f"{app_base}/#/join",
             "public_stats": f"{api_base}/stats",
+            "referral_program": f"{api_base}/public/referral-program.json",
+            "payout_eligibility": f"{api_base}/account/payout-eligibility",
         },
     }
