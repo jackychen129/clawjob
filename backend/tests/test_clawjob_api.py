@@ -3794,6 +3794,122 @@ def test_withdrawal_rejection_refunds_balance():
         db.close()
 
 
+def test_withdrawal_deducts_credits_before_commission_balance():
+    """提现冻结：优先扣 credits，不足部分扣 commission_balance（payout.split_deduction）。"""
+    user = f"wdsplit_{_unique()}"
+    tk = _register_user(user, f"{user}@example.com", "pw")["access_token"]
+    h = {"Authorization": f"Bearer {tk}"}
+    from app.database.relational_db import SessionLocal, User as UserModel
+    db = SessionLocal()
+    try:
+        u = db.query(UserModel).filter(UserModel.username == user).first()
+        u.credits = 30
+        u.commission_balance = 50
+        u.kyc_status = "approved"
+        u.receiving_account_type = "alipay"
+        u.receiving_account_name = "Split Test"
+        u.receiving_account_number = "***@a.com"
+        db.commit()
+    finally:
+        db.close()
+    sub = client.post("/account/withdrawals", json={"amount": 60}, headers=h)
+    assert sub.status_code == 200, sub.text
+    body = sub.json()
+    assert body["credits_balance"] == 0
+    assert body["commission_balance"] == 20
+    assert body["withdrawable_balance"] == 20
+    db = SessionLocal()
+    try:
+        u = db.query(UserModel).filter(UserModel.username == user).first()
+        assert u.credits == 0
+        assert u.commission_balance == 20
+    finally:
+        db.close()
+
+
+def test_full_payout_happy_path_from_task_confirm():
+    """端到端：接任务 → 验收发奖 → earnings-summary → 收款/KYC → 提现 → 管理员打款。"""
+    pub = f"fp_pub_{_unique()}"
+    exe = f"fp_exe_{_unique()}"
+    _register_user(pub, f"{pub}@example.com", "pub")
+    _register_user(exe, f"{exe}@example.com", "exe")
+    pub_headers = {"Authorization": f"Bearer {client.post('/auth/login', json={'username': pub, 'password': 'pub'}).json()['access_token']}"}
+    exe_headers = {"Authorization": f"Bearer {client.post('/auth/login', json={'username': exe, 'password': 'exe'}).json()['access_token']}"}
+    reward = 100
+    client.post("/account/recharge", json={"amount": reward + 50}, headers=pub_headers)
+    tr = client.post(
+        "/tasks",
+        json={
+            "title": "提现端到端任务",
+            "reward_points": reward,
+            "completion_webhook_url": "https://example.com/cb",
+        },
+        headers=pub_headers,
+    )
+    assert tr.status_code == 200, tr.text
+    task_id = tr.json()["id"]
+    ar = client.post("/agents/register", json={"name": "PayoutAgent", "description": ""}, headers=exe_headers)
+    assert ar.status_code == 200, ar.text
+    agent_id = ar.json()["id"]
+    assert client.post(f"/tasks/{task_id}/subscribe", json={"agent_id": agent_id}, headers=exe_headers).status_code == 200
+    with patch("app.main.httpx") as m:
+        m.Client.return_value.__enter__.return_value.post.return_value.status_code = 200
+        assert client.post(
+            f"/tasks/{task_id}/submit-completion",
+            json={"result_summary": "done"},
+            headers=exe_headers,
+        ).status_code == 200
+    assert client.post(f"/tasks/{task_id}/confirm", headers=pub_headers).status_code == 200
+    bal = client.get("/account/balance", headers=exe_headers).json()
+    earned_net = bal["credits"]
+    assert earned_net >= 10  # 满足默认最低提现门槛
+    es = client.get(f"/agents/{agent_id}/earnings-summary", headers=exe_headers)
+    assert es.status_code == 200, es.text
+    es_body = es.json()
+    assert es_body["tasks_completed"] == 1
+    assert es_body["credits_balance"] == earned_net
+    assert es_body.get("payout", {}).get("eligible") is False  # 尚未 KYC/收款账户
+    recv = client.patch(
+        "/account/receiving-account",
+        json={"account_type": "alipay", "account_name": "Executor", "account_number": "138****0000"},
+        headers=exe_headers,
+    )
+    assert recv.status_code == 200, recv.text
+    kyc_sub = client.post(
+        "/account/kyc/personal",
+        json={"legal_name": "Executor User", "id_type": "id_card", "id_number": "110101199001011234"},
+        headers=exe_headers,
+    )
+    assert kyc_sub.status_code == 200, kyc_sub.text
+    rec_id = kyc_sub.json()["kyc"]["id"]
+    tk_a = _make_admin_token(f"fp_adm_{_unique()}")
+    h_a = {"Authorization": f"Bearer {tk_a}"}
+    assert client.post(f"/admin/kyc/records/{rec_id}/approve", json={}, headers=h_a).status_code == 200
+    elig = client.get("/account/payout-eligibility", headers=exe_headers).json()
+    assert elig["eligible"] is True
+    assert elig["withdrawable_balance"] == earned_net
+    withdraw_amt = min(50, earned_net)
+    wd = client.post("/account/withdrawals", json={"amount": withdraw_amt}, headers=exe_headers)
+    assert wd.status_code == 200, wd.text
+    wd_body = wd.json()
+    assert wd_body["status"] == "pending"
+    assert wd_body["withdrawable_balance"] == earned_net - withdraw_amt
+    decide = client.post(
+        f"/admin/withdrawals/{wd_body['withdrawal_id']}/decide",
+        json={"action": "mark_paid", "remark": "测试打款"},
+        headers=h_a,
+    )
+    assert decide.status_code == 200
+    assert decide.json()["status"] == "paid"
+    from app.database.relational_db import SessionLocal, User as UserModel
+    db = SessionLocal()
+    try:
+        u = db.query(UserModel).filter(UserModel.username == exe).first()
+        assert u.credits == earned_net - withdraw_amt
+    finally:
+        db.close()
+
+
 # ========================= D-17 工作区 / 团队 =========================
 
 

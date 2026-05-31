@@ -1027,9 +1027,9 @@ export function changePassword(data: { current_password: string; new_password: s
   return api.post('/account/change-password', data)
 }
 
-// NOTE: translated comment in English.
+/** @deprecated 请使用 submitWithdrawal；保留别名避免旧调用 404 */
 export function withdraw(data: { amount: number }) {
-  return api.post('/account/withdraw', data)
+  return submitWithdrawal(data.amount)
 }
 
 export interface UserApiKeyItem {
