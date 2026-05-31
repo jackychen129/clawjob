@@ -267,8 +267,11 @@ def get_or_create_clawjob_system_agent(db: Session):
     return user, agent
 
 
-def pay_task_reward(task: Task, db: Session) -> bool:
-    """发放任务奖励：接取者得奖励；若已配置佣金则按比例计入发布者佣金余额。已完成则返回 False。"""
+def pay_task_reward(task: Task, db: Session, *, skip_credits: bool = False) -> bool:
+    """发放任务奖励：接取者得奖励；若已配置佣金则按比例计入发布者佣金余额。已完成则返回 False。
+
+    skip_credits=True（agent_direct 结算）：不发平台 credits，仅完成任务并触发信誉/社区钩子。
+    """
     if task.status == "completed":
         return False
     reward_points = getattr(task, "reward_points", 0) or 0
@@ -276,6 +279,8 @@ def pay_task_reward(task: Task, db: Session) -> bool:
     if reward_points > 0 and task.agent_id:
         agent = db.query(Agent).filter(Agent.id == task.agent_id).first()
         if agent:
+            invitee_user_id_for_referral = int(agent.owner_id)
+        if agent and not skip_credits:
             receiver = db.query(User).filter(User.id == agent.owner_id).first()
             if receiver:
                 commission = int(reward_points * PLATFORM_COMMISSION_RATE)
@@ -403,8 +408,16 @@ def maybe_auto_confirm(task: Task, db: Session) -> None:
         )
         db.commit()
         return
-    pay_task_reward(task, db)
-    _append_timeline_event(task, "auto_confirmed", "验收截止未操作，系统自动确认并发奖")
+    from app.services.settlement import create_settlement_on_confirm, get_settlement_mode
+
+    reward_points = int(getattr(task, "reward_points", 0) or 0)
+    agent_direct = get_settlement_mode(task) == "agent_direct" and reward_points > 0
+    pay_task_reward(task, db, skip_credits=agent_direct)
+    if agent_direct:
+        create_settlement_on_confirm(task, db)
+        _append_timeline_event(task, "auto_confirmed", "验收截止未操作，系统自动确认；Agent 间结算待完成")
+    else:
+        _append_timeline_event(task, "auto_confirmed", "验收截止未操作，系统自动确认并发奖")
     db.commit()
 def task_extra(t: Task, db: Session) -> dict:
     """任务扩展字段：分类、要求、地点、时长、技能等"""
@@ -422,6 +435,7 @@ def task_extra(t: Task, db: Session) -> dict:
         "verification_requirements": d.get("verification_requirements") if isinstance(d.get("verification_requirements"), list) else [],
         "related_skill": task_related_skill(db, t, d),
         "collaborative": bool(d.get("collaborative")),
+        "settlement_mode": (d.get("settlement_mode") or "platform_credits"),
     }
     out["verification_hours"] = task_verification_hours(t)
     out["verification_extend_used"] = int(d.get("verification_extend_used", 0) or 0)
@@ -469,7 +483,18 @@ def task_extra(t: Task, db: Session) -> dict:
     reward_pts = int(getattr(t, "reward_points", 0) or 0)
     if reward_pts > 0:
         badges.append("verified_payout")
+    from app.services.settlement import get_settlement, get_settlement_mode
+
+    if get_settlement_mode(t) == "agent_direct":
+        badges.append("agent_direct_settlement")
     out["badges"] = badges
+    stl = get_settlement(t)
+    if stl:
+        out["settlement"] = {
+            "status": stl.get("status"),
+            "payer_confirmed_at": stl.get("payer_confirmed_at"),
+            "payee_confirmed_at": stl.get("payee_confirmed_at"),
+        }
     return out
 def task_is_visible_to(task: Task, viewer_user_id: Optional[int], viewer_agent_ids: List[int]) -> bool:
     """定向任务可见性：仅发布者 + 被邀请 Agent 的拥有者可见。

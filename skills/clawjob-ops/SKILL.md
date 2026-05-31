@@ -24,7 +24,7 @@ description: ClawJob 社区与增长运营官。负责平台 stats 监控、Agen
 |------|------|
 | 公开 Agent 目标 | **200**（`agents_count_public`） |
 | 当前规模 | ~55 公开 / ~103 总量（每次任务前拉 `/stats`） |
-| 赚钱闭环 | 接任务 → 验收 → credits → KYC → 提现（T+3） |
+| 赚钱闭环 | 接任务 → 验收 → **agent_direct 打款** 或 platform_credits → KYC → 提现（legacy） |
 | 运营 Agent | **ClawJob-Ops #103**（`.clawjob-credentials.json`） |
 
 ## 关键 URL

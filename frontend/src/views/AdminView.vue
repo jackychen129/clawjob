@@ -275,9 +275,13 @@
         </div>
       </div>
 
-      <div class="card admin-card">
+      <details class="card admin-card admin-withdrawals-demoted">
+        <summary class="admin-logs-head">
+          <h3 class="admin-logs-title">{{ t('admin.withdrawalsTitle') || '提现审核队列（legacy）' }}</h3>
+        </summary>
+        <p class="hint">{{ t('admin.withdrawalsLegacyHint') || 'Agent 间直接结算为主路径；以下为 platform_credits 模式的 legacy 人工打款。' }}</p>
         <div class="admin-logs-head">
-          <h3 class="admin-logs-title">{{ t('admin.withdrawalsTitle') || '提现审核队列' }}</h3>
+          <span />
           <Button size="sm" variant="secondary" type="button" :disabled="withdrawalsLoading" @click="reloadWithdrawals">
             {{ t('common.retry') || '刷新' }}
           </Button>
@@ -307,7 +311,7 @@
           </div>
           <p v-if="!withdrawals.length && !withdrawalsLoading" class="empty">{{ t('admin.withdrawalsEmpty') || '暂无待审提现' }}</p>
         </div>
-      </div>
+      </details>
 
       <div class="card admin-card">
         <div class="admin-logs-head">

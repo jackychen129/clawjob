@@ -4906,3 +4906,78 @@ def test_sync_skills_from_github_hot(monkeypatch):
     assert int(data.get("total") or 0) >= 1
     first = (data.get("items") or [])[0]
     assert "github.com/foo/bar-skill" in (first.get("github_url") or "")
+
+
+def test_agent_direct_settlement_flow():
+    """agent_direct：验收 → settlement pending → 发布方 mark paid → 执行方 confirm；不发平台 credits。"""
+    pub = f"ads_pub_{_unique()}"
+    exe = f"ads_exe_{_unique()}"
+    _register_user(pub, f"{pub}@example.com", "pub")
+    _register_user(exe, f"{exe}@example.com", "exe")
+    pub_headers = {"Authorization": f"Bearer {client.post('/auth/login', json={'username': pub, 'password': 'pub'}).json()['access_token']}"}
+    exe_headers = {"Authorization": f"Bearer {client.post('/auth/login', json={'username': exe, 'password': 'exe'}).json()['access_token']}"}
+    reward = 80
+    client.post("/account/recharge", json={"amount": reward + 20}, headers=pub_headers)
+    ar = client.post("/agents/register", json={"name": "ExecAgent", "description": ""}, headers=exe_headers)
+    assert ar.status_code == 200, ar.text
+    agent_id = ar.json()["id"]
+    client.put(
+        f"/agents/{agent_id}/payment-profile",
+        json={
+            "methods": [{
+                "type": "alipay",
+                "label": "支付宝",
+                "account_masked": "138****9999",
+                "details_for_counterparty": "alipay:13800138000",
+            }]
+        },
+        headers=exe_headers,
+    )
+    tr = client.post(
+        "/tasks",
+        json={
+            "title": "Agent 直接结算任务",
+            "reward_points": reward,
+            "completion_webhook_url": "https://example.com/cb",
+            "settlement_mode": "agent_direct",
+        },
+        headers=pub_headers,
+    )
+    assert tr.status_code == 200, tr.text
+    task_id = tr.json()["id"]
+    assert client.post(f"/tasks/{task_id}/subscribe", json={"agent_id": agent_id}, headers=exe_headers).status_code == 200
+    with patch("app.main.httpx") as m:
+        m.Client.return_value.__enter__.return_value.post.return_value.status_code = 200
+        assert client.post(
+            f"/tasks/{task_id}/submit-completion",
+            json={"result_summary": "done"},
+            headers=exe_headers,
+        ).status_code == 200
+    bal_before = client.get("/account/balance", headers=exe_headers).json()["credits"]
+    cr = client.post(f"/tasks/{task_id}/confirm", headers=pub_headers)
+    assert cr.status_code == 200, cr.text
+    cr_body = cr.json()
+    assert cr_body.get("settlement_mode") == "agent_direct"
+    assert cr_body.get("settlement", {}).get("status") == "pending"
+    assert cr_body.get("reward_paid") == 0
+    bal_after = client.get("/account/balance", headers=exe_headers).json()["credits"]
+    assert bal_after == bal_before
+    pc_fail = client.post(f"/tasks/{task_id}/settlement/payee-confirm", headers=exe_headers)
+    assert pc_fail.status_code == 400
+    st = client.get(f"/tasks/{task_id}/settlement", headers=pub_headers)
+    assert st.status_code == 200, st.text
+    st_body = st.json()
+    assert st_body["viewer_role"] == "publisher"
+    assert st_body["payee_profile"]["methods"][0]["account_masked"] == "138****9999"
+    assert st_body["payee_profile"]["methods"][0].get("details_for_counterparty") == "alipay:13800138000"
+    mp = client.post(
+        f"/tasks/{task_id}/settlement/payer-mark-paid",
+        json={"proof_links": ["https://example.com/proof.png"], "note": "已转账"},
+        headers=pub_headers,
+    )
+    assert mp.status_code == 200, mp.text
+    assert mp.json()["settlement"].get("payer_confirmed_at")
+    pc = client.post(f"/tasks/{task_id}/settlement/payee-confirm", headers=exe_headers)
+    assert pc.status_code == 200, pc.text
+    assert pc.json()["settlement"]["status"] == "paid"
+    assert pc.json()["settlement"].get("payee_confirmed_at")

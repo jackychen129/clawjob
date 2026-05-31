@@ -616,6 +616,45 @@
                 <p v-if="selectedTaskDetail.verification_record.note" class="completion-summary">{{ selectedTaskDetail.verification_record.note }}</p>
                 <p class="completion-link">{{ t('task.verifiedAt') || '验收时间' }}：{{ selectedTaskDetail.verification_record.verified_at || '-' }}</p>
               </div>
+              <div
+                v-if="taskSettlementView || (selectedTaskDetail.settlement_mode === 'agent_direct' && selectedTaskDetail.status === 'completed')"
+                class="task-settlement-panel card card-content"
+              >
+                <h4 class="task-comments-title">{{ t('task.settlementTitle') || 'Agent 间结算' }}</h4>
+                <p v-if="taskSettlementLoading" class="hint">{{ t('common.loading') }}</p>
+                <template v-else-if="taskSettlementView">
+                  <p class="hint">{{ taskSettlementView.instructions_zh }}</p>
+                  <p class="mono">{{ t('task.settlementAmount') || '结算金额' }}：{{ taskSettlementView.reward_points }} {{ t('task.pointsUnit') || '点' }}</p>
+                  <p class="mono">{{ t('task.settlementStatus') || '状态' }}：{{ (taskSettlementView.settlement as { status?: string })?.status || 'pending' }}</p>
+                  <div v-if="taskSettlementView.payee_profile?.methods?.length" class="task-settlement-methods">
+                    <p class="hint">{{ t('task.settlementPayeeMethods') || '执行方收款方式' }}</p>
+                    <ul>
+                      <li v-for="(m, mi) in taskSettlementView.payee_profile.methods" :key="mi">
+                        <strong>{{ m.label || m.type }}</strong>
+                        <span v-if="m.account_masked" class="mono"> · {{ m.account_masked }}</span>
+                        <p v-if="taskSettlementView.viewer_role === 'publisher'" class="mono">{{ m.details_for_counterparty }}</p>
+                      </li>
+                    </ul>
+                  </div>
+                  <div v-if="taskSettlementView.viewer_role === 'publisher'" class="task-settlement-payer-form">
+                    <Input v-model="settlementPayerNote" placeholder="打款备注（可选）" />
+                    <Input v-model="settlementPayerProof" placeholder="凭证链接（可选，逗号分隔）" />
+                    <Button
+                      size="sm"
+                      :disabled="settlementActionLoading"
+                      @click="runSettlementPayerMarkPaid"
+                    >{{ t('task.settlementPayerMarkPaid') || '我已向执行方打款' }}</Button>
+                  </div>
+                  <div v-if="taskSettlementView.viewer_role === 'executor'" class="task-settlement-payee-actions">
+                    <Button
+                      size="sm"
+                      :disabled="settlementActionLoading || !(taskSettlementView.settlement as { payer_confirmed_at?: string })?.payer_confirmed_at"
+                      @click="runSettlementPayeeConfirm"
+                    >{{ t('task.settlementPayeeConfirm') || '确认已收到打款' }}</Button>
+                    <p v-if="!(taskSettlementView.settlement as { payer_confirmed_at?: string })?.payer_confirmed_at" class="hint">{{ t('task.settlementWaitPayer') || '请等待发布方标记已打款' }}</p>
+                  </div>
+                </template>
+              </div>
               <div v-if="selectedTaskDetail && canA2aTask(selectedTaskDetail)" class="detail-a2a-sync">
                 <h4 class="task-comments-title">{{ t('task.a2aSyncTitle') || 'A2A 任务同步' }}</h4>
                 <p class="hint detail-a2a-sync__hint">{{ t('task.a2aSyncHint') || '与 GET /a2a/tasks/{id} 一致，便于 Agent 与发布方/接取方对齐状态。' }}</p>
@@ -1508,6 +1547,11 @@ const escrowResolveForm = reactive<{ resolution_type: 'resume' | 'force_confirm'
 const escrowResolveLoading = ref<number | null>(null)
 const isAdmin = ref(false)
 const confirmLoading = ref<number | null>(null)
+const taskSettlementView = ref<api.TaskSettlementView | null>(null)
+const taskSettlementLoading = ref(false)
+const settlementActionLoading = ref(false)
+const settlementPayerNote = ref('')
+const settlementPayerProof = ref('')
 const extendVerificationLoading = ref<number | null>(null)
 const rejectLoading = ref<number | null>(null)
 const cancelLoading = ref<number | null>(null)
@@ -2079,11 +2123,17 @@ function openTaskDetail(task: TaskListItem) {
   commentAgentId.value = ''
   recommendCandidates.value = []
   recommendLoaded.value = false
+  taskSettlementView.value = null
+  settlementPayerNote.value = ''
+  settlementPayerProof.value = ''
   api.getTaskDetail(task.id).then((res) => {
     selectedTaskDetail.value = res.data as TaskListItem
     const detail = res.data as TaskListItem
     loadWorkflowPreview(task.id)
     loadA2aSync(task.id)
+    if (detail.settlement_mode === 'agent_direct' || detail.settlement) {
+      loadTaskSettlement(task.id)
+    }
     if (auth.isLoggedIn) loadVerificationChain()
     if (detail.agent_id) {
       api.fetchAgentSkills(Number(detail.agent_id)).then((r) => {
@@ -2098,6 +2148,41 @@ function openTaskDetail(task: TaskListItem) {
     }
   }).catch(() => {}).finally(() => { detailLoading.value = false })
   loadTaskComments(task.id, task)
+}
+
+function loadTaskSettlement(taskId: number) {
+  taskSettlementLoading.value = true
+  api.fetchTaskSettlement(taskId)
+    .then((res) => { taskSettlementView.value = res.data })
+    .catch(() => { taskSettlementView.value = null })
+    .finally(() => { taskSettlementLoading.value = false })
+}
+
+function runSettlementPayerMarkPaid() {
+  const tid = selectedTaskDetail.value?.id
+  if (!tid) return
+  settlementActionLoading.value = true
+  const proof_links = settlementPayerProof.value.split(',').map((s) => s.trim()).filter(Boolean)
+  api.settlementPayerMarkPaid(tid, { note: settlementPayerNote.value.trim(), proof_links })
+    .then(() => {
+      showSuccessLocal(t('task.settlementPayerOk') || '已标记打款')
+      loadTaskSettlement(tid)
+      reloadSelectedTask()
+    })
+    .finally(() => { settlementActionLoading.value = false })
+}
+
+function runSettlementPayeeConfirm() {
+  const tid = selectedTaskDetail.value?.id
+  if (!tid) return
+  settlementActionLoading.value = true
+  api.settlementPayeeConfirm(tid)
+    .then(() => {
+      showSuccessLocal(t('task.settlementPayeeOk') || '已确认收款')
+      loadTaskSettlement(tid)
+      reloadSelectedTask()
+    })
+    .finally(() => { settlementActionLoading.value = false })
 }
 
 function loadA2aSync(taskId: number) {

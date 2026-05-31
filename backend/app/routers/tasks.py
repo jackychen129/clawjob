@@ -35,14 +35,15 @@ from app.domain.task_helpers import (
 )
 from app.domain.task_models import (
     A2AMessageBody, BatchConfirmBody, CloseAuctionBody, ConfirmTaskBody, EscrowDisputeBody,
-    PlaceBidBody, PostCommentBody, PublishTaskBody, RejectCompletionBody, SubscribeTaskBody,
-    SubmitCompletionBody, WorkflowPlanBody,
+    PayerMarkPaidBody, PlaceBidBody, PostCommentBody, PublishTaskBody, RejectCompletionBody,
+    SubscribeTaskBody, SubmitCompletionBody, WorkflowPlanBody,
 )
 from app.security import get_current_user, get_current_user_optional
 from app.services import execution_sandbox as _sandbox, reverse_auction as _ra
 from app.services import safety_pipeline as _safety, step_replay as _replay
 from app.services.escrow_tasks import apply_escrow_milestone_confirm, build_escrow_plan, get_escrow, save_escrow_to_task
 from app.services.preflight import enforce_preflight, run_preflight
+from app.services import settlement as _settlement
 from app.services.task_timeline import append_timeline_event as _append_timeline_event
 from app.services.workflow_dag import predecessors, validate_workflow_dag
 from app.utils.datetime_iso import iso_utc
@@ -507,6 +508,10 @@ def publish_task(
             raise HTTPException(status_code=400, detail=str(e))
     if bool(getattr(body, "collaborative", False)):
         extra["collaborative"] = True
+    settlement_mode = (getattr(body, "settlement_mode", None) or "platform_credits").strip()
+    if settlement_mode not in ("platform_credits", "agent_direct"):
+        raise HTTPException(status_code=400, detail="settlement_mode 须为 platform_credits 或 agent_direct")
+    extra["settlement_mode"] = settlement_mode
     task = Task(
         title=body.title,
         description=body.description,
@@ -1432,8 +1437,15 @@ def confirm_task(
             },
         }
     if task.status == "pending_verification":
-        pay_task_reward(task, db)
-        _append_timeline_event(task, "confirmed", "发布方确认验收，任务完成并已发奖")
+        agent_direct = (
+            _settlement.get_settlement_mode(task) == "agent_direct" and reward_points > 0
+        )
+        pay_task_reward(task, db, skip_credits=agent_direct)
+        if agent_direct:
+            _settlement.create_settlement_on_confirm(task, db)
+            _append_timeline_event(task, "confirmed", "发布方确认验收；Agent 间直接结算待完成")
+        else:
+            _append_timeline_event(task, "confirmed", "发布方确认验收，任务完成并已发奖")
     elif task.status == "open" and reward_points == 0:
         task.status = "completed"
         task.completed_at = datetime.utcnow()
@@ -1455,6 +1467,10 @@ def confirm_task(
     )
     commission = int(reward_points * PLATFORM_COMMISSION_RATE) if reward_points else 0
     amount_to_executor = reward_points - commission if reward_points else 0
+    agent_direct = _settlement.get_settlement_mode(task) == "agent_direct" and reward_points > 0
+    if agent_direct:
+        amount_to_executor = 0
+        commission = 0
     try:
         base = task.output_data if isinstance(task.output_data, dict) else {}
         task.output_data = {
@@ -1470,12 +1486,78 @@ def confirm_task(
     except Exception:
         db.rollback()
     return {
-        "message": "验收通过，奖励已发放" if reward_points else "任务已关闭",
+        "message": (
+            "验收通过，Agent 间结算已开启，请按 settlement API 完成打款"
+            if agent_direct
+            else ("验收通过，奖励已发放" if reward_points else "任务已关闭")
+        ),
         "task_id": task_id,
         "reward_paid": amount_to_executor,
         "reward_total": reward_points,
         "commission": commission,
+        "settlement_mode": _settlement.get_settlement_mode(task),
+        "settlement": _settlement.get_settlement(task) if agent_direct else None,
     }
+
+
+@router.get("/tasks/{task_id}/settlement")
+def get_task_settlement(
+    task_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """获取任务 Agent 间结算详情（发布方与执行方可见）。"""
+    uid = int(current_user["user_id"])
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    if _settlement.get_settlement_mode(task) != "agent_direct" and not _settlement.get_settlement(task):
+        raise HTTPException(status_code=404, detail="该任务未启用 Agent 直接结算")
+    return _settlement.serialize_settlement_view(task, db, uid)
+
+
+@router.post("/tasks/{task_id}/settlement/payer-mark-paid")
+def settlement_payer_mark_paid(
+    task_id: int,
+    body: PayerMarkPaidBody,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """发布方标记已向执行方打款（agent_direct 结算）。"""
+    uid = int(current_user["user_id"])
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    if task.status != "completed":
+        raise HTTPException(status_code=400, detail="任务须已验收完成")
+    settlement = _settlement.payer_mark_paid(
+        task,
+        db,
+        uid,
+        proof_links=body.proof_links,
+        note=body.note,
+        method_used=body.method_used,
+    )
+    _append_timeline_event(task, "settlement_payer_marked", "发布方标记已向执行方打款")
+    db.commit()
+    return {"ok": True, "task_id": task_id, "settlement": settlement}
+
+
+@router.post("/tasks/{task_id}/settlement/payee-confirm")
+def settlement_payee_confirm(
+    task_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """执行方确认已收到打款，关闭 settlement。"""
+    uid = int(current_user["user_id"])
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    settlement = _settlement.payee_confirm_received(task, db, uid)
+    _append_timeline_event(task, "settlement_paid", "执行方确认收款，Agent 间结算完成")
+    db.commit()
+    return {"ok": True, "task_id": task_id, "settlement": settlement}
 
 
 @router.post("/tasks/{task_id}/reject")

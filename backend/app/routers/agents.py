@@ -33,8 +33,8 @@ from app.domain.task_helpers import (
 )
 from app.domain.task_models import (
     A2AMessageBody, BatchConfirmBody, CloseAuctionBody, ConfirmTaskBody, EscrowDisputeBody,
-    PlaceBidBody, PostCommentBody, PublishTaskBody, RejectCompletionBody, SubscribeTaskBody,
-    SubmitCompletionBody, WorkflowPlanBody,
+    PaymentProfileBody, PlaceBidBody, PostCommentBody, PublishTaskBody, RejectCompletionBody,
+    SubscribeTaskBody, SubmitCompletionBody, WorkflowPlanBody,
 )
 from app.security import get_current_user, get_current_user_optional
 from app.services import execution_sandbox as _sandbox, reverse_auction as _ra
@@ -42,6 +42,7 @@ from app.services import safety_pipeline as _safety, step_replay as _replay
 from app.services.escrow_tasks import apply_escrow_milestone_confirm, build_escrow_plan, get_escrow, save_escrow_to_task
 from app.services.preflight import enforce_preflight, run_preflight
 from app.services import payout as _payout
+from app.services import settlement as _settlement
 from app.services.task_timeline import append_timeline_event as _append_timeline_event
 from app.services.workflow_dag import predecessors, validate_workflow_dag
 from app.utils.datetime_iso import iso_utc
@@ -661,8 +662,12 @@ def get_agent_earnings_summary(
         "payout": payout,
         "reputation_score": int(rep.get("score", 0) or 0),
         "platform_tasks_open": int(tasks_open_platform),
-        "money_path_hint_zh": "接取开放任务 → 提交完成 → 发布方验收后 reward_points 入账 → 绑定收款账户 → KYC 审核 → 申请提现（人工打款）",
-        "money_path_hint_en": "Subscribe → submit → confirm → credits → bind payout account → KYC → withdraw (manual payout).",
+        "money_path_hint_zh": "接取开放任务 → 提交完成 → 发布方验收 → Agent 间直接打款（settlement_mode=agent_direct）或平台 credits 入账 → 配置收款方式",
+        "money_path_hint_en": "Subscribe → submit → confirm → agent_direct settlement (P2P) or platform credits → configure payment profile.",
+        "settlement_api": {
+            "payment_profile": f"{api_base}/agents/{agent.id}/payment-profile",
+            "settlement_flow": "GET/POST /tasks/{{task_id}}/settlement/*",
+        },
         "links": {
             "task_radar": f"{api_base}/agents/{agent.id}/task-radar",
             "browse_open_tasks": f"{api_base}/tasks?status_filter=open&limit=20",
@@ -732,3 +737,47 @@ def get_agent_task_radar(
         content=result,
         headers={"Cache-Control": "private, max-age=30"},
     )
+
+
+@router.get("/agents/{agent_id}/payment-profile")
+def get_agent_payment_profile(
+    agent_id: int,
+    task_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """获取 Agent 收款方式。拥有者始终可读；交易对手在 subscribe 后或待验收/结算阶段可读。"""
+    uid = int(current_user["user_id"])
+    agent = db.query(Agent).filter(Agent.id == int(agent_id)).first()
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent 不存在")
+    task = None
+    if task_id is not None:
+        task = db.query(Task).filter(Task.id == int(task_id)).first()
+    if int(agent.owner_id) != uid:
+        if task is None:
+            raise HTTPException(status_code=403, detail="须提供 task_id 以验证交易对手身份")
+        if not _settlement.can_view_agent_payment_profile(task, agent, uid, db):
+            raise HTTPException(status_code=403, detail="无权查看该 Agent 收款方式")
+    profile = _settlement.get_payment_profile(agent)
+    return {"agent_id": agent.id, "payment_profile": profile}
+
+
+@router.put("/agents/{agent_id}/payment-profile")
+def put_agent_payment_profile(
+    agent_id: int,
+    body: PaymentProfileBody,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """配置 Agent 收款方式（仅拥有者可写）。"""
+    uid = int(current_user["user_id"])
+    agent = db.query(Agent).filter(Agent.id == int(agent_id)).first()
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent 不存在")
+    if int(agent.owner_id) != uid:
+        raise HTTPException(status_code=403, detail="仅 Agent 拥有者可配置收款方式")
+    profile = _settlement.validate_payment_profile({"methods": [m.model_dump() for m in body.methods]})
+    _settlement.set_agent_payment_profile(agent, profile)
+    db.commit()
+    return {"ok": True, "agent_id": agent.id, "payment_profile": profile}

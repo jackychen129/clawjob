@@ -240,6 +240,32 @@
                   </ul>
                   <p v-if="!(agentTasksMap[a.id] || []).length" class="agent-card__detail-empty">{{ t('agentManage.noTasks') || '暂无接取任务' }}</p>
 
+                  <div class="agent-payment-profile-box">
+                    <h4 class="agent-card__detail-title">{{ t('agentManage.paymentProfileTitle') || '收款方式' }}</h4>
+                    <p class="hint">{{ t('agentManage.paymentProfileHint') || 'Agent 间直接结算时，发布方将按此处配置向你打款（支付宝/微信/银行卡等）。' }}</p>
+                    <div v-if="paymentProfileLoading === a.id" class="agent-card__detail-loading"><div class="spinner" /></div>
+                    <template v-else>
+                      <div v-for="(m, idx) in (paymentProfileForms[a.id]?.methods || [])" :key="idx" class="payment-method-row">
+                        <select v-model="m.type" class="input">
+                          <option value="alipay">支付宝</option>
+                          <option value="wechat">微信</option>
+                          <option value="bank">银行卡</option>
+                          <option value="crypto">Crypto</option>
+                          <option value="custom">自定义</option>
+                        </select>
+                        <input v-model="m.label" class="input" placeholder="标签" />
+                        <input v-model="m.account_masked" class="input" placeholder="脱敏账号（展示用）" />
+                        <input v-model="m.details_for_counterparty" class="input" placeholder="对方打款所需信息（必填）" />
+                        <Button size="sm" variant="ghost" type="button" @click="removePaymentMethod(a.id, idx)">删除</Button>
+                      </div>
+                      <div class="agent-payment-profile-actions">
+                        <Button size="sm" variant="secondary" type="button" @click="addPaymentMethod(a.id)">添加收款方式</Button>
+                        <Button size="sm" type="button" :disabled="paymentProfileSaving === a.id" @click="savePaymentProfile(a.id)">保存收款方式</Button>
+                      </div>
+                      <p v-if="paymentProfileError[a.id]" class="error-msg">{{ paymentProfileError[a.id] }}</p>
+                    </template>
+                  </div>
+
                   <div v-if="a.has_skill_token" class="agent-skill-box">
                     <div class="agent-skill-box__head">
                       <span class="agent-skill-box__title">{{ t('agentManage.agentSkillTitle') || 'Agent Skill' }}</span>
@@ -442,6 +468,10 @@ const copySkillExportDone = ref(false)
 const templateUnpublishLoading = ref<number | null>(null)
 const skillUnpublishLoading = ref<number | null>(null)
 const radarAgentId = ref<number | null>(null)
+const paymentProfileForms = ref<Record<number, { methods: api.PaymentMethod[] }>>({})
+const paymentProfileLoading = ref<number | null>(null)
+const paymentProfileSaving = ref<number | null>(null)
+const paymentProfileError = ref<Record<number, string>>({})
 const earningsSummary = ref<{
   agent_name: string
   reward_points_earned: number
@@ -637,8 +667,56 @@ watch(() => auth.isLoggedIn, (loggedIn) => {
 })
 
 watch(expandedAgent, (id) => {
-  if (id != null) loadAgentTasks(id)
+  if (id != null) {
+    loadAgentTasks(id)
+    loadPaymentProfile(id)
+  }
 })
+
+function loadPaymentProfile(agentId: number) {
+  paymentProfileLoading.value = agentId
+  paymentProfileError.value[agentId] = ''
+  api.fetchAgentPaymentProfile(agentId)
+    .then((res) => {
+      const methods = res.data.payment_profile?.methods?.length
+        ? res.data.payment_profile.methods.map((m) => ({ ...m }))
+        : [{ type: 'alipay', label: '支付宝', account_masked: '', details_for_counterparty: '' }]
+      paymentProfileForms.value = { ...paymentProfileForms.value, [agentId]: { methods } }
+    })
+    .catch(() => {
+      paymentProfileForms.value = {
+        ...paymentProfileForms.value,
+        [agentId]: { methods: [{ type: 'alipay', label: '支付宝', account_masked: '', details_for_counterparty: '' }] },
+      }
+    })
+    .finally(() => { paymentProfileLoading.value = null })
+}
+
+function addPaymentMethod(agentId: number) {
+  const cur = paymentProfileForms.value[agentId]?.methods || []
+  paymentProfileForms.value = {
+    ...paymentProfileForms.value,
+    [agentId]: { methods: [...cur, { type: 'alipay', label: '', account_masked: '', details_for_counterparty: '' }] },
+  }
+}
+
+function removePaymentMethod(agentId: number, idx: number) {
+  const cur = [...(paymentProfileForms.value[agentId]?.methods || [])]
+  cur.splice(idx, 1)
+  paymentProfileForms.value = { ...paymentProfileForms.value, [agentId]: { methods: cur } }
+}
+
+function savePaymentProfile(agentId: number) {
+  const methods = paymentProfileForms.value[agentId]?.methods || []
+  paymentProfileSaving.value = agentId
+  paymentProfileError.value[agentId] = ''
+  api.updateAgentPaymentProfile(agentId, methods)
+    .then(() => { paymentProfileError.value[agentId] = '' })
+    .catch((e: unknown) => {
+      paymentProfileError.value[agentId] = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail || '保存失败'
+    })
+    .finally(() => { paymentProfileSaving.value = null })
+}
 
 function openCertificate(a: AgentItem) {
   certificateAgent.value = a
@@ -892,6 +970,9 @@ function copySkillExportBlurb() {
 .agent-skill-box__tags { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3); }
 .agent-skill-box__loading { margin-top: var(--space-3); }
 
+.agent-payment-profile-box { margin-top: var(--space-4); padding-top: var(--space-3); border-top: var(--border-hairline); }
+.payment-method-row { display: grid; gap: var(--space-2); margin-bottom: var(--space-2); }
+.agent-payment-profile-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }
 .earnings-summary { margin-bottom: var(--space-6); }
 .earnings-payout-cta { margin-top: var(--space-3); display: grid; gap: var(--space-2); }
 .earnings-withdraw-btn { justify-self: start; font-weight: 650; }

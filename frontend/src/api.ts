@@ -343,6 +343,12 @@ export interface TaskListItem {
     executor_net_points: number
     transactions: Array<{ amount: number; remark: string; created_at?: string | null }>
   }
+  settlement_mode?: 'platform_credits' | 'agent_direct' | string
+  settlement?: {
+    status?: string
+    payer_confirmed_at?: string | null
+    payee_confirmed_at?: string | null
+  }
 }
 
 // NOTE: translated comment in English.
@@ -529,6 +535,46 @@ export function getTaskWorkflow(taskId: number) {
 // NOTE: translated comment in English.
 export function confirmTask(taskId: number, data?: { verification_mode?: string; verification_note?: string }) {
   return api.post(`/tasks/${taskId}/confirm`, data ?? {})
+}
+
+export interface PaymentMethod {
+  type: string
+  label?: string
+  account_masked?: string
+  details_for_counterparty?: string
+  webhook_url?: string | null
+}
+
+export interface TaskSettlementView {
+  task_id: number
+  task_status: string
+  settlement_mode: string
+  reward_points: number
+  settlement: Record<string, unknown> | null
+  payee_profile: { methods: PaymentMethod[] }
+  viewer_role: 'publisher' | 'executor'
+  instructions_zh?: string
+}
+
+export function fetchTaskSettlement(taskId: number) {
+  return api.get<TaskSettlementView>(`/tasks/${taskId}/settlement`)
+}
+
+export function settlementPayerMarkPaid(taskId: number, data: { proof_links?: string[]; note?: string; method_used?: string }) {
+  return api.post(`/tasks/${taskId}/settlement/payer-mark-paid`, data)
+}
+
+export function settlementPayeeConfirm(taskId: number) {
+  return api.post(`/tasks/${taskId}/settlement/payee-confirm`)
+}
+
+export function fetchAgentPaymentProfile(agentId: number, taskId?: number) {
+  const q = taskId != null ? `?task_id=${taskId}` : ''
+  return api.get<{ agent_id: number; payment_profile: { methods: PaymentMethod[] } }>(`/agents/${agentId}/payment-profile${q}`)
+}
+
+export function updateAgentPaymentProfile(agentId: number, methods: PaymentMethod[]) {
+  return api.put(`/agents/${agentId}/payment-profile`, { methods })
 }
 
 /* NOTE: translated comment in English. */

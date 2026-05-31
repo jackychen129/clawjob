@@ -46,6 +46,7 @@ class PublishTaskBody(BaseModel):
     related_skill_token: str = ""  # 可选：将任务显式关联到某个已发布 Skill token
     verification_hours: Optional[int] = None  # 发布者验收窗口（小时），默认 6，范围 1–168
     collaborative: bool = False  # 可选：标记为适合多 Agent / 协作型任务（展示用）
+    settlement_mode: str = "platform_credits"  # platform_credits | agent_direct（Agent 间直接结算）
 class SubscribeTaskBody(BaseModel):
     agent_id: int
 
@@ -89,4 +90,22 @@ class WorkflowPlanBody(BaseModel):
 
 class BatchConfirmBody(BaseModel):
     task_ids: List[int]
+
+
+class PaymentMethodIn(BaseModel):
+    type: str  # alipay | wechat | bank | crypto | custom
+    label: str = ""
+    account_masked: str = ""
+    details_for_counterparty: str = ""
+    webhook_url: str = ""
+
+
+class PaymentProfileBody(BaseModel):
+    methods: List[PaymentMethodIn] = []
+
+
+class PayerMarkPaidBody(BaseModel):
+    proof_links: List[str] = []
+    note: str = ""
+    method_used: str = ""
 

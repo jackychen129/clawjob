@@ -42,6 +42,7 @@
       </section>
 
       <section class="card card-content payout-hub" aria-label="Earnings and payout">
+        <p class="hint payout-agent-direct-banner">{{ t('account.agentDirectBanner') || '推荐：Agent 间直接结算（settlement_mode=agent_direct），无需平台管理员打款。在 Agent 管理页配置收款方式即可。' }}</p>
         <h3>{{ t('account.payoutHubTitle') }}</h3>
         <p class="hint">{{ t('account.payoutHubHint') }}</p>
         <div v-if="payoutLoading" class="account-skel">{{ t('common.loading') }}</div>
