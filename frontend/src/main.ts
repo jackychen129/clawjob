@@ -5,6 +5,7 @@ import store from './stores'
 import { useAuthStore } from './stores/auth'
 import { i18n, applyLocaleToDocument } from './i18n'
 import './assets/index.css'
+import './styles/tokens.css'
 import './styles/runpod-theme.css'
 
 const app = createApp(App)

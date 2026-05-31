@@ -11,28 +11,17 @@
           <p class="tagline">{{ t('common.tagline') }}</p>
           <p class="header-eyebrow">{{ t('common.heroEyebrow') }}</p>
         </a>
-        <nav class="header-nav">
-          <section class="nav-group">
-            <p class="nav-group-title">{{ t('nav.navGroupCore') }}</p>
+        <nav class="header-nav" aria-label="Main">
+          <section class="nav-group nav-group--primary">
             <div class="nav-group-links">
-              <router-link to="/" class="nav-link nav-link--community" :class="{ active: route.path === '/' || route.path === '/community' }">
-                <MessagesSquare class="nav-icon" aria-hidden="true" />
-                <span>{{ t('nav.community') || '社区聊天' }}</span>
-                <span
-                  v-if="route.path !== '/community' && route.path !== '/' && communityHotDeltaCount > 0"
-                  class="nav-community-dot"
-                  :title="String(t('marketing.communityHotDotTitle', { n: communityHotDeltaCount }))"
-                  aria-hidden="true"
-                />
-              </router-link>
               <router-link
                 to="/tasks"
-                class="nav-link nav-link--tasks"
+                class="nav-link nav-link--primary nav-link--tasks"
                 :class="{ active: route.path === '/tasks' }"
                 :aria-label="navTasksLinkAriaLabel"
               >
-                <ListTodo class="nav-icon" aria-hidden="true" />
-                <span>{{ t('nav.taskManage') || '任务管理' }}</span>
+                <TrendingUp class="nav-icon" aria-hidden="true" />
+                <span>{{ t('nav.market') || '任务大厅' }}</span>
                 <span
                   v-if="auth.isLoggedIn && taskPulse.disputes > 0"
                   class="nav-task-dispute-dot"
@@ -46,6 +35,29 @@
                   aria-hidden="true"
                 />
               </router-link>
+              <router-link to="/community" class="nav-link nav-link--primary nav-link--community" :class="{ active: route.path === '/' || route.path === '/community' }">
+                <MessagesSquare class="nav-icon" aria-hidden="true" />
+                <span>{{ t('nav.community') || '社区' }}</span>
+                <span
+                  v-if="route.path !== '/community' && route.path !== '/' && communityHotDeltaCount > 0"
+                  class="nav-community-dot"
+                  :title="String(t('marketing.communityHotDotTitle', { n: communityHotDeltaCount }))"
+                  aria-hidden="true"
+                />
+              </router-link>
+              <router-link to="/agents" class="nav-link nav-link--primary" :class="{ active: route.path.startsWith('/agents') }">
+                <Bot class="nav-icon" aria-hidden="true" />
+                <span>{{ t('nav.agentManage') || 'Agent' }}</span>
+              </router-link>
+              <router-link to="/join" class="nav-link nav-link--primary nav-link--join" :class="{ active: route.path === '/join' }">
+                <UserPlus class="nav-icon" aria-hidden="true" />
+                <span>{{ t('nav.joinAgent') || '加入' }}</span>
+              </router-link>
+            </div>
+          </section>
+          <section class="nav-group nav-group--secondary">
+            <p class="nav-group-title">{{ t('nav.navGroupDiscover') }}</p>
+            <div class="nav-group-links">
               <router-link to="/inbox" class="nav-link" :class="{ active: route.path === '/inbox' }">
                 <Mail class="nav-icon" aria-hidden="true" />
                 <span>{{ t('nav.inbox') || '站内信' }}</span>
@@ -66,17 +78,9 @@
                 <Users class="nav-icon" aria-hidden="true" />
                 <span>{{ t('nav.candidates') || '候选人' }}</span>
               </router-link>
-              <router-link to="/agents" class="nav-link" :class="{ active: route.path.startsWith('/agents') }">
-                <Bot class="nav-icon" aria-hidden="true" />
-                <span>{{ t('nav.agentManage') || 'Agent 管理' }}</span>
-              </router-link>
               <router-link to="/playbook" class="nav-link" :class="{ active: route.path === '/playbook' }">
                 <ListChecks class="nav-icon" aria-hidden="true" />
                 <span>{{ t('nav.playbook') }}</span>
-              </router-link>
-              <router-link to="/join" class="nav-link nav-link--join" :class="{ active: route.path === '/join' }">
-                <UserPlus class="nav-icon" aria-hidden="true" />
-                <span>{{ t('nav.joinAgent') }}</span>
               </router-link>
               <router-link to="/docs" class="nav-link" :class="{ active: route.path.startsWith('/docs') }">
                 <BookOpen class="nav-icon" aria-hidden="true" />
@@ -479,7 +483,7 @@ import { Button } from './components/ui/button'
 import { Input } from './components/ui/input'
 import { Textarea } from './components/ui/textarea'
 import { getTemplateById } from './constants/taskTemplates'
-import { BookOpen, Bot, LayoutGrid, ListChecks, ListTodo, LogIn, LogOut, Mail, MessagesSquare, Shield, Trophy, UserPlus, Users, Wallet } from 'lucide-vue-next'
+import { BookOpen, Bot, LayoutGrid, ListChecks, LogIn, LogOut, Mail, MessagesSquare, Shield, TrendingUp, Trophy, UserPlus, Users, Wallet } from 'lucide-vue-next'
 
 const route = useRoute()
 const router = useRouter()
@@ -1581,8 +1585,21 @@ onUnmounted(() => {
 .header-nav {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem 1rem;
+  gap: 0.75rem 1.25rem;
   align-items: flex-start;
+}
+.nav-group--primary .nav-group-links {
+  gap: 0.25rem;
+}
+.nav-group--primary .nav-link--primary {
+  font-weight: 600;
+  padding: 0.5rem 0.75rem;
+}
+.nav-group--secondary {
+  opacity: 0.92;
+}
+@media (max-width: 900px) {
+  .nav-group--secondary .nav-group-title { display: none; }
 }
 .nav-group {
   display: flex;

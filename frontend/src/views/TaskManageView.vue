@@ -1,6 +1,31 @@
 <template>
   <div class="task-manage-view apple-layout">
-    <h1 class="page-title">{{ t('nav.taskManage') }}</h1>
+    <header class="task-market-header">
+      <div>
+        <h1 class="page-title task-market-header__title">{{ t('nav.market') || t('nav.taskManage') }}</h1>
+        <p class="task-market-header__desc">{{ t('taskManage.intro') }}</p>
+      </div>
+      <div v-if="marketStatsLoading" class="market-stats-bar market-stats-bar--skeleton" aria-busy="true">
+        <div v-for="i in 3" :key="i" class="market-stat market-stat--skeleton">
+          <div class="tw-skeleton market-stat__skeleton-value"></div>
+          <div class="tw-skeleton market-stat__skeleton-label"></div>
+        </div>
+      </div>
+      <div v-else class="market-stats-bar" role="status">
+        <div class="market-stat">
+          <span class="market-stat__value mono">{{ formatMarketStat(marketStats.tasks_open) }}</span>
+          <span class="market-stat__label">{{ t('taskManage.statOpenTasks') || '开放任务' }}</span>
+        </div>
+        <div class="market-stat market-stat--accent">
+          <span class="market-stat__value mono">{{ formatMarketStat(marketStats.rewards_paid) }}</span>
+          <span class="market-stat__label">{{ t('taskManage.statRewardsPaid') || '已发放奖励' }}</span>
+        </div>
+        <div class="market-stat">
+          <span class="market-stat__value mono">{{ formatMarketStat(marketStats.agents_count) }}</span>
+          <span class="market-stat__label">{{ t('taskManage.statAgentsPublic') || '公开 Agent' }}</span>
+        </div>
+      </div>
+    </header>
     <div class="task-layout task-layout--mine-only">
       <section class="task-center">
         <div class="task-center-inner" :class="{ 'task-center-inner--with-detail': !!selectedTaskDetail }">
@@ -310,7 +335,13 @@
           </div>
           <div v-if="selectedTaskDetail" class="task-detail-panel">
             <div class="task-detail-panel__head">
-              <h3 class="task-detail-panel__title">{{ selectedTaskDetail.title }}</h3>
+              <div class="task-detail-panel__head-main">
+                <h3 class="task-detail-panel__title">{{ selectedTaskDetail.title }}</h3>
+                <div class="task-detail-panel__badges">
+                  <span v-for="b in (selectedTaskDetail.badges || [])" :key="b" class="task-tag task-tag--exchange" :class="'task-tag--' + b">{{ taskBadgeLabel(b) }}</span>
+                  <span v-if="selectedTaskDetail.settlement_mode === 'agent_direct'" class="task-tag task-tag--exchange task-tag--agent_direct_settlement">{{ t('task.settlementBadge') || 'P2P 结算' }}</span>
+                </div>
+              </div>
               <Button size="sm" variant="ghost" type="button" aria-label="关闭" @click="closeTaskDetail">×</Button>
             </div>
             <div v-if="detailLoading" class="loading"><div class="spinner"></div></div>
@@ -1942,7 +1973,25 @@ const categoryLabels: Record<string, string> = {
 function taskBadgeLabel(badge: string): string {
   if (badge === 'escrow') return t('task.badgeEscrow') || '托管'
   if (badge === 'verified_payout') return t('task.badgeVerifiedPayout') || '验收放款'
+  if (badge === 'agent_direct_settlement') return t('task.settlementBadge') || 'P2P 结算'
   return badge
+}
+
+function formatMarketStat(n: number | undefined | null): string {
+  const v = Number(n)
+  if (!Number.isFinite(v)) return '—'
+  if (v >= 10000) return `${(v / 1000).toFixed(1)}k`
+  return String(v)
+}
+
+const marketStats = ref<{ tasks_open?: number; rewards_paid?: number; agents_count?: number }>({})
+const marketStatsLoading = ref(true)
+function loadMarketStats() {
+  marketStatsLoading.value = true
+  api.fetchStats()
+    .then((res) => { marketStats.value = res.data || {} })
+    .catch(() => { marketStats.value = {} })
+    .finally(() => { marketStatsLoading.value = false })
 }
 
 function taskCategoryLabel(cat: string) {
@@ -3023,6 +3072,7 @@ function applySwarmFromQuery() {
 }
 
 onMounted(() => {
+  loadMarketStats()
   loadCandidates()
   if (auth.isLoggedIn) {
     loadMyAgents()
@@ -3497,8 +3547,48 @@ watch(tab, (newTab) => {
 .task-tag--skill { border-color: rgba(168, 85, 247, 0.35); color: rgba(233, 213, 255, 0.95); }
 .task-tag--skill-related { border-color: rgba(34, 197, 94, 0.38); color: rgba(187, 247, 208, 0.95); }
 .task-tag--collab { border-color: rgba(59, 130, 246, 0.45); color: rgba(191, 219, 254, 0.98); }
-.task-tag--escrow { border-color: rgba(16, 185, 129, 0.5); color: rgba(167, 243, 208, 0.98); }
-.task-tag--verified_payout { border-color: rgba(245, 158, 11, 0.5); color: rgba(253, 230, 138, 0.98); }
+.task-tag--escrow { border-color: rgba(var(--exchange-escrow-rgb), 0.55); color: rgba(167, 243, 208, 0.98); background: rgba(var(--exchange-escrow-rgb), 0.08); }
+.task-tag--verified_payout { border-color: rgba(var(--exchange-verified-rgb), 0.55); color: rgba(253, 230, 138, 0.98); background: rgba(var(--exchange-verified-rgb), 0.08); }
+.task-tag--agent_direct_settlement { border-color: rgba(var(--exchange-settlement-rgb), 0.55); color: rgba(253, 230, 138, 0.98); background: rgba(var(--exchange-settlement-rgb), 0.08); }
+.task-tag--exchange { letter-spacing: var(--tracking-wide); text-transform: uppercase; font-size: 0.625rem; font-weight: 700; }
+.task-market-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  margin-bottom: var(--space-6);
+}
+.task-market-header__title { margin-bottom: var(--space-2); padding-bottom: 0; border-bottom: none; }
+.task-market-header__desc { margin: 0; color: var(--text-secondary); font-size: var(--font-body); max-width: 42rem; }
+.market-stats-bar {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  border: var(--border-hairline);
+  background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.06), rgba(var(--exchange-ask-rgb), 0.04));
+  box-shadow: var(--shadow-layer-1);
+}
+@media (max-width: 640px) {
+  .market-stats-bar { grid-template-columns: 1fr; }
+}
+.market-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+.market-stat--accent .market-stat__value { color: var(--exchange-verified); }
+.market-stat__value { font-size: 1.35rem; font-weight: 800; letter-spacing: var(--tracking-tight); color: var(--primary-color); }
+.market-stat__label { font-size: var(--font-caption); color: var(--text-secondary); font-weight: 500; }
+.market-stats-bar--skeleton .market-stat--skeleton { background: transparent; border: none; }
+.market-stat__skeleton-value { height: 1.35rem; width: 4rem; margin-bottom: 0.35rem; }
+.market-stat__skeleton-label { height: 0.75rem; width: 5rem; }
+.task-detail-panel__head-main { flex: 1; min-width: 0; }
+.task-detail-panel__badges { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }
 .detail-economy-explainer {
   margin: var(--space-3) 0;
   padding: var(--space-2) var(--space-3);

@@ -1,68 +1,7 @@
-/* ClawJob 主题 · Apple Design 原则：清晰、留白、层次、一致性 */
+/* ClawJob 主题 · tokens 见 tokens.css；此处为组件与布局样式 */
 :root {
-  --primary-color: #22c55e;
-  --primary-rgb: 34, 197, 94;
-  --secondary-color: #4ade80;
-  --brand-400: #4ade80;
-  --brand-500: #22c55e;
-  --brand-600: #16a34a;
   --el-text-color-secondary: var(--text-secondary);
   --el-text-color-primary: var(--text-primary);
-  --success-color: #22c55e;
-  --warning-color: #eab308;
-  --danger-color: #ef4444;
-  --background-dark: #18181b;
-  --background-darker: #0a0a0b;
-  --card-background: #27272a;
-  --card-bg: #27272a;
-  --card-hover: #3f3f46;
-  --surface: rgba(34, 197, 94, 0.08);
-  --text-primary: #fafafa;
-  --text-secondary: #a1a1aa;
-  /* NOTE: do not override shadcn `--muted` / `--border` / `--primary` (HSL vars in assets/index.css) */
-  --text-tertiary: rgba(161, 161, 170, 0.78);
-  --border-color: #3f3f46;
-  /* Subtle borders & layered shadows (do NOT change primary color) */
-  --border-muted: rgba(226, 232, 240, 0.08);
-  --border-muted-strong: rgba(226, 232, 240, 0.14);
-  --shadow-layer-1: 0 1px 0 rgba(0, 0, 0, 0.25);
-  --shadow-layer-2: 0 10px 30px rgba(0, 0, 0, 0.35);
-  --shadow-layer-3: 0 1px 0 rgba(34, 197, 94, 0.10), 0 0 0 1px rgba(34, 197, 94, 0.10) inset;
-  --shadow-color: rgba(0, 0, 0, 0.4);
-  /* Apple-style spacing & radius */
-  --space-1: 0.25rem;
-  --space-2: 0.5rem;
-  --space-3: 0.75rem;
-  --space-4: 1rem;
-  --space-5: 1.25rem;
-  --space-6: 1.5rem;
-  --space-8: 2rem;
-  --space-10: 2.5rem;
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 20px;
-  --radius-full: 9999px;
-  --font-title: 1.25rem;
-  --font-headline: 1.1rem;
-  --font-body: 0.9375rem;
-  --font-caption: 0.8125rem;
-  --font-page-title: 1.5rem;
-  --font-section-title: 1.125rem;
-  --font-body-strong: 1rem;
-  --line-tight: 1.2;
-  --line-normal: 1.55;
-  --tracking-tight: -0.025em;
-  --tracking-normal: -0.01em;
-  /* 呼吸感 · 栅格与动效（8px 栅格单位） */
-  --space-unit: 8px;
-  --ease-apple: cubic-bezier(0.4, 0, 0.2, 1);
-  --duration-m: 300ms;
-  /* 卡片 · 多层复合阴影（轻盈真实） */
-  --shadow-card: 0 1px 0 rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.08);
-  --shadow-card-hover: 0 1px 0 rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.08), 0 8px 24px rgba(0, 0, 0, 0.12);
-  /* 任务管理 · 极细分隔与状态 pill */
-  --border-hairline: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 * {
@@ -137,18 +76,18 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* Header：毛玻璃、1px 细边框、极轻阴影 */
+/* Header：Stripe/Linear 式毛玻璃 elevation */
 .app-header {
-  background: rgba(24, 24, 27, 0.72);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(20px) saturate(1.1);
-  -webkit-backdrop-filter: blur(20px) saturate(1.1);
-  padding: 0.75rem 1.5rem;
-  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.08);
+  background: var(--header-bg);
+  border-bottom: var(--border-hairline);
+  backdrop-filter: blur(var(--header-blur)) saturate(1.15);
+  -webkit-backdrop-filter: blur(var(--header-blur)) saturate(1.15);
+  padding: 0.65rem 1.5rem;
+  box-shadow: var(--shadow-header);
   position: sticky;
   top: 0;
   z-index: 100;
-  transition: box-shadow var(--duration-m) var(--ease-apple);
+  transition: box-shadow var(--duration-m) var(--ease-apple), background var(--duration-m) var(--ease-apple);
 }
 
 .header-content {
@@ -248,6 +187,23 @@ body {
   color: var(--primary-color);
   background: rgba(var(--primary-rgb), 0.10);
   box-shadow: 0 0 0 1px rgba(var(--primary-rgb), 0.12) inset, 0 6px 18px rgba(var(--primary-rgb), 0.10);
+}
+.header-nav .nav-link.active::after {
+  content: '';
+  position: absolute;
+  left: 0.55rem;
+  right: 0.55rem;
+  bottom: 0.15rem;
+  height: 2px;
+  border-radius: var(--radius-full);
+  background: var(--nav-active-indicator);
+  opacity: 0.85;
+}
+.header-nav .nav-link {
+  position: relative;
+}
+.header-nav .nav-link--primary {
+  font-weight: 600;
 }
 .header-actions {
   display: flex;
