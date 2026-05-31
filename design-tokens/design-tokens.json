@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://clawjob.com/design-tokens/v2",
+  "meta": {
+    "version": "2.0.0",
+    "source": "frontend/src/styles/tokens.css",
+    "description": "ClawJob shared design tokens — dark-first exchange aesthetic"
+  },
+  "colors": {
+    "brand": {
+      "primary": "#22c55e",
+      "primaryRgb": "34, 197, 94",
+      "secondary": "#4ade80",
+      "400": "#4ade80",
+      "500": "#22c55e",
+      "600": "#16a34a"
+    },
+    "exchange": {
+      "bid": "#22c55e",
+      "bidRgb": "34, 197, 94",
+      "ask": "#60a5fa",
+      "askRgb": "96, 165, 250",
+      "escrow": "#10b981",
+      "escrowRgb": "16, 185, 129",
+      "settlement": "#f59e0b",
+      "settlementRgb": "245, 158, 11",
+      "verified": "#eab308",
+      "verifiedRgb": "234, 179, 8"
+    },
+    "semantic": {
+      "success": "#22c55e",
+      "warning": "#eab308",
+      "danger": "#ef4444"
+    },
+    "status": {
+      "open": "#22c55e",
+      "inProgress": "#3b82f6",
+      "pending": "#eab308",
+      "disputed": "#f97316",
+      "completed": "#71717a",
+      "settled": "#a78bfa"
+    },
+    "surface": {
+      "0": "#0a0a0b",
+      "1": "#18181b",
+      "2": "#27272a",
+      "3": "#3f3f46",
+      "backgroundDark": "#18181b",
+      "backgroundDarker": "#0a0a0b",
+      "card": "#27272a",
+      "cardHover": "#3f3f46",
+      "overlay": "rgba(34, 197, 94, 0.08)"
+    },
+    "text": {
+      "primary": "#fafafa",
+      "secondary": "#a1a1aa",
+      "tertiary": "rgba(161, 161, 170, 0.78)"
+    },
+    "border": {
+      "default": "#3f3f46",
+      "muted": "rgba(226, 232, 240, 0.08)",
+      "mutedStrong": "rgba(226, 232, 240, 0.14)",
+      "hairline": "1px solid rgba(255, 255, 255, 0.06)"
+    },
+    "data": {
+      "positive": "#4ade80",
+      "negative": "#f87171"
+    },
+    "shell": {
+      "headerBg": "rgba(10, 10, 11, 0.72)",
+      "navActiveIndicator": "rgba(34, 197, 94, 0.85)"
+    }
+  },
+  "spacing": {
+    "unit": "8px",
+    "1": "0.25rem",
+    "2": "0.5rem",
+    "3": "0.75rem",
+    "4": "1rem",
+    "5": "1.25rem",
+    "6": "1.5rem",
+    "8": "2rem",
+    "10": "2.5rem",
+    "12": "3rem"
+  },
+  "radius": {
+    "sm": "8px",
+    "md": "12px",
+    "lg": "16px",
+    "xl": "20px",
+    "full": "9999px"
+  },
+  "typography": {
+    "title": "1.25rem",
+    "headline": "1.1rem",
+    "body": "0.9375rem",
+    "caption": "0.8125rem",
+    "pageTitle": "1.5rem",
+    "sectionTitle": "1.125rem",
+    "bodyStrong": "1rem",
+    "fontMono": "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \"Liberation Mono\", \"Courier New\", monospace",
+    "lineTight": 1.2,
+    "lineNormal": 1.55,
+    "trackingTight": "-0.025em",
+    "trackingNormal": "-0.01em",
+    "trackingWide": "0.04em"
+  },
+  "shadow": {
+    "layer1": "0 1px 0 rgba(0, 0, 0, 0.25)",
+    "layer2": "0 10px 30px rgba(0, 0, 0, 0.35)",
+    "layer3": "0 1px 0 rgba(34, 197, 94, 0.10), 0 0 0 1px rgba(34, 197, 94, 0.10) inset",
+    "card": "0 1px 0 rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.08)",
+    "cardHover": "0 1px 0 rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.08), 0 8px 24px rgba(0, 0, 0, 0.12)",
+    "header": "0 1px 0 rgba(0, 0, 0, 0.12), 0 8px 32px rgba(0, 0, 0, 0.18)"
+  },
+  "motion": {
+    "easeApple": "cubic-bezier(0.4, 0, 0.2, 1)",
+    "easeSpring": "cubic-bezier(0.34, 1.56, 0.64, 1)",
+    "durationFast": "150ms",
+    "durationM": "300ms",
+    "durationSlow": "500ms",
+    "reducedMotion": {
+      "durationFast": "1ms",
+      "durationM": "1ms",
+      "durationSlow": "1ms"
+    }
+  },
+  "shell": {
+    "headerBlur": "20px"
+  }
+}

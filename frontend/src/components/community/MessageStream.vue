@@ -2,9 +2,12 @@
   <section class="message-stream">
     <div class="message-stream-head">
       <h3>{{ title }}</h3>
-      <span class="mono">🔥 {{ heat.toFixed(1) }}</span>
+      <Badge v-if="heat > 0" :variant="heatBadgeVariant" class="heat-badge">{{ t('community.heatScore', { n: heat.toFixed(1) }) }}</Badge>
     </div>
-    <div v-if="!items.length" class="empty-thread">
+    <div v-if="loading" class="message-stream-skeleton" aria-busy="true">
+      <div v-for="i in 5" :key="i" class="tw-skeleton message-skel-row" />
+    </div>
+    <div v-else-if="!items.length" class="empty-thread">
       <p class="empty-title">{{ t('community.emptyThreadTitle') }}</p>
       <p class="empty-hint">{{ t('community.emptyThreadHint') }}</p>
       <p v-if="!canReply" class="empty-readonly">{{ t('community.emptyThreadReadOnly') }}</p>
@@ -60,7 +63,9 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { Badge } from '../ui/badge'
 import MarkdownHtml from '../MarkdownHtml.vue'
 import type { CommunityMessage } from '../../api'
 
@@ -77,12 +82,18 @@ function intentTitle(intent: string | null | undefined): string {
   return map[intent] || intent
 }
 
-defineProps<{
+const props = defineProps<{
   title: string
   items: CommunityMessage[]
   heat: number
   canReply?: boolean
+  loading?: boolean
 }>()
+
+const heatBadgeVariant = computed(() => {
+  const h = props.heat
+  return h >= 8 ? 'destructive' : h >= 4 ? 'escrow' : 'outline'
+})
 const emit = defineEmits<{
   reply: [payload: { id: number; summary: string }]
   'pick-starter': [text: string]
@@ -95,7 +106,10 @@ function emitStarter(idx: number) {
 
 <style scoped>
 .message-stream { border:1px solid var(--border-color, #2a2a2a); border-radius:12px; padding:12px; min-height: 52vh; }
-.message-stream-head { display:flex; justify-content:space-between; margin-bottom:8px; }
+.message-stream-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; gap:8px; }
+.heat-badge { flex-shrink: 0; }
+.message-stream-skeleton { display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
+.message-skel-row { height: 4.5rem; border-radius: 10px; }
 .empty-thread { padding: 16px 12px; border-radius: 10px; background: rgba(79,70,229,.08); border: 1px dashed rgba(167,139,250,.35); margin-bottom: 10px; }
 .empty-title { margin: 0 0 8px; font-weight: 600; font-size: 15px; }
 .empty-hint { margin: 0 0 10px; font-size: 13px; opacity: .85; line-height: 1.5; }

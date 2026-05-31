@@ -1,7 +1,9 @@
 <template>
   <div class="agent-manage-view">
-    <h1 class="page-title">{{ t('nav.agentManage') || 'Agent 管理' }}</h1>
-    <p class="page-desc">{{ t('agentManage.intro') || '查看已注册的 Agent，以及每个 Agent 接取的任务情况。支持网页配置或通过 OpenClaw Skill / API 接取。' }}</p>
+    <PageHeader
+      :title="t('nav.agentManage') || 'Agent 管理'"
+      :description="t('agentManage.intro') || '查看已注册的 Agent，以及每个 Agent 接取的任务情况。'"
+    />
 
     <nav class="agent-manage-tools" aria-label="Agent tools">
       <RouterLink to="/agent-lab" class="agent-manage-tools__link">{{ t('nav.agentLab') || 'Agent Lab' }}</RouterLink>
@@ -156,9 +158,10 @@
                   <span class="agent-card__state-pill" :class="agentStatePillClass(a)">
                     {{ agentStateLabel(a) }}
                   </span>
-                  <span v-if="a.has_skill_token" class="agent-card__badge agent-card__badge--skill" :title="t('agent.skillBound')">{{ t('agent.skillBound') }}</span>
-                  <span v-if="a.published_skill_id" class="agent-card__badge agent-card__badge--skill-live" :title="t('agentManage.skillOnMarketHint')">{{ t('agentManage.skillOnMarket') || 'Skill 已上架' }}</span>
-                  <span v-if="a.published_template_id" class="agent-card__badge agent-card__badge--published">{{ t('agentManage.published') || '已发布模板' }}</span>
+                  <Badge v-if="a.has_skill_token" variant="verified">{{ t('agent.skillBound') }}</Badge>
+                  <Badge v-if="a.published_skill_id" variant="verified">{{ t('agentManage.skillOnMarket') || 'Skill 已上架' }}</Badge>
+                  <Badge v-if="a.published_template_id" variant="outline">{{ t('agentManage.published') || '已发布模板' }}</Badge>
+                  <Badge variant="p2p">{{ t('agentManage.p2pBadge') }}</Badge>
                 </div>
 
                 <!-- NOTE: translated comment in English. -->
@@ -241,21 +244,30 @@
                   <p v-if="!(agentTasksMap[a.id] || []).length" class="agent-card__detail-empty">{{ t('agentManage.noTasks') || '暂无接取任务' }}</p>
 
                   <div class="agent-payment-profile-box">
-                    <h4 class="agent-card__detail-title">{{ t('agentManage.paymentProfileTitle') || '收款方式' }}</h4>
+                    <div class="payment-profile-header">
+                      <h4 class="agent-card__detail-title">{{ t('agentManage.paymentProfileTitle') || '收款方式' }}</h4>
+                      <Badge variant="settlement">{{ t('agentManage.p2pBadge') }}</Badge>
+                    </div>
                     <p class="hint">{{ t('agentManage.paymentProfileHint') || 'Agent 间直接结算时，发布方将按此处配置向你打款（支付宝/微信/银行卡等）。' }}</p>
                     <div v-if="paymentProfileLoading === a.id" class="agent-card__detail-loading"><div class="spinner" /></div>
                     <template v-else>
-                      <div v-for="(m, idx) in (paymentProfileForms[a.id]?.methods || [])" :key="idx" class="payment-method-row">
-                        <select v-model="m.type" class="input">
-                          <option value="alipay">支付宝</option>
-                          <option value="wechat">微信</option>
-                          <option value="bank">银行卡</option>
-                          <option value="crypto">Crypto</option>
-                          <option value="custom">自定义</option>
-                        </select>
-                        <input v-model="m.label" class="input" placeholder="标签" />
-                        <input v-model="m.account_masked" class="input" placeholder="脱敏账号（展示用）" />
-                        <input v-model="m.details_for_counterparty" class="input" placeholder="对方打款所需信息（必填）" />
+                      <div v-for="(m, idx) in (paymentProfileForms[a.id]?.methods || [])" :key="idx" class="payment-method-card">
+                        <div class="payment-method-card__head">
+                          <Badge variant="outline">{{ m.type }}</Badge>
+                          <span v-if="m.label" class="payment-method-card__label">{{ m.label }}</span>
+                        </div>
+                        <div class="payment-method-card__fields">
+                          <select v-model="m.type" class="input">
+                            <option value="alipay">支付宝</option>
+                            <option value="wechat">微信</option>
+                            <option value="bank">银行卡</option>
+                            <option value="crypto">Crypto</option>
+                            <option value="custom">自定义</option>
+                          </select>
+                          <input v-model="m.label" class="input" placeholder="标签" />
+                          <input v-model="m.account_masked" class="input" placeholder="脱敏账号（展示用）" />
+                          <input v-model="m.details_for_counterparty" class="input" placeholder="对方打款所需信息（必填）" />
+                        </div>
                         <Button size="sm" variant="ghost" type="button" @click="removePaymentMethod(a.id, idx)">删除</Button>
                       </div>
                       <div class="agent-payment-profile-actions">
@@ -401,6 +413,8 @@
 import { ref, reactive, onMounted, watch, computed } from 'vue'
 import { RouterLink } from 'vue-router'
 import { Button } from '../components/ui/button'
+import { Badge } from '../components/ui/badge'
+import PageHeader from '../components/PageHeader.vue'
 import { Input } from '../components/ui/input'
 import CertificateModal from '../components/CertificateModal.vue'
 import EmptyState from '../components/EmptyState.vue'
@@ -970,7 +984,12 @@ function copySkillExportBlurb() {
 .agent-skill-box__tags { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3); }
 .agent-skill-box__loading { margin-top: var(--space-3); }
 
-.agent-payment-profile-box { margin-top: var(--space-4); padding-top: var(--space-3); border-top: var(--border-hairline); }
+.agent-payment-profile-box { margin-top: var(--space-4); padding: var(--space-4); border: var(--border-hairline); border-radius: var(--radius-lg); background: rgba(var(--exchange-settlement-rgb), 0.04); }
+.payment-profile-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin-bottom: var(--space-2); }
+.payment-method-card { padding: var(--space-3); margin-bottom: var(--space-2); border: var(--border-hairline); border-radius: var(--radius-md); background: var(--card-background); display: grid; gap: var(--space-2); }
+.payment-method-card__head { display: flex; align-items: center; gap: var(--space-2); }
+.payment-method-card__label { font-size: var(--font-caption); font-weight: 600; }
+.payment-method-card__fields { display: grid; gap: var(--space-2); }
 .payment-method-row { display: grid; gap: var(--space-2); margin-bottom: var(--space-2); }
 .agent-payment-profile-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }
 .earnings-summary { margin-bottom: var(--space-6); }

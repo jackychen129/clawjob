@@ -31,29 +31,35 @@
       </header>
 
       <section v-if="trustCard" class="agent-profile-trust">
-        <h2>{{ t('agentProfile.trustCardTitle') || '信任卡' }}</h2>
+        <div class="agent-profile-trust-head">
+          <h2>{{ t('agentProfile.trustCardTitle') || '信任卡' }}</h2>
+          <Badge variant="p2p">{{ t('agentProfile.trustP2pBadge') }}</Badge>
+        </div>
         <p class="hint">{{ t('agentProfile.trustCardHint') }}</p>
         <p v-if="trustCard.one_liner_zh" class="agent-profile-trust-oneliner">{{ trustCard.one_liner_zh }}</p>
         <div class="agent-profile-trust-grid">
-          <div class="stat-card">
+          <div class="stat-card stat-card--trust">
             <div class="stat-card__num">{{ trustCompletionText }}</div>
             <div class="stat-card__label">{{ t('agentProfile.trustCompletionRate') || '完成率' }}</div>
           </div>
-          <div class="stat-card">
+          <div class="stat-card stat-card--trust">
             <div class="stat-card__num">{{ trustCard.escrow_tasks_completed }}</div>
             <div class="stat-card__label">{{ t('agentProfile.trustEscrowDone') || '托管完成' }}</div>
           </div>
-          <div class="stat-card">
+          <div class="stat-card stat-card--trust">
             <div class="stat-card__num">{{ trustCard.total_earned }}</div>
             <div class="stat-card__label">{{ t('agentProfile.trustTotalEarned') || '累计收益' }}</div>
           </div>
         </div>
         <ul v-if="trustCard.badges.length" class="agent-profile-trust-badges">
-          <li v-for="b in trustCard.badges" :key="b">{{ trustBadgeLabel(b) }}</li>
+          <li v-for="b in trustCard.badges" :key="b">
+            <Badge :variant="trustBadgeVariant(b)">{{ trustBadgeLabel(b) }}</Badge>
+          </li>
         </ul>
         <ul v-if="trustCard.verified_skills.length" class="agent-profile-trust-skills">
           <li v-for="s in trustCard.verified_skills" :key="s.skill_token">
-            <code>{{ s.skill_token }}</code> — {{ s.name }}
+            <Badge variant="verified">{{ s.name }}</Badge>
+            <code class="trust-skill-token">{{ s.skill_token }}</code>
           </li>
         </ul>
       </section>
@@ -158,6 +164,7 @@ import {
   type AgentCaseItem,
   type SkillNode,
 } from '../api'
+import { Badge } from '../components/ui/badge'
 
 const route = useRoute()
 const { t } = useI18n()
@@ -236,8 +243,16 @@ function trustBadgeLabel(b: string): string {
     escrow_executor: t('agentProfile.badgeEscrowExecutor') || '托管执行',
     proven_executor: t('agentProfile.badgeProven') || '成熟执行',
     verified_skill_author: t('agentProfile.badgeVerifiedAuthor') || '认证作者',
+    p2p_settlement: t('agentProfile.badgeP2p') || 'P2P 结算',
   }
   return map[b] || b
+}
+
+function trustBadgeVariant(b: string): 'verified' | 'p2p' | 'escrow' | 'outline' {
+  if (b === 'verified_skill_author') return 'verified'
+  if (b === 'p2p_settlement') return 'p2p'
+  if (b === 'escrow_executor') return 'escrow'
+  return 'outline'
 }
 
 const firstPassText = computed(() => {
@@ -306,16 +321,14 @@ function formatDate(iso: string): string {
 .agent-profile-xp-meta { font-size: 11px; color: #666; }
 .agent-profile-xp-bar { height: 6px; border-radius: 999px; background: #e5e7eb; overflow: hidden; }
 .agent-profile-xp-bar span { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #22c55e, #a855f7); }
-.agent-profile-trust { margin-top: 28px; }
+.agent-profile-trust { margin-top: 28px; padding: 20px; border-radius: 16px; border: 1px solid rgba(var(--exchange-settlement-rgb, 167, 139, 250), 0.35); background: rgba(var(--exchange-settlement-rgb, 167, 139, 250), 0.06); }
+.agent-profile-trust-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.agent-profile-trust-head h2 { margin: 0; font-size: 16px; }
 .agent-profile-trust-oneliner { font-size: 15px; color: #0f766e; margin: 8px 0 16px; }
 .agent-profile-trust-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
-.agent-profile-trust-badges, .agent-profile-trust-skills { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0; margin: 12px 0 0; }
-.agent-profile-trust-badges li, .agent-profile-trust-skills li { font-size: 12px; padding: 4px 10px; border-radius: 999px; background: #ecfdf5; color: #065f46; }
-.agent-profile-trust { margin-top: 28px; }
-.agent-profile-trust-oneliner { font-size: 15px; color: #0f766e; margin: 8px 0 16px; }
-.agent-profile-trust-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
-.agent-profile-trust-badges, .agent-profile-trust-skills { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0; margin: 12px 0 0; }
-.agent-profile-trust-badges li, .agent-profile-trust-skills li { font-size: 12px; padding: 4px 10px; border-radius: 999px; background: #ecfdf5; color: #065f46; }
+.stat-card--trust { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.08); }
+.agent-profile-trust-badges, .agent-profile-trust-skills { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0; margin: 12px 0 0; align-items: center; }
+.trust-skill-token { font-size: 11px; opacity: 0.75; margin-left: 4px; }
 .agent-profile-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-top: 24px; }
 .stat-card { background: #fff; border: 1px solid #eee; border-radius: 12px; padding: 16px; }
 .stat-card__num { font-size: 24px; font-weight: 600; line-height: 1.2; }

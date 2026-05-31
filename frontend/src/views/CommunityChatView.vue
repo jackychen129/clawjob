@@ -21,6 +21,7 @@
         :title="t('community.topicList')"
         :search-placeholder="t('community.searchPlaceholder')"
         :query="query"
+        :loading="topicsLoading"
         @select="selectTopic"
         @search="onSearch"
       />
@@ -30,10 +31,14 @@
           :items="messages"
           :heat="selectedHeat"
           :can-reply="canSpeak"
+          :loading="messagesLoading"
           @reply="startReply"
           @pick-starter="applyStarterDraft"
         />
-        <p v-if="typingHint" class="typing-hint">{{ typingHint }}</p>
+        <p v-if="typingHint" class="typing-hint" role="status" aria-live="polite">
+          <span class="typing-dots" aria-hidden="true"><i /><i /><i /></span>
+          {{ typingHint }}
+        </p>
         <div v-if="showGuestCommunityBanner" class="composer-upsell composer-upsell--guest">
           <p class="composer-upsell__lead">{{ t('community.guestBannerLine') }}</p>
           <p class="composer-upsell__links">
@@ -169,6 +174,8 @@ const hotFeed = ref<api.CommunityHotFeedItem[]>([])
 const tasksDigest = ref<api.TaskListItem[]>([])
 const tasksDigestLoading = ref(false)
 const messages = ref<api.CommunityMessage[]>([])
+const messagesLoading = ref(false)
+const topicsLoading = ref(false)
 const allAgents = ref<Array<{ id: number; name: string }>>([])
 const skills = ref<api.SkillMarketItem[]>([])
 const selectedTopicId = ref<number | null>(null)
@@ -265,6 +272,8 @@ function openWs(topicId: number) {
 }
 
 async function fetchTopicsList() {
+  topicsLoading.value = true
+  try {
   const skillTag =
     typeof route.query.skill_tag === 'string' && route.query.skill_tag.trim()
       ? route.query.skill_tag.trim()
@@ -276,6 +285,9 @@ async function fetchTopicsList() {
     limit: 40,
   })
   topics.value = res.data.items || []
+  } finally {
+    topicsLoading.value = false
+  }
 }
 
 async function loadTasksDigest() {
@@ -358,10 +370,15 @@ async function loadHot() {
 async function selectTopic(id: number) {
   clearTypingPeers()
   selectedTopicId.value = id
+  messagesLoading.value = true
+  try {
   const res = await api.fetchCommunityMessages(id, { limit: 80 })
   messages.value = res.data.items || []
   selectedHeat.value = res.data.topic?.heat_score || 0
   openWs(id)
+  } finally {
+    messagesLoading.value = false
+  }
 }
 
 async function onSearch(q: string) {
@@ -481,7 +498,13 @@ async function pushSkill() {
 .growth-link:hover { text-decoration: underline; }
 .community-layout { display:grid; grid-template-columns: 280px 1fr 280px; gap:12px; align-items:start; }
 .community-main { display:flex; flex-direction:column; gap:10px; }
-.typing-hint { margin:0; font-size:12px; opacity:.72; min-height:18px; color:#a78bfa; }
+.typing-hint { margin:0; font-size:12px; min-height:22px; color:#c4b5fd; display:flex; align-items:center; gap:8px; }
+.typing-dots { display:inline-flex; gap:3px; }
+.typing-dots i { width:5px; height:5px; border-radius:50%; background:#a78bfa; animation:typing-bounce 1.2s ease-in-out infinite; }
+.typing-dots i:nth-child(2) { animation-delay: 0.15s; }
+.typing-dots i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes typing-bounce { 0%, 60%, 100% { transform: translateY(0); opacity: 0.45; } 30% { transform: translateY(-3px); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .typing-dots i { animation: none; opacity: 0.8; } }
 .community-right { display:flex; flex-direction:column; gap:10px; }
 .skill-push-panel { border:1px solid var(--border-color, #2a2a2a); border-radius:12px; padding:10px; display:flex; flex-direction:column; gap:8px; }
 .skill-push-panel h4 { margin:0; font-size:14px; }

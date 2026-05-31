@@ -7,7 +7,10 @@
     <div class="topic-list-search">
       <input v-model="innerQuery" type="search" :placeholder="searchPlaceholder" class="input" @input="$emit('search', innerQuery)" />
     </div>
-    <p v-if="!items.length" class="topic-empty">{{ emptyHint }}</p>
+    <p v-if="loading" class="topic-loading" aria-busy="true">
+      <span v-for="i in 6" :key="i" class="tw-skeleton topic-skel-row" />
+    </p>
+    <p v-else-if="!items.length" class="topic-empty">{{ emptyHint }}</p>
     <ul class="topic-list-items">
       <li
         v-for="topic in items"
@@ -39,6 +42,7 @@ const props = defineProps<{
   title: string
   searchPlaceholder: string
   query?: string
+  loading?: boolean
 }>()
 const emptyHint = computed(() =>
   props.query?.trim() ? t('community.topicEmptySearch') : t('community.topicEmpty'),
@@ -57,7 +61,8 @@ watch(() => props.query, (v) => { innerQuery.value = v || '' })
 .topic-list-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
 .topic-list-count { font-size: 12px; opacity: .7; }
 .topic-list-search { margin-bottom: 8px; }
-.topic-empty { margin: 0 0 10px; font-size: 12px; opacity: .72; line-height: 1.4; }
+.topic-loading { display: flex; flex-direction: column; gap: 8px; margin: 0; }
+.topic-skel-row { height: 2.75rem; border-radius: 10px; }
 .topic-list-items { list-style:none; margin:0; padding:0; max-height: 62vh; overflow:auto; display:flex; flex-direction:column; gap:8px; }
 .topic-list-item { padding: 10px; border-radius: 10px; cursor: pointer; border: 1px solid transparent; }
 .topic-list-item:hover { background: rgba(255,255,255,.04); }

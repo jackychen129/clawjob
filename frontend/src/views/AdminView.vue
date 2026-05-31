@@ -1,11 +1,12 @@
 <template>
   <section class="admin-wrap">
-    <h1 class="page-title">{{ t('admin.title') || '管理后台' }}</h1>
-    <div class="admin-head-actions">
-      <Button type="button" variant="secondary" :disabled="loading" @click="reloadAll">
-        {{ t('common.retry') || '刷新' }}
-      </Button>
-    </div>
+    <PageHeader :title="t('admin.title') || '管理后台'">
+      <template #actions>
+        <Button type="button" variant="secondary" :disabled="loading" @click="reloadAll">
+          {{ t('common.retry') || '刷新' }}
+        </Button>
+      </template>
+    </PageHeader>
 
     <div v-if="denied" class="card admin-card">
       <p class="error-msg">{{ t('admin.denied') || '无权限访问（需要管理员账号）' }}</p>
@@ -61,219 +62,267 @@
         </div>
       </div>
 
-      <div class="card admin-card">
-        <div class="admin-logs-head">
-          <h3 class="admin-logs-title">{{ t('admin.circuitBreakersTitle') }}</h3>
-          <div class="admin-cb-actions">
-            <input
-              v-model.trim="cbHostFilter"
-              class="input admin-cb-filter"
-              type="text"
-              :placeholder="t('admin.circuitFilterHost')"
-            />
-            <select v-model="cbStateFilter" class="input select-input admin-cb-filter">
-              <option value="">{{ t('admin.circuitFilterAll') }}</option>
-              <option value="open">open</option>
-              <option value="half_open">half_open</option>
-              <option value="closed">closed</option>
-            </select>
-            <Button size="sm" variant="secondary" type="button" :disabled="cbLoading" @click="reloadCircuitBreakers">
-              {{ cbLoading ? '…' : t('admin.circuitRefresh') }}
-            </Button>
-          </div>
-        </div>
-        <p class="hint admin-cb-hint">
-          {{ t('admin.circuitRuntimeHint', { n: cbThreshold, s: cbOpenSeconds }) }}
-        </p>
-        <div class="admin-log-table">
-          <div class="admin-log-row admin-log-row--head">
-            <div>Host</div>
-            <div>State</div>
-            <div>Failures</div>
-            <div>Open Until</div>
-          </div>
-          <div v-for="row in filteredCbRows" :key="row.host" class="admin-log-row">
-            <div class="admin-log-cat">{{ row.host }}</div>
-            <div class="admin-log-level">{{ row.state }}</div>
-            <div class="admin-log-level">{{ row.consecutive_failures }}</div>
-            <div class="admin-log-time">
-              <div>{{ row.open_until || '-' }}</div>
-              <div class="admin-dispute-actions" style="margin-top:6px">
-                <Button size="sm" type="button" variant="secondary" :disabled="cbControlLoading === row.host" @click="controlBreaker(row.host, 'open')">{{ t('admin.circuitOpen') }}</Button>
-                <Button size="sm" type="button" variant="secondary" :disabled="cbControlLoading === row.host" @click="controlBreaker(row.host, 'reset')">{{ t('admin.circuitReset') }}</Button>
-                <Button size="sm" type="button" variant="secondary" :disabled="cbControlLoading === row.host" @click="controlBreaker(row.host, 'half_open')">{{ t('admin.circuitHalfOpen') }}</Button>
-                <Button size="sm" type="button" :disabled="cbControlLoading === row.host" @click="controlBreaker(row.host, 'close')">{{ t('admin.circuitClose') }}</Button>
-              </div>
-            </div>
-          </div>
-          <p v-if="!filteredCbRows.length && !cbLoading" class="empty">暂无熔断记录</p>
-        </div>
-        <div class="admin-cb-history">
-          <div class="admin-cb-history__head">
-            <h4 class="admin-cb-history__title">{{ t('admin.circuitOpsHistory') }}</h4>
-            <Button size="sm" variant="ghost" type="button" @click="clearCircuitOpHistory">{{ t('admin.circuitClearHistory') }}</Button>
-          </div>
-          <ul v-if="circuitOpHistory.length" class="admin-cb-history__list">
-            <li v-for="(it, i) in circuitOpHistory" :key="`${it.host}-${it.action}-${i}`" class="admin-cb-history__item mono">
-              {{ it.at }} · {{ it.host }} · {{ it.action }}
-            </li>
-          </ul>
-          <p v-else class="hint">{{ t('admin.circuitHistoryEmpty') }}</p>
-        </div>
-      </div>
+      <Tabs v-model="adminTab" default-value="disputes" class="admin-primary-tabs">
+        <TabList>
+          <Tab value="disputes">{{ t('admin.tabDisputes') }}</Tab>
+          <Tab value="settlements">{{ t('admin.tabSettlements') }}</Tab>
+          <Tab value="circuit">{{ t('admin.tabCircuit') }}</Tab>
+          <Tab value="audit">{{ t('admin.tabAudit') }}</Tab>
+        </TabList>
 
-      <div class="card admin-card">
-        <div class="admin-logs-head">
-          <h3 class="admin-logs-title">{{ t('admin.communityOpsTitle') }}</h3>
-          <Button
-            size="sm"
-            type="button"
-            variant="secondary"
-            :disabled="communityDispatchLoading"
-            @click="runCommunityDispatch"
-          >
-            {{ communityDispatchLoading ? '…' : t('admin.communityDispatchBtn') }}
-          </Button>
-        </div>
-        <p class="hint">{{ t('admin.communityDispatchHint') }}</p>
-        <p v-if="communityDispatchResult" class="mono admin-dispatch-result">{{ communityDispatchResult }}</p>
-        <p v-if="communityDispatchError" class="error-msg">{{ communityDispatchError }}</p>
-      </div>
-
-      <div class="card admin-card">
-        <div class="admin-logs-head">
-          <h3 class="admin-logs-title">{{ t('admin.clearingTitle') }}</h3>
-          <div class="admin-cb-actions">
-            <Button size="sm" variant="secondary" type="button" :disabled="clearingLoading" @click="reloadClearing">
-              {{ clearingLoading ? '…' : (t('admin.clearingLoad') || '加载中转账户') }}
-            </Button>
-            <Button size="sm" type="button" :disabled="clearingSaving" @click="saveClearing">
-              {{ clearingSaving ? '…' : (t('admin.clearingSave') || '保存中转账户') }}
-            </Button>
-          </div>
-        </div>
-        <p class="hint">{{ t('admin.clearingHint') }}</p>
-        <div class="memory-search-row">
-          <input v-model="platformAdminKey" class="input" type="password" :placeholder="t('admin.clearingAdminKey')" />
-        </div>
-        <div class="memory-search-row">
-          <input v-model="clearingForm.alipay_account" class="input" type="text" :placeholder="t('admin.clearingAlipayAccount')" />
-          <input v-model="clearingForm.alipay_name" class="input" type="text" :placeholder="t('admin.clearingAlipayName')" />
-        </div>
-        <p class="hint">{{ t('admin.clearingBalance') }}：<span class="mono">{{ clearingAccount?.balance ?? 0 }}</span></p>
-        <p v-if="clearingError" class="error-msg">{{ clearingError }}</p>
-        <div class="admin-cb-history">
-          <div class="admin-cb-history__head">
-            <h4 class="admin-cb-history__title">{{ t('admin.clearingRecordsTitle') }}</h4>
-          </div>
-          <ul v-if="clearingRecords.length" class="admin-cb-history__list">
-            <li v-for="r in clearingRecords" :key="r.id" class="admin-cb-history__item mono">
-              {{ r.created_at || '-' }} · +{{ r.amount }} · task#{{ r.task_id ?? '-' }} · {{ r.remark || '-' }}
-            </li>
-          </ul>
-          <p v-else class="hint">{{ t('admin.clearingNoRecords') }}</p>
-        </div>
-      </div>
-
-      <div class="card admin-card admin-logs">
-        <div class="admin-logs-head">
-          <h3 class="admin-logs-title">{{ t('admin.logs') || '系统日志' }}</h3>
-          <div class="admin-logs-filters">
-            <select v-model="level" class="input select-input admin-filter" @change="reloadLogs(true)">
-              <option value="">{{ t('admin.allLevels') || '全部级别' }}</option>
-              <option value="info">info</option>
-              <option value="warning">warning</option>
-              <option value="error">error</option>
-            </select>
-            <select v-model="category" class="input select-input admin-filter" @change="reloadLogs(true)">
-              <option value="">{{ t('admin.allCategories') || '全部分类' }}</option>
-              <option value="request">request</option>
-              <option value="auth">auth</option>
-              <option value="task">task</option>
-              <option value="agent">agent</option>
-              <option value="system">system</option>
-            </select>
-          </div>
-        </div>
-
-        <div v-if="logsLoading && logs.length === 0" class="admin-logs-skeleton">
-          <div v-for="i in 8" :key="i" class="tw-skeleton admin-log-skel-row"></div>
-        </div>
-
-        <div v-else class="admin-log-table">
-          <div class="admin-log-row admin-log-row--head">
-            <div>{{ t('admin.time') || '时间' }}</div>
-            <div>{{ t('admin.level') || '级别' }}</div>
-            <div>{{ t('admin.category') || '分类' }}</div>
-            <div>{{ t('admin.message') || '消息' }}</div>
-          </div>
-          <div v-for="it in logs" :key="it.id" class="admin-log-row" :class="'lvl-' + it.level">
-            <div class="admin-log-time">{{ (it.created_at || '').slice(0, 19).replace('T', ' ') }}</div>
-            <div class="admin-log-level">{{ it.level }}</div>
-            <div class="admin-log-cat">{{ it.category }}</div>
-            <div class="admin-log-msg">
-              <div class="admin-log-msg-main">{{ it.message }}</div>
-              <div v-if="it.method || it.path || it.status_code" class="admin-log-msg-sub">
-                <span v-if="it.method">{{ it.method }}</span>
-                <span v-if="it.path">{{ it.path }}</span>
-                <span v-if="it.status_code">· {{ it.status_code }}</span>
-                <span v-if="it.user_id">· uid={{ it.user_id }}</span>
-              </div>
-            </div>
-          </div>
-
-          <p v-if="!logs.length && !logsLoading" class="empty">{{ t('admin.noLogs') || '暂无日志' }}</p>
-        </div>
-
-        <div class="admin-pagination">
-          <Button size="sm" variant="secondary" type="button" :disabled="skip <= 0 || logsLoading" @click="prevPage">
-            {{ t('admin.prev') || '上一页' }}
-          </Button>
-          <span class="admin-page-meta">
-            {{ skip + 1 }}-{{ skip + logs.length }} / {{ total }}
-          </span>
-          <Button size="sm" variant="secondary" type="button" :disabled="skip + pageSize >= total || logsLoading" @click="nextPage">
-            {{ t('admin.next') || '下一页' }}
-          </Button>
-        </div>
-      </div>
-
-      <div class="card admin-card admin-disputes">
-        <div class="admin-logs-head">
-          <h3 class="admin-logs-title">{{ t('admin.disputesTitle') || '争议任务快速处理' }}</h3>
-          <Button size="sm" variant="secondary" type="button" :disabled="disputesLoading" @click="reloadDisputes">
-            {{ t('admin.refreshDisputes') || '刷新争议列表' }}
-          </Button>
-        </div>
-        <div v-if="disputesLoading && disputes.length === 0" class="admin-logs-skeleton">
-          <div v-for="i in 4" :key="'dsk-'+i" class="tw-skeleton admin-log-skel-row"></div>
-        </div>
-        <div v-else class="admin-log-table">
-          <div class="admin-log-row admin-log-row--head admin-dispute-row">
-            <div>{{ t('admin.disputeColTask') || '任务' }}</div>
-            <div>{{ t('admin.disputeColProgress') || '进度' }}</div>
-            <div>{{ t('admin.disputeColReason') || '争议原因' }}</div>
-            <div>{{ t('admin.disputeColActions') || '操作' }}</div>
-          </div>
-          <div v-for="it in disputes" :key="it.id" class="admin-log-row admin-dispute-row">
-            <div>
-              <div class="admin-log-msg-main">#{{ it.id }} {{ it.title }}</div>
-              <div class="admin-log-time">{{ (it.updated_at || '').slice(0, 19).replace('T', ' ') }}</div>
-            </div>
-            <div class="admin-log-level">{{ Math.min(it.current_index + 1, Math.max(it.milestones_total, 1)) }} / {{ Math.max(it.milestones_total, 1) }}</div>
-            <div class="admin-log-msg-main">{{ it.dispute_reason || '-' }}</div>
-            <div class="admin-dispute-actions">
-              <Button size="sm" type="button" variant="secondary" :disabled="resolveLoading === it.id" @click="quickResolve(it.id, 'resume')">
-                {{ t('admin.resumeExec') || '恢复执行' }}
-              </Button>
-              <Button size="sm" type="button" :disabled="resolveLoading === it.id" @click="quickResolve(it.id, 'force_confirm')">
-                {{ t('admin.forceConfirm') || '强制验收' }}
+        <TabPanel value="disputes">
+          <div class="card admin-card admin-disputes">
+            <div class="admin-logs-head">
+              <h3 class="admin-logs-title">{{ t('admin.disputesTitle') || '争议任务快速处理' }}</h3>
+              <Button size="sm" variant="secondary" type="button" :disabled="disputesLoading" @click="reloadDisputes">
+                {{ t('admin.refreshDisputes') || '刷新争议列表' }}
               </Button>
             </div>
+            <div v-if="disputesLoading && disputes.length === 0" class="admin-logs-skeleton">
+              <div v-for="i in 4" :key="'dsk-'+i" class="tw-skeleton admin-log-skel-row"></div>
+            </div>
+            <div v-else class="admin-log-table">
+              <div class="admin-log-row admin-log-row--head admin-dispute-row">
+                <div>{{ t('admin.disputeColTask') || '任务' }}</div>
+                <div>{{ t('admin.disputeColProgress') || '进度' }}</div>
+                <div>{{ t('admin.disputeColReason') || '争议原因' }}</div>
+                <div>{{ t('admin.disputeColActions') || '操作' }}</div>
+              </div>
+              <div v-for="it in disputes" :key="it.id" class="admin-log-row admin-dispute-row">
+                <div>
+                  <div class="admin-log-msg-main">#{{ it.id }} {{ it.title }}</div>
+                  <div class="admin-log-time">{{ (it.updated_at || '').slice(0, 19).replace('T', ' ') }}</div>
+                </div>
+                <div class="admin-log-level">{{ Math.min(it.current_index + 1, Math.max(it.milestones_total, 1)) }} / {{ Math.max(it.milestones_total, 1) }}</div>
+                <div class="admin-log-msg-main">{{ it.dispute_reason || '-' }}</div>
+                <div class="admin-dispute-actions">
+                  <Button size="sm" type="button" variant="secondary" :disabled="resolveLoading === it.id" @click="quickResolve(it.id, 'resume')">
+                    {{ t('admin.resumeExec') || '恢复执行' }}
+                  </Button>
+                  <Button size="sm" type="button" :disabled="resolveLoading === it.id" @click="quickResolve(it.id, 'force_confirm')">
+                    {{ t('admin.forceConfirm') || '强制验收' }}
+                  </Button>
+                </div>
+              </div>
+              <p v-if="!disputes.length && !disputesLoading" class="empty">{{ t('admin.noDisputes') || '暂无争议任务' }}</p>
+            </div>
           </div>
-          <p v-if="!disputes.length && !disputesLoading" class="empty">{{ t('admin.noDisputes') || '暂无争议任务' }}</p>
-        </div>
-      </div>
+        </TabPanel>
+
+        <TabPanel value="settlements">
+          <div class="card admin-card">
+            <div class="admin-logs-head">
+              <h3 class="admin-logs-title">{{ t('admin.clearingTitle') }}</h3>
+              <div class="admin-cb-actions">
+                <Button size="sm" variant="secondary" type="button" :disabled="clearingLoading" @click="reloadClearing">
+                  {{ clearingLoading ? '…' : (t('admin.clearingLoad') || '加载中转账户') }}
+                </Button>
+                <Button size="sm" type="button" :disabled="clearingSaving" @click="saveClearing">
+                  {{ clearingSaving ? '…' : (t('admin.clearingSave') || '保存中转账户') }}
+                </Button>
+              </div>
+            </div>
+            <p class="hint">{{ t('admin.clearingHint') }}</p>
+            <div class="memory-search-row">
+              <input v-model="platformAdminKey" class="input" type="password" :placeholder="t('admin.clearingAdminKey')" />
+            </div>
+            <div class="memory-search-row">
+              <input v-model="clearingForm.alipay_account" class="input" type="text" :placeholder="t('admin.clearingAlipayAccount')" />
+              <input v-model="clearingForm.alipay_name" class="input" type="text" :placeholder="t('admin.clearingAlipayName')" />
+            </div>
+            <p class="hint">{{ t('admin.clearingBalance') }}：<span class="mono">{{ clearingAccount?.balance ?? 0 }}</span></p>
+            <p v-if="clearingError" class="error-msg">{{ clearingError }}</p>
+            <div class="admin-cb-history">
+              <div class="admin-cb-history__head">
+                <h4 class="admin-cb-history__title">{{ t('admin.clearingRecordsTitle') }}</h4>
+              </div>
+              <ul v-if="clearingRecords.length" class="admin-cb-history__list">
+                <li v-for="r in clearingRecords" :key="r.id" class="admin-cb-history__item mono">
+                  {{ r.created_at || '-' }} · +{{ r.amount }} · task#{{ r.task_id ?? '-' }} · {{ r.remark || '-' }}
+                </li>
+              </ul>
+              <p v-else class="hint">{{ t('admin.clearingNoRecords') }}</p>
+            </div>
+          </div>
+
+          <div class="card admin-card">
+            <div class="admin-logs-head">
+              <h3 class="admin-logs-title">{{ t('admin.kycTitle') || 'KYC 审核' }}</h3>
+              <Button size="sm" variant="secondary" type="button" :disabled="kycLoading" @click="reloadKyc">
+                {{ t('common.retry') || '刷新' }}
+              </Button>
+            </div>
+            <div class="admin-log-table">
+              <div class="admin-log-row admin-log-row--head admin-dispute-row">
+                <div>ID</div>
+                <div>{{ t('admin.kycColName') || '姓名' }}</div>
+                <div>{{ t('admin.kycColKind') || '类型' }}</div>
+                <div>{{ t('admin.disputeColActions') || '操作' }}</div>
+              </div>
+              <div v-for="k in kycRecords" :key="k.id" class="admin-log-row admin-dispute-row">
+                <div class="mono">#{{ k.id }} · uid={{ k.user_id }}</div>
+                <div>{{ k.legal_name }}<br /><span class="hint mono">{{ k.id_number_masked }}</span></div>
+                <div>{{ k.kind }} · {{ k.status }}</div>
+                <div class="admin-dispute-actions">
+                  <Button v-if="k.status === 'pending'" size="sm" type="button" :disabled="kycDecideLoading === k.id" @click="approveKyc(k.id)">
+                    {{ t('admin.kycApprove') || '通过' }}
+                  </Button>
+                  <Button v-if="k.status === 'pending'" size="sm" variant="secondary" type="button" :disabled="kycDecideLoading === k.id" @click="rejectKyc(k.id)">
+                    {{ t('admin.kycReject') || '驳回' }}
+                  </Button>
+                </div>
+              </div>
+              <p v-if="!kycRecords.length && !kycLoading" class="empty">{{ t('admin.kycEmpty') || '暂无待审 KYC' }}</p>
+            </div>
+          </div>
+        </TabPanel>
+
+        <TabPanel value="circuit">
+          <div class="card admin-card">
+            <div class="admin-logs-head">
+              <h3 class="admin-logs-title">{{ t('admin.circuitBreakersTitle') }}</h3>
+              <div class="admin-cb-actions">
+                <input
+                  v-model.trim="cbHostFilter"
+                  class="input admin-cb-filter"
+                  type="text"
+                  :placeholder="t('admin.circuitFilterHost')"
+                />
+                <select v-model="cbStateFilter" class="input select-input admin-cb-filter">
+                  <option value="">{{ t('admin.circuitFilterAll') }}</option>
+                  <option value="open">open</option>
+                  <option value="half_open">half_open</option>
+                  <option value="closed">closed</option>
+                </select>
+                <Button size="sm" variant="secondary" type="button" :disabled="cbLoading" @click="reloadCircuitBreakers">
+                  {{ cbLoading ? '…' : t('admin.circuitRefresh') }}
+                </Button>
+              </div>
+            </div>
+            <p class="hint admin-cb-hint">
+              {{ t('admin.circuitRuntimeHint', { n: cbThreshold, s: cbOpenSeconds }) }}
+            </p>
+            <div class="admin-log-table">
+              <div class="admin-log-row admin-log-row--head">
+                <div>Host</div>
+                <div>State</div>
+                <div>Failures</div>
+                <div>Open Until</div>
+              </div>
+              <div v-for="row in filteredCbRows" :key="row.host" class="admin-log-row">
+                <div class="admin-log-cat">{{ row.host }}</div>
+                <div class="admin-log-level">{{ row.state }}</div>
+                <div class="admin-log-level">{{ row.consecutive_failures }}</div>
+                <div class="admin-log-time">
+                  <div>{{ row.open_until || '-' }}</div>
+                  <div class="admin-dispute-actions" style="margin-top:6px">
+                    <Button size="sm" type="button" variant="secondary" :disabled="cbControlLoading === row.host" @click="controlBreaker(row.host, 'open')">{{ t('admin.circuitOpen') }}</Button>
+                    <Button size="sm" type="button" variant="secondary" :disabled="cbControlLoading === row.host" @click="controlBreaker(row.host, 'reset')">{{ t('admin.circuitReset') }}</Button>
+                    <Button size="sm" type="button" variant="secondary" :disabled="cbControlLoading === row.host" @click="controlBreaker(row.host, 'half_open')">{{ t('admin.circuitHalfOpen') }}</Button>
+                    <Button size="sm" type="button" :disabled="cbControlLoading === row.host" @click="controlBreaker(row.host, 'close')">{{ t('admin.circuitClose') }}</Button>
+                  </div>
+                </div>
+              </div>
+              <p v-if="!filteredCbRows.length && !cbLoading" class="empty">暂无熔断记录</p>
+            </div>
+            <div class="admin-cb-history">
+              <div class="admin-cb-history__head">
+                <h4 class="admin-cb-history__title">{{ t('admin.circuitOpsHistory') }}</h4>
+                <Button size="sm" variant="ghost" type="button" @click="clearCircuitOpHistory">{{ t('admin.circuitClearHistory') }}</Button>
+              </div>
+              <ul v-if="circuitOpHistory.length" class="admin-cb-history__list">
+                <li v-for="(it, i) in circuitOpHistory" :key="`${it.host}-${it.action}-${i}`" class="admin-cb-history__item mono">
+                  {{ it.at }} · {{ it.host }} · {{ it.action }}
+                </li>
+              </ul>
+              <p v-else class="hint">{{ t('admin.circuitHistoryEmpty') }}</p>
+            </div>
+          </div>
+        </TabPanel>
+
+        <TabPanel value="audit">
+          <div class="card admin-card">
+            <div class="admin-logs-head">
+              <h3 class="admin-logs-title">{{ t('admin.communityOpsTitle') }}</h3>
+              <Button
+                size="sm"
+                type="button"
+                variant="secondary"
+                :disabled="communityDispatchLoading"
+                @click="runCommunityDispatch"
+              >
+                {{ communityDispatchLoading ? '…' : t('admin.communityDispatchBtn') }}
+              </Button>
+            </div>
+            <p class="hint">{{ t('admin.communityDispatchHint') }}</p>
+            <p v-if="communityDispatchResult" class="mono admin-dispatch-result">{{ communityDispatchResult }}</p>
+            <p v-if="communityDispatchError" class="error-msg">{{ communityDispatchError }}</p>
+          </div>
+
+          <div class="card admin-card admin-logs">
+            <div class="admin-logs-head">
+              <h3 class="admin-logs-title">{{ t('admin.logs') || '系统日志' }}</h3>
+              <div class="admin-logs-filters">
+                <select v-model="level" class="input select-input admin-filter" @change="reloadLogs(true)">
+                  <option value="">{{ t('admin.allLevels') || '全部级别' }}</option>
+                  <option value="info">info</option>
+                  <option value="warning">warning</option>
+                  <option value="error">error</option>
+                </select>
+                <select v-model="category" class="input select-input admin-filter" @change="reloadLogs(true)">
+                  <option value="">{{ t('admin.allCategories') || '全部分类' }}</option>
+                  <option value="request">request</option>
+                  <option value="auth">auth</option>
+                  <option value="task">task</option>
+                  <option value="agent">agent</option>
+                  <option value="system">system</option>
+                </select>
+              </div>
+            </div>
+
+            <div v-if="logsLoading && logs.length === 0" class="admin-logs-skeleton">
+              <div v-for="i in 8" :key="i" class="tw-skeleton admin-log-skel-row"></div>
+            </div>
+
+            <div v-else class="admin-log-table">
+              <div class="admin-log-row admin-log-row--head">
+                <div>{{ t('admin.time') || '时间' }}</div>
+                <div>{{ t('admin.level') || '级别' }}</div>
+                <div>{{ t('admin.category') || '分类' }}</div>
+                <div>{{ t('admin.message') || '消息' }}</div>
+              </div>
+              <div v-for="it in logs" :key="it.id" class="admin-log-row" :class="'lvl-' + it.level">
+                <div class="admin-log-time">{{ (it.created_at || '').slice(0, 19).replace('T', ' ') }}</div>
+                <div class="admin-log-level">{{ it.level }}</div>
+                <div class="admin-log-cat">{{ it.category }}</div>
+                <div class="admin-log-msg">
+                  <div class="admin-log-msg-main">{{ it.message }}</div>
+                  <div v-if="it.method || it.path || it.status_code" class="admin-log-msg-sub">
+                    <span v-if="it.method">{{ it.method }}</span>
+                    <span v-if="it.path">{{ it.path }}</span>
+                    <span v-if="it.status_code">· {{ it.status_code }}</span>
+                    <span v-if="it.user_id">· uid={{ it.user_id }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <p v-if="!logs.length && !logsLoading" class="empty">{{ t('admin.noLogs') || '暂无日志' }}</p>
+            </div>
+
+            <div class="admin-pagination">
+              <Button size="sm" variant="secondary" type="button" :disabled="skip <= 0 || logsLoading" @click="prevPage">
+                {{ t('admin.prev') || '上一页' }}
+              </Button>
+              <span class="admin-page-meta">
+                {{ skip + 1 }}-{{ skip + logs.length }} / {{ total }}
+              </span>
+              <Button size="sm" variant="secondary" type="button" :disabled="skip + pageSize >= total || logsLoading" @click="nextPage">
+                {{ t('admin.next') || '下一页' }}
+              </Button>
+            </div>
+          </div>
+        </TabPanel>
+      </Tabs>
 
       <details class="card admin-card admin-withdrawals-demoted">
         <summary class="admin-logs-head">
@@ -312,37 +361,6 @@
           <p v-if="!withdrawals.length && !withdrawalsLoading" class="empty">{{ t('admin.withdrawalsEmpty') || '暂无待审提现' }}</p>
         </div>
       </details>
-
-      <div class="card admin-card">
-        <div class="admin-logs-head">
-          <h3 class="admin-logs-title">{{ t('admin.kycTitle') || 'KYC 审核' }}</h3>
-          <Button size="sm" variant="secondary" type="button" :disabled="kycLoading" @click="reloadKyc">
-            {{ t('common.retry') || '刷新' }}
-          </Button>
-        </div>
-        <div class="admin-log-table">
-          <div class="admin-log-row admin-log-row--head admin-dispute-row">
-            <div>ID</div>
-            <div>{{ t('admin.kycColName') || '姓名' }}</div>
-            <div>{{ t('admin.kycColKind') || '类型' }}</div>
-            <div>{{ t('admin.disputeColActions') || '操作' }}</div>
-          </div>
-          <div v-for="k in kycRecords" :key="k.id" class="admin-log-row admin-dispute-row">
-            <div class="mono">#{{ k.id }} · uid={{ k.user_id }}</div>
-            <div>{{ k.legal_name }}<br /><span class="hint mono">{{ k.id_number_masked }}</span></div>
-            <div>{{ k.kind }} · {{ k.status }}</div>
-            <div class="admin-dispute-actions">
-              <Button v-if="k.status === 'pending'" size="sm" type="button" :disabled="kycDecideLoading === k.id" @click="approveKyc(k.id)">
-                {{ t('admin.kycApprove') || '通过' }}
-              </Button>
-              <Button v-if="k.status === 'pending'" size="sm" variant="secondary" type="button" :disabled="kycDecideLoading === k.id" @click="rejectKyc(k.id)">
-                {{ t('admin.kycReject') || '驳回' }}
-              </Button>
-            </div>
-          </div>
-          <p v-if="!kycRecords.length && !kycLoading" class="empty">{{ t('admin.kycEmpty') || '暂无待审 KYC' }}</p>
-        </div>
-      </div>
     </template>
   </section>
 </template>
@@ -351,6 +369,8 @@
 import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Button } from '../components/ui/button'
+import { Tabs, TabList, Tab, TabPanel } from '../components/ui/tabs'
+import PageHeader from '../components/PageHeader.vue'
 import { safeT } from '../i18n'
 import * as api from '../api'
 
@@ -398,6 +418,7 @@ const withdrawDecideLoading = ref<number | null>(null)
 const kycLoading = ref(false)
 const kycRecords = ref<api.KycRecord[]>([])
 const kycDecideLoading = ref<number | null>(null)
+const adminTab = ref('disputes')
 
 const filteredCbRows = computed(() => {
   const hostQ = cbHostFilter.value.toLowerCase()
@@ -658,7 +679,10 @@ onMounted(() => {
 
 <style scoped>
 .admin-wrap { display: flex; flex-direction: column; gap: var(--space-6); }
-.admin-head-actions { display: flex; gap: var(--space-2); margin-bottom: var(--space-2); }
+.admin-primary-tabs { margin-top: var(--space-2); }
+.admin-withdrawals-demoted { opacity: 0.92; }
+.admin-withdrawals-demoted > summary { cursor: pointer; list-style: none; }
+.admin-withdrawals-demoted > summary::-webkit-details-marker { display: none; }
 .admin-metrics { display: grid; grid-template-columns: 1fr; gap: var(--space-4); }
 @media (min-width: 768px) { .admin-metrics { grid-template-columns: repeat(4, 1fr); } }
 .admin-metric-card {

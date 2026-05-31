@@ -1,31 +1,33 @@
 <template>
   <div class="task-manage-view apple-layout">
-    <header class="task-market-header">
-      <div>
-        <h1 class="page-title task-market-header__title">{{ t('nav.market') || t('nav.taskManage') }}</h1>
-        <p class="task-market-header__desc">{{ t('taskManage.intro') }}</p>
-      </div>
-      <div v-if="marketStatsLoading" class="market-stats-bar market-stats-bar--skeleton" aria-busy="true">
-        <div v-for="i in 3" :key="i" class="market-stat market-stat--skeleton">
-          <div class="tw-skeleton market-stat__skeleton-value"></div>
-          <div class="tw-skeleton market-stat__skeleton-label"></div>
+    <PageHeader
+      :title="t('nav.market') || t('nav.taskManage')"
+      :description="t('taskManage.intro')"
+      class="task-market-page-header"
+    >
+      <template #actions>
+        <div v-if="marketStatsLoading" class="market-stats-bar market-stats-bar--skeleton" aria-busy="true">
+          <div v-for="i in 3" :key="i" class="market-stat market-stat--skeleton">
+            <div class="tw-skeleton market-stat__skeleton-value"></div>
+            <div class="tw-skeleton market-stat__skeleton-label"></div>
+          </div>
         </div>
-      </div>
-      <div v-else class="market-stats-bar" role="status">
-        <div class="market-stat">
-          <span class="market-stat__value mono">{{ formatMarketStat(marketStats.tasks_open) }}</span>
-          <span class="market-stat__label">{{ t('taskManage.statOpenTasks') || '开放任务' }}</span>
+        <div v-else class="market-stats-bar" role="status">
+          <div class="market-stat">
+            <span class="market-stat__value mono">{{ formatMarketStat(marketStats.tasks_open) }}</span>
+            <span class="market-stat__label">{{ t('taskManage.statOpenTasks') || '开放任务' }}</span>
+          </div>
+          <div class="market-stat market-stat--accent">
+            <span class="market-stat__value mono">{{ formatMarketStat(marketStats.rewards_paid) }}</span>
+            <span class="market-stat__label">{{ t('taskManage.statRewardsPaid') || '已发放奖励' }}</span>
+          </div>
+          <div class="market-stat">
+            <span class="market-stat__value mono">{{ formatMarketStat(marketStats.agents_count) }}</span>
+            <span class="market-stat__label">{{ t('taskManage.statAgentsPublic') || '公开 Agent' }}</span>
+          </div>
         </div>
-        <div class="market-stat market-stat--accent">
-          <span class="market-stat__value mono">{{ formatMarketStat(marketStats.rewards_paid) }}</span>
-          <span class="market-stat__label">{{ t('taskManage.statRewardsPaid') || '已发放奖励' }}</span>
-        </div>
-        <div class="market-stat">
-          <span class="market-stat__value mono">{{ formatMarketStat(marketStats.agents_count) }}</span>
-          <span class="market-stat__label">{{ t('taskManage.statAgentsPublic') || '公开 Agent' }}</span>
-        </div>
-      </div>
-    </header>
+      </template>
+    </PageHeader>
     <div class="task-layout task-layout--mine-only">
       <section class="task-center">
         <div class="task-center-inner" :class="{ 'task-center-inner--with-detail': !!selectedTaskDetail }">
@@ -61,6 +63,28 @@
                   <option value="">{{ t('taskManage.categoryAll') || '全部' }}</option>
                   <option v-for="opt in categoryFilterOptions" :key="opt.value" :value="opt.value">{{ t(opt.labelKey) }}</option>
                 </select>
+                <div class="task-view-toggle" role="group" :aria-label="t('taskManage.viewTable')">
+                  <Button
+                    type="button"
+                    size="sm"
+                    :variant="listViewMode === 'cards' ? 'default' : 'ghost'"
+                    :aria-pressed="listViewMode === 'cards'"
+                    :title="t('taskManage.viewCards')"
+                    @click="listViewMode = 'cards'"
+                  >
+                    <LayoutGrid class="h-4 w-4" aria-hidden="true" />
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    :variant="listViewMode === 'table' ? 'default' : 'ghost'"
+                    :aria-pressed="listViewMode === 'table'"
+                    :title="t('taskManage.viewTable')"
+                    @click="listViewMode = 'table'"
+                  >
+                    <Table2 class="h-4 w-4" aria-hidden="true" />
+                  </Button>
+                </div>
               </div>
               <div v-if="tasksLoading" class="task-list task-list--skeleton">
                 <div v-for="i in 5" :key="i" class="task-row task-row--skeleton">
@@ -69,12 +93,59 @@
                   <div class="tw-skeleton task-manage-skeleton-line task-manage-skeleton-line--mid"></div>
                 </div>
               </div>
+              <div v-else-if="listViewMode === 'table'" class="task-table-wrap">
+                <Table>
+                  <thead>
+                    <TableRow>
+                      <TableHead>{{ t('taskManage.tableColTitle') }}</TableHead>
+                      <TableHead class="text-right">{{ t('taskManage.tableColReward') }}</TableHead>
+                      <TableHead>{{ t('taskManage.tableColStatus') }}</TableHead>
+                      <TableHead>{{ t('taskManage.tableColDepth') }}</TableHead>
+                      <TableHead class="text-right">{{ t('taskManage.tableColActions') }}</TableHead>
+                    </TableRow>
+                  </thead>
+                  <tbody>
+                    <TableRow
+                      v-for="(task, idx) in filteredTasks"
+                      :key="task.id"
+                      :class="cn('task-table-row', { 'task-table-row--selected': selectedTaskDetail?.id === task.id, 'task-table-row--stagger': !prefersReducedMotion })"
+                      :style="taskRowStaggerStyle(idx)"
+                      tabindex="0"
+                      role="button"
+                      @click="openTaskDetail(task)"
+                      @keydown.enter.prevent="openTaskDetail(task)"
+                      @keydown.space.prevent="openTaskDetail(task)"
+                    >
+                      <TableCell>
+                        <div class="task-table-title">{{ task.title }}</div>
+                        <div v-if="task.category" class="task-table-category">{{ taskCategoryLabel(task.category) }}</div>
+                      </TableCell>
+                      <TableCell class="text-right">
+                        <span v-if="task.reward_points" class="task-table-reward mono">{{ task.reward_points }}</span>
+                        <span v-else class="hint">—</span>
+                      </TableCell>
+                      <TableCell>
+                        <Badge :variant="taskStatusBadgeVariant(task.status)">{{ t('status.' + task.status) || task.status }}</Badge>
+                      </TableCell>
+                      <TableCell class="mono text-xs text-[var(--text-secondary)]">{{ formatSubscribersDepth(task) }}</TableCell>
+                      <TableCell class="text-right" @click.stop>
+                        <div class="task-table-actions">
+                          <Button size="sm" variant="ghost" type="button" @click="openTaskDetail(task)">{{ t('task.viewDetail') }}</Button>
+                          <Button v-if="task.status === 'open' && auth.isLoggedIn && myAgents.length" size="sm" :disabled="subscribeLoading === task.id" @click="openSubscribeModal(task)">{{ t('task.subscribe') }}</Button>
+                          <Button v-else-if="task.status === 'open' && !auth.isLoggedIn" size="sm" variant="secondary" type="button" @click="showAuthModal = true">{{ t('task.loginToAccept') }}</Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  </tbody>
+                </Table>
+              </div>
               <div v-else class="task-list task-list--virtual" v-bind="virtualAvailable.containerProps">
                 <div v-bind="virtualAvailable.wrapperProps">
                   <article
                     v-for="item in virtualAvailableItems"
                     :key="item.index"
-                    :class="cn('task-row', 'task-row--available', `task-row--${item.data!.status}`, { 'task-row--selected': selectedTaskDetail?.id === item.data!.id })"
+                    :class="cn('task-row', 'task-row--available', `task-row--${item.data!.status}`, { 'task-row--selected': selectedTaskDetail?.id === item.data!.id, 'task-row--stagger': !prefersReducedMotion })"
+                    :style="taskRowStaggerStyle(item.index)"
                     role="button"
                     tabindex="0"
                     @click="openTaskDetail(item.data!)"
@@ -84,6 +155,7 @@
                     <div class="task-row__head">
                       <span v-if="item.data!.category" class="task-row__category">{{ taskCategoryLabel(item.data!.category) }}</span>
                       <span v-if="item.data!.collaborative" class="task-tag task-tag--collab">{{ t('task.collaborativeBadge') }}</span>
+                      <span v-if="item.data!.settlement_mode === 'agent_direct' && item.data!.reward_points" class="task-tag task-tag--exchange task-tag--agent_direct_settlement">{{ t('task.settlementBadge') }}</span>
                       <span v-for="b in (item.data!.badges || [])" :key="b" class="task-tag" :class="'task-tag--' + b">{{ taskBadgeLabel(b) }}</span>
                       <span :class="taskStatusPillClass(item.data!.status)">{{ t('status.' + item.data!.status) || item.data!.status }}</span>
                       <span v-if="item.data!.reward_points" class="task-row__reward mono">{{ t('task.reward', { n: item.data!.reward_points }) }}</span>
@@ -129,6 +201,30 @@
               </template>
             </EmptyState>
             <template v-else>
+            <div class="task-filter-row task-filter-row--toggle-only">
+              <div class="task-view-toggle" role="group" :aria-label="t('taskManage.viewTable')">
+                <Button
+                  type="button"
+                  size="sm"
+                  :variant="listViewMode === 'cards' ? 'default' : 'ghost'"
+                  :aria-pressed="listViewMode === 'cards'"
+                  :title="t('taskManage.viewCards')"
+                  @click="listViewMode = 'cards'"
+                >
+                  <LayoutGrid class="h-4 w-4" aria-hidden="true" />
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  :variant="listViewMode === 'table' ? 'default' : 'ghost'"
+                  :aria-pressed="listViewMode === 'table'"
+                  :title="t('taskManage.viewTable')"
+                  @click="listViewMode = 'table'"
+                >
+                  <Table2 class="h-4 w-4" aria-hidden="true" />
+                </Button>
+              </div>
+            </div>
             <div v-if="myTasksLoading" class="task-list task-list--skeleton">
               <div v-for="i in 4" :key="i" class="task-row task-row--skeleton">
                 <div class="tw-skeleton task-manage-skeleton-line task-manage-skeleton-line--short"></div>
@@ -136,12 +232,67 @@
                 <div class="tw-skeleton task-manage-skeleton-line task-manage-skeleton-line--mid"></div>
               </div>
             </div>
+            <div v-else-if="listViewMode === 'table'" class="task-table-wrap">
+              <Table>
+                <thead>
+                  <TableRow>
+                    <TableHead>{{ t('taskManage.tableColTitle') }}</TableHead>
+                    <TableHead class="text-right">{{ t('taskManage.tableColReward') }}</TableHead>
+                    <TableHead>{{ t('taskManage.tableColStatus') }}</TableHead>
+                    <TableHead>{{ t('taskManage.tableColDepth') }}</TableHead>
+                    <TableHead class="text-right">{{ t('taskManage.tableColActions') }}</TableHead>
+                  </TableRow>
+                </thead>
+                <tbody>
+                  <TableRow
+                    v-for="(task, idx) in mineFilteredTasks"
+                    :key="task.id"
+                    :class="cn('task-table-row', { 'task-table-row--selected': selectedTaskDetail?.id === task.id, 'task-table-row--stagger': !prefersReducedMotion })"
+                    :style="taskRowStaggerStyle(idx)"
+                    tabindex="0"
+                    role="button"
+                    @click="openTaskDetail(task)"
+                    @keydown.enter.prevent="openTaskDetail(task)"
+                    @keydown.space.prevent="openTaskDetail(task)"
+                  >
+                    <TableCell>
+                      <div class="task-table-title">{{ task.title }}</div>
+                      <div v-if="task.category" class="task-table-category">{{ taskCategoryLabel(task.category) }}</div>
+                    </TableCell>
+                    <TableCell class="text-right">
+                      <span v-if="task.reward_points" class="task-table-reward mono">{{ task.reward_points }}</span>
+                      <span v-else class="hint">—</span>
+                    </TableCell>
+                    <TableCell>
+                      <Badge :variant="taskStatusBadgeVariant(task.status)">{{ t('status.' + task.status) || task.status }}</Badge>
+                    </TableCell>
+                    <TableCell class="mono text-xs text-[var(--text-secondary)]">{{ formatSubscribersDepth(task) }}</TableCell>
+                    <TableCell class="text-right" @click.stop>
+                      <div class="task-table-actions">
+                        <Button size="sm" variant="ghost" type="button" @click="openTaskDetail(task)">{{ t('task.viewDetail') }}</Button>
+                        <Button
+                          v-if="isExecutor(task) && (task.status === 'open' || task.status === 'in_progress')"
+                          size="sm"
+                          :disabled="submitCompletionLoading === task.id"
+                          @click="openSubmitModal(task)"
+                        >{{ t('task.submitCompletion') }}</Button>
+                        <template v-if="task.owner_id === auth.userId && task.status === 'pending_verification'">
+                          <Button size="sm" :disabled="confirmLoading === task.id" @click="openConfirmModal(task.id)">{{ t('task.confirmPass') }}</Button>
+                          <Button size="sm" variant="secondary" :disabled="rejectLoading === task.id" @click="openRejectModal(task.id)">{{ t('task.reject') }}</Button>
+                        </template>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                </tbody>
+              </Table>
+            </div>
             <div v-else class="task-list task-list--virtual" v-bind="virtualMine.containerProps">
               <div v-bind="virtualMine.wrapperProps">
                 <article
                   v-for="item in virtualMineItems"
                   :key="item.index"
-                  :class="cn('task-row', 'task-row--mine', `task-row--${item.data!.status}`, { 'task-row--selected': selectedTaskDetail?.id === item.data!.id })"
+                  :class="cn('task-row', 'task-row--mine', `task-row--${item.data!.status}`, { 'task-row--selected': selectedTaskDetail?.id === item.data!.id, 'task-row--stagger': !prefersReducedMotion })"
+                  :style="taskRowStaggerStyle(item.index)"
                   role="button"
                   tabindex="0"
                   @click="openTaskDetail(item.data!)"
@@ -215,6 +366,30 @@
               </template>
             </EmptyState>
             <template v-else>
+              <div class="task-filter-row task-filter-row--toggle-only">
+                <div class="task-view-toggle" role="group" :aria-label="t('taskManage.viewTable')">
+                  <Button
+                    type="button"
+                    size="sm"
+                    :variant="listViewMode === 'cards' ? 'default' : 'ghost'"
+                    :aria-pressed="listViewMode === 'cards'"
+                    :title="t('taskManage.viewCards')"
+                    @click="listViewMode = 'cards'"
+                  >
+                    <LayoutGrid class="h-4 w-4" aria-hidden="true" />
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    :variant="listViewMode === 'table' ? 'default' : 'ghost'"
+                    :aria-pressed="listViewMode === 'table'"
+                    :title="t('taskManage.viewTable')"
+                    @click="listViewMode = 'table'"
+                  >
+                    <Table2 class="h-4 w-4" aria-hidden="true" />
+                  </Button>
+                </div>
+              </div>
               <div v-if="publishedTasksLoading" class="task-list task-list--skeleton">
                 <div v-for="i in 4" :key="'p' + i" class="task-row task-row--skeleton">
                   <div class="tw-skeleton task-manage-skeleton-line task-manage-skeleton-line--short"></div>
@@ -222,12 +397,61 @@
                   <div class="tw-skeleton task-manage-skeleton-line task-manage-skeleton-line--mid"></div>
                 </div>
               </div>
+              <div v-else-if="listViewMode === 'table'" class="task-table-wrap">
+                <Table>
+                  <thead>
+                    <TableRow>
+                      <TableHead>{{ t('taskManage.tableColTitle') }}</TableHead>
+                      <TableHead class="text-right">{{ t('taskManage.tableColReward') }}</TableHead>
+                      <TableHead>{{ t('taskManage.tableColStatus') }}</TableHead>
+                      <TableHead>{{ t('taskManage.tableColDepth') }}</TableHead>
+                      <TableHead class="text-right">{{ t('taskManage.tableColActions') }}</TableHead>
+                    </TableRow>
+                  </thead>
+                  <tbody>
+                    <TableRow
+                      v-for="(task, idx) in publishedFilteredTasks"
+                      :key="task.id"
+                      :class="cn('task-table-row', { 'task-table-row--selected': selectedTaskDetail?.id === task.id, 'task-table-row--stagger': !prefersReducedMotion })"
+                      :style="taskRowStaggerStyle(idx)"
+                      tabindex="0"
+                      role="button"
+                      @click="openTaskDetail(task)"
+                      @keydown.enter.prevent="openTaskDetail(task)"
+                      @keydown.space.prevent="openTaskDetail(task)"
+                    >
+                      <TableCell>
+                        <div class="task-table-title">{{ task.title }}</div>
+                        <div v-if="task.category" class="task-table-category">{{ taskCategoryLabel(task.category) }}</div>
+                      </TableCell>
+                      <TableCell class="text-right">
+                        <span v-if="task.reward_points" class="task-table-reward mono">{{ task.reward_points }}</span>
+                        <span v-else class="hint">—</span>
+                      </TableCell>
+                      <TableCell>
+                        <Badge :variant="taskStatusBadgeVariant(task.status)">{{ t('status.' + task.status) || task.status }}</Badge>
+                      </TableCell>
+                      <TableCell class="mono text-xs text-[var(--text-secondary)]">{{ formatSubscribersDepth(task) }}</TableCell>
+                      <TableCell class="text-right" @click.stop>
+                        <div class="task-table-actions">
+                          <Button size="sm" variant="ghost" type="button" @click="openTaskDetail(task)">{{ t('task.viewDetail') }}</Button>
+                          <template v-if="task.owner_id === auth.userId && task.status === 'pending_verification'">
+                            <Button size="sm" :disabled="confirmLoading === task.id" @click="openConfirmModal(task.id)">{{ t('task.confirmPass') }}</Button>
+                            <Button size="sm" variant="secondary" :disabled="rejectLoading === task.id" @click="openRejectModal(task.id)">{{ t('task.reject') }}</Button>
+                          </template>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  </tbody>
+                </Table>
+              </div>
               <div v-else class="task-list task-list--virtual" v-bind="virtualPublished.containerProps">
                 <div v-bind="virtualPublished.wrapperProps">
                   <article
                     v-for="item in virtualPublishedItems"
                     :key="item.index"
-                    :class="cn('task-row', 'task-row--published', `task-row--${item.data!.status}`, { 'task-row--selected': selectedTaskDetail?.id === item.data!.id })"
+                    :class="cn('task-row', 'task-row--published', `task-row--${item.data!.status}`, { 'task-row--selected': selectedTaskDetail?.id === item.data!.id, 'task-row--stagger': !prefersReducedMotion })"
+                    :style="taskRowStaggerStyle(item.index)"
                     role="button"
                     tabindex="0"
                     @click="openTaskDetail(item.data!)"
@@ -344,6 +568,18 @@
               </div>
               <Button size="sm" variant="ghost" type="button" aria-label="关闭" @click="closeTaskDetail">×</Button>
             </div>
+            <TaskStatusStepper
+              class="task-detail-panel__stepper"
+              :status="detailStepperStatus"
+              :settled="detailStepperSettled"
+              compact
+            />
+            <Tabs v-model="detailPanelTab" default-value="human" class="task-detail-tabs">
+              <TabList class="task-detail-tabs__list">
+                <Tab value="human">{{ t('taskManage.humanTab') }}</Tab>
+                <Tab value="agent">{{ t('taskManage.agentJsonTab') }}</Tab>
+              </TabList>
+              <TabPanel value="human">
             <div v-if="detailLoading" class="loading"><div class="spinner"></div></div>
             <template v-else>
               <div class="detail-section">
@@ -649,14 +885,33 @@
               </div>
               <div
                 v-if="taskSettlementView || (selectedTaskDetail.settlement_mode === 'agent_direct' && selectedTaskDetail.status === 'completed')"
-                class="task-settlement-panel card card-content"
+                class="task-settlement-panel task-settlement-panel--exchange card card-content"
               >
-                <h4 class="task-comments-title">{{ t('task.settlementTitle') || 'Agent 间结算' }}</h4>
+                <h4 class="task-comments-title">{{ t('task.settlementTitle') }}</h4>
                 <p v-if="taskSettlementLoading" class="hint">{{ t('common.loading') }}</p>
                 <template v-else-if="taskSettlementView">
+                  <ol class="settlement-flow-steps" aria-label="Settlement flow">
+                    <li
+                      class="settlement-flow-step"
+                      :class="`settlement-flow-step--${settlementStepState(1)}`"
+                    >
+                      <span class="settlement-flow-step__num">1</span>
+                      <span class="settlement-flow-step__label">{{ t('taskManage.settlementStepPayer') || t('task.settlementPayerMarkPaid') }}</span>
+                    </li>
+                    <li class="settlement-flow-step__connector" aria-hidden="true" />
+                    <li
+                      class="settlement-flow-step"
+                      :class="`settlement-flow-step--${settlementStepState(2)}`"
+                    >
+                      <span class="settlement-flow-step__num">2</span>
+                      <span class="settlement-flow-step__label">{{ t('taskManage.settlementStepPayee') || t('task.settlementPayeeConfirm') }}</span>
+                    </li>
+                  </ol>
                   <p class="hint">{{ taskSettlementView.instructions_zh }}</p>
-                  <p class="mono">{{ t('task.settlementAmount') || '结算金额' }}：{{ taskSettlementView.reward_points }} {{ t('task.pointsUnit') || '点' }}</p>
-                  <p class="mono">{{ t('task.settlementStatus') || '状态' }}：{{ (taskSettlementView.settlement as { status?: string })?.status || 'pending' }}</p>
+                  <p class="mono task-settlement-status">
+                    {{ t('task.settlementAmount') }}：<strong>{{ taskSettlementView.reward_points }}</strong> {{ t('task.pointsUnit') }}
+                    · {{ t('task.settlementStatus') }}：<span :class="['settlement-status-pill', 'is-' + ((taskSettlementView.settlement as { status?: string })?.status || 'pending')]">{{ (taskSettlementView.settlement as { status?: string })?.status || 'pending' }}</span>
+                  </p>
                   <div v-if="taskSettlementView.payee_profile?.methods?.length" class="task-settlement-methods">
                     <p class="hint">{{ t('task.settlementPayeeMethods') || '执行方收款方式' }}</p>
                     <ul>
@@ -898,6 +1153,29 @@
                 <p v-else class="hint">{{ t('task.loginToComment') }}</p>
               </div>
             </template>
+              </TabPanel>
+              <TabPanel value="agent" class="task-detail-agent-panel">
+                <div class="task-detail-agent-panel__head">
+                  <p class="hint">{{ t('task.a2aSyncHint') || '供 Agent 集成的任务 JSON 与 curl 示例。' }}</p>
+                  <Button size="sm" type="button" variant="secondary" @click="copyAgentTaskJson">
+                    <Copy class="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                    {{ t('taskManage.copyAgentJson') || t('task.a2aCopyPayload') }}
+                  </Button>
+                </div>
+                <details open class="task-detail-agent-json">
+                  <summary class="task-comments-title">{{ t('taskManage.agentJsonTab') }}</summary>
+                  <pre class="account-json-pre">{{ agentTaskJson }}</pre>
+                </details>
+                <details class="task-detail-agent-curl">
+                  <summary class="task-comments-title">GET /tasks/{id}</summary>
+                  <pre class="account-json-pre">{{ agentCurlExamples.task }}</pre>
+                </details>
+                <details class="task-detail-agent-curl">
+                  <summary class="task-comments-title">GET /tasks/{id}/settlement</summary>
+                  <pre class="account-json-pre">{{ agentCurlExamples.settlement }}</pre>
+                </details>
+              </TabPanel>
+            </Tabs>
           </div>
         </div>
       </section>
@@ -1350,6 +1628,7 @@ import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue'
 import { useVirtualList } from '@vueuse/core'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { LayoutGrid, Table2, Copy } from 'lucide-vue-next'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Textarea } from '../components/ui/textarea'
@@ -1358,7 +1637,15 @@ import MarkdownHtml from '../components/MarkdownHtml.vue'
 import WorkflowDagPreview from '../components/WorkflowDagPreview.vue'
 import TaskTimelinePanel from '../components/TaskTimelinePanel.vue'
 import TaskAuctionPanel from '../components/TaskAuctionPanel.vue'
+import PageHeader from '../components/PageHeader.vue'
+import TaskStatusStepper from '../components/TaskStatusStepper.vue'
+import type { TaskStepperStatus } from '../components/TaskStatusStepper.vue'
+import { Table, TableRow, TableHead, TableCell } from '../components/ui/table'
+import { Badge } from '../components/ui/badge'
+import type { BadgeVariants } from '../components/ui/badge'
+import { Tabs, TabList, Tab, TabPanel } from '../components/ui/tabs'
 import { cn } from '../lib/utils'
+import { usePrefersReducedMotion } from '../lib/use-prefers-reduced-motion'
 import { safeT } from '../i18n'
 import { useAuthStore } from '../stores/auth'
 import * as api from '../api'
@@ -1374,6 +1661,12 @@ const emit = defineEmits<{ (e: 'show-auth'): void; (e: 'scroll-agent'): void; (e
 const _i18n = useI18n()
 const t = typeof _i18n.t === 'function' ? _i18n.t : safeT
 const auth = useAuthStore()
+const prefersReducedMotion = usePrefersReducedMotion()
+const listViewMode = ref<'cards' | 'table'>('cards')
+const detailPanelTab = ref('human')
+const apiBaseUrl =
+  (import.meta.env.VITE_API_BASE_URL && String(import.meta.env.VITE_API_BASE_URL).trim()) ||
+  (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8000')
 const showAuthModal = ref(false)
 const showCreateModal = ref(false)
 const authTab = ref<'login' | 'register'>('login')
@@ -2024,6 +2317,49 @@ function taskStatusPillClass(status: string): string {
   return 'task-status-pill task-status-pill--open'
 }
 
+function taskStatusBadgeVariant(status: string): BadgeVariants['variant'] {
+  const s = (status || '').replace(/-/g, '_')
+  const map: Record<string, BadgeVariants['variant']> = {
+    open: 'status-open',
+    in_progress: 'status-in-progress',
+    pending_verification: 'status-pending',
+    disputed: 'status-disputed',
+    completed: 'status-completed',
+    settled: 'status-settled',
+  }
+  return map[s] || 'default'
+}
+
+function formatSubscribersDepth(task: TaskListItem): string {
+  const subs = task.subscription_count != null ? String(task.subscription_count) : '—'
+  const depth = (task.category_completions ?? 0) > 0 ? String(task.category_completions) : '—'
+  return `${subs} / ${depth}`
+}
+
+function taskRowStaggerStyle(index: number): Record<string, string> | undefined {
+  if (prefersReducedMotion.value) return undefined
+  return { animationDelay: `${index * 45}ms` }
+}
+
+function patchLocalTask(taskId: number, patch: Partial<TaskListItem>) {
+  tasks.value = tasks.value.map((row) => (row.id === taskId ? { ...row, ...patch } : row))
+  myTasks.value = myTasks.value.map((row) => (row.id === taskId ? { ...row, ...patch } : row))
+  publishedTasks.value = publishedTasks.value.map((row) => (row.id === taskId ? { ...row, ...patch } : row))
+  if (selectedTaskDetail.value?.id === taskId) {
+    selectedTaskDetail.value = { ...selectedTaskDetail.value, ...patch }
+  }
+}
+
+async function copyAgentTaskJson() {
+  if (!agentTaskJson.value) return
+  try {
+    await navigator.clipboard.writeText(agentTaskJson.value)
+    showSuccessLocal(String(t('taskManage.agentJsonCopied') || t('task.a2aCopied') || '已复制'))
+  } catch {
+    showSuccessLocal(String(t('task.a2aCopyFailed') || '复制失败'))
+  }
+}
+
 type PreflightCheckRow = { name?: string; severity?: string; status?: string; message?: string }
 
 function verificationCheckClass(c: unknown): string {
@@ -2150,6 +2486,47 @@ const commentKind = ref<'message' | 'status_update'>('message')
 const commentAgentId = ref('')
 const skillProgress = ref<api.SkillNode[]>([])
 
+const detailStepperStatus = computed((): TaskStepperStatus => {
+  const raw = (selectedTaskDetail.value?.status || 'open').replace(/-/g, '_')
+  if (['open', 'in_progress', 'pending_verification', 'completed', 'settled', 'disputed'].includes(raw)) {
+    return raw as TaskStepperStatus
+  }
+  return 'open'
+})
+
+const detailStepperSettled = computed(() => {
+  if (selectedTaskDetail.value?.status === 'settled') return true
+  const st = (taskSettlementView.value?.settlement as { status?: string } | undefined)?.status
+  return st === 'completed'
+})
+
+const agentTaskJson = computed(() =>
+  selectedTaskDetail.value ? JSON.stringify(selectedTaskDetail.value, null, 2) : '',
+)
+
+const agentCurlExamples = computed(() => {
+  const id = selectedTaskDetail.value?.id
+  if (!id) return { task: '', settlement: '' }
+  const base = apiBaseUrl.replace(/\/$/, '')
+  return {
+    task: `curl -sS "${base}/tasks/${id}" \\\n  -H "Authorization: Bearer $TOKEN"`,
+    settlement: `curl -sS "${base}/tasks/${id}/settlement" \\\n  -H "Authorization: Bearer $TOKEN"`,
+  }
+})
+
+function settlementStepState(step: 1 | 2): 'done' | 'current' | 'upcoming' {
+  const settlement = taskSettlementView.value?.settlement as {
+    status?: string
+    payer_confirmed_at?: string
+  } | undefined
+  if (!settlement) return step === 1 ? 'current' : 'upcoming'
+  const status = settlement.status || 'pending'
+  if (status === 'completed') return 'done'
+  const payerConfirmed = !!settlement.payer_confirmed_at || status === 'payer_confirmed'
+  if (step === 1) return payerConfirmed ? 'done' : 'current'
+  return payerConfirmed ? 'current' : 'upcoming'
+}
+
 function reloadSelectedTask() {
   if (!selectedTaskDetail.value) return
   api.getTaskDetail(selectedTaskDetail.value.id).then((res) => {
@@ -2159,6 +2536,7 @@ function reloadSelectedTask() {
 
 function openTaskDetail(task: TaskListItem) {
   selectedTaskDetail.value = { ...task }
+  detailPanelTab.value = 'human'
   detailLoading.value = true
   taskComments.value = []
   skillProgress.value = []
@@ -2779,6 +3157,7 @@ function doSubscribe(taskId: number, agentId: number) {
   subscribeLoading.value = taskId
   api.subscribeTask(taskId, agentId).then(() => {
     subscribeTaskItem.value = null
+    patchLocalTask(taskId, { status: 'in_progress' })
     showSuccessLocal(t('task.subscribeSuccess'))
     loadTasks()
     loadMyTasks()
@@ -3608,6 +3987,13 @@ watch(tab, (newTab) => {
   margin: 0 0 var(--space-4);
 }
 .task-row__meta--skill { color: rgba(187, 247, 208, 0.86); }
+.task-row__meta--dense { line-height: 1.35; font-size: 0.8125rem; }
+.task-settlement-panel--exchange { border-color: rgba(167, 139, 250, 0.35); background: rgba(167, 139, 250, 0.04); }
+.task-settlement-status { margin: 0; font-size: var(--font-caption); }
+.settlement-status-pill { display: inline-block; padding: 0.1rem 0.45rem; border-radius: var(--radius-sm); font-size: 0.75rem; font-weight: 600; text-transform: lowercase; }
+.settlement-status-pill.is-pending { background: rgba(234, 179, 8, 0.15); color: rgb(234, 179, 8); }
+.settlement-status-pill.is-payer_confirmed { background: rgba(59, 130, 246, 0.15); color: rgb(96, 165, 250); }
+.settlement-status-pill.is-completed { background: rgba(34, 197, 94, 0.15); color: rgb(74, 222, 128); }
 .task-row__actions {
   display: flex;
   flex-wrap: wrap;
@@ -3822,8 +4208,121 @@ watch(tab, (newTab) => {
   color: var(--text-secondary);
   line-height: 1.5;
 }
-.task-filter-row { margin-bottom: var(--space-4); }
+.task-filter-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-4);
+}
+.task-filter-row--toggle-only { justify-content: flex-end; }
 .task-filter-select { max-width: 200px; border-radius: var(--radius-md); border: var(--border-hairline); padding: var(--space-2) var(--space-3); font-size: var(--font-body); }
+.task-view-toggle {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: auto;
+  padding: 2px;
+  border-radius: var(--radius-md);
+  border: var(--border-hairline);
+  background: var(--surface-2);
+}
+.task-table-wrap { margin-bottom: var(--space-4); }
+.task-table-row { cursor: pointer; }
+.task-table-row--selected { background: rgba(var(--primary-rgb), 0.06) !important; }
+.task-table-title { font-weight: 650; color: var(--text-primary); line-height: 1.3; }
+.task-table-category { margin-top: 0.15rem; font-size: var(--font-caption); color: var(--text-secondary); }
+.task-table-reward { font-weight: 700; color: #22c55e; letter-spacing: -0.02em; }
+.task-table-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); }
+.task-detail-panel__stepper { margin-bottom: var(--space-5); }
+.task-detail-tabs__list { margin-bottom: var(--space-4); }
+.task-detail-agent-panel__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+.task-detail-agent-json,
+.task-detail-agent-curl { margin-bottom: var(--space-4); }
+.settlement-flow-steps {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  list-style: none;
+  margin: 0 0 var(--space-4);
+  padding: 0;
+}
+.settlement-flow-step {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  border: var(--border-hairline);
+  background: var(--surface-2);
+  font-size: var(--font-caption);
+  color: var(--text-secondary);
+  transition: border-color var(--duration-fast), background-color var(--duration-fast), color var(--duration-fast);
+}
+.settlement-flow-step--current {
+  border-color: rgba(var(--primary-rgb), 0.35);
+  background: rgba(var(--primary-rgb), 0.08);
+  color: var(--text-primary);
+}
+.settlement-flow-step--done {
+  border-color: rgba(34, 197, 94, 0.35);
+  background: rgba(34, 197, 94, 0.08);
+  color: rgba(134, 239, 172, 0.95);
+}
+.settlement-flow-step__num {
+  display: inline-flex;
+  height: 1.5rem;
+  width: 1.5rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.06);
+}
+.settlement-flow-step--current .settlement-flow-step__num { background: rgba(var(--primary-rgb), 0.2); color: var(--primary-color); }
+.settlement-flow-step--done .settlement-flow-step__num { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
+.settlement-flow-step__connector {
+  flex: 0 0 1.5rem;
+  height: 2px;
+  background: var(--border-color);
+  border-radius: 1px;
+}
+.task-status-pill {
+  transition: background-color var(--duration-fast) var(--ease-apple),
+    color var(--duration-fast) var(--ease-apple);
+}
+@keyframes task-row-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.task-row--stagger,
+.task-table-row--stagger {
+  animation: task-row-enter var(--duration-m) var(--ease-apple) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .task-row--stagger,
+  .task-table-row--stagger {
+    animation: none;
+  }
+  .task-status-pill {
+    transition: none;
+  }
+  .settlement-flow-step {
+    transition: none;
+  }
+}
+.task-market-page-header :deep(.market-stats-bar) {
+  min-width: min(100%, 22rem);
+}
 .task-layout--mine-only { grid-template-columns: minmax(0, 1fr) 260px; }
 .task-layout--mine-only .task-center { min-width: 0; }
 .task-right { display: flex; flex-direction: column; gap: var(--space-6); position: sticky; top: 92px; }

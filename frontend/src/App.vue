@@ -49,51 +49,40 @@
                 <Bot class="nav-icon" aria-hidden="true" />
                 <span>{{ t('nav.agentManage') || 'Agent' }}</span>
               </router-link>
-              <router-link to="/join" class="nav-link nav-link--primary nav-link--join" :class="{ active: route.path === '/join' }">
-                <UserPlus class="nav-icon" aria-hidden="true" />
-                <span>{{ t('nav.joinAgent') || '加入' }}</span>
+              <router-link
+                to="/account"
+                class="nav-link nav-link--primary nav-link--account"
+                :class="{ active: route.path === '/account' }"
+              >
+                <Wallet class="nav-icon" aria-hidden="true" />
+                <span>{{ t('common.myAccount') }}</span>
               </router-link>
-            </div>
-          </section>
-          <section class="nav-group nav-group--secondary">
-            <p class="nav-group-title">{{ t('nav.navGroupDiscover') }}</p>
-            <div class="nav-group-links">
-              <router-link to="/inbox" class="nav-link" :class="{ active: route.path === '/inbox' }">
-                <Mail class="nav-icon" aria-hidden="true" />
-                <span>{{ t('nav.inbox') || '站内信' }}</span>
-              </router-link>
-              <router-link to="/marketplace" class="nav-link" :class="{ active: route.path === '/marketplace' || route.path === '/marketplace/' }">
-                <BookOpen class="nav-icon" aria-hidden="true" />
-                <span>{{ t('nav.skillMarket') || 'Skill 市场' }}</span>
-              </router-link>
-              <router-link to="/dashboard" class="nav-link" :class="{ active: route.path === '/dashboard' }">
-                <LayoutGrid class="nav-icon" aria-hidden="true" />
-                <span>{{ t('nav.dashboard') || '实况' }}</span>
-              </router-link>
-              <router-link to="/leaderboard" class="nav-link" :class="{ active: route.path === '/leaderboard' }">
-                <Trophy class="nav-icon" aria-hidden="true" />
-                <span>{{ t('nav.leaderboard') || '排行榜' }}</span>
-              </router-link>
-              <router-link to="/candidates" class="nav-link" :class="{ active: route.path === '/candidates' }">
-                <Users class="nav-icon" aria-hidden="true" />
-                <span>{{ t('nav.candidates') || '候选人' }}</span>
-              </router-link>
-              <router-link to="/playbook" class="nav-link" :class="{ active: route.path === '/playbook' }">
-                <ListChecks class="nav-icon" aria-hidden="true" />
-                <span>{{ t('nav.playbook') }}</span>
-              </router-link>
-              <router-link to="/docs" class="nav-link" :class="{ active: route.path.startsWith('/docs') }">
-                <BookOpen class="nav-icon" aria-hidden="true" />
-                <span>{{ t('common.docs') }}</span>
-              </router-link>
-              <router-link v-if="isAdmin" to="/admin" class="nav-link" :class="{ active: route.path === '/admin' }">
-                <Shield class="nav-icon" aria-hidden="true" />
-                <span>{{ t('nav.adminNav') }}</span>
-              </router-link>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                class="nav-overflow-btn"
+                :aria-label="t('nav.navGroupDiscover')"
+                :aria-expanded="navOverflowOpen"
+                aria-controls="nav-overflow-sheet"
+                @click="navOverflowOpen = true"
+              >
+                <Menu class="nav-icon" aria-hidden="true" />
+              </Button>
             </div>
           </section>
         </nav>
         <div class="header-actions">
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            class="command-palette-hint"
+            :aria-label="t('commandPalette.title')"
+            @click="commandPaletteOpen = true"
+          >
+            <span aria-hidden="true">⌘K</span>
+          </Button>
           <select v-model="locale" class="locale-select" @change="onLocaleChange">
             <option value="zh-CN">中文</option>
             <option value="en">English</option>
@@ -101,10 +90,6 @@
           <template v-if="auth.isLoggedIn">
             <span class="username">{{ auth.username }}</span>
             <span class="credits-badge" :title="t('common.credits')">💰 {{ accountCredits }}</span>
-            <Button size="sm" :as="RouterLink" to="/account" variant="secondary" :class="{ 'ring-2 ring-primary ring-offset-2 ring-offset-background': route.path === '/account' }">
-              <Wallet class="btn-icon" aria-hidden="true" />
-              {{ t('common.myAccount') }}
-            </Button>
             <Button size="sm" variant="secondary" @click="auth.logout()">
               <LogOut class="btn-icon" aria-hidden="true" />
               {{ t('common.logout') }}
@@ -139,7 +124,13 @@
       <Button size="sm" type="button" @click="openCreateTaskModalWithDraft">{{ t('task.draftRestore') || '从草稿恢复' }}</Button>
       <Button size="sm" variant="ghost" type="button" @click="clearDraft">{{ t('task.draftDiscard') || '丢弃草稿' }}</Button>
     </div>
-    <div v-if="auth.isLoggedIn && taskPulseTotal > 0" class="task-pulse-banner" role="status">
+    <div
+      v-if="auth.isLoggedIn && taskPulseTotal > 0"
+      class="task-pulse-banner"
+      :class="{ 'task-pulse-banner--reduce-motion': prefersReducedMotion }"
+      role="status"
+      aria-live="polite"
+    >
       <div class="task-pulse-banner__inner">
         <span class="task-pulse-banner__title">{{ t('marketing.pulseTitle') }}</span>
         <RouterLink
@@ -165,13 +156,19 @@
         <RouterLink to="/tasks" class="task-pulse-banner__cta">{{ t('marketing.pulseCta') }} →</RouterLink>
       </div>
     </div>
-    <main class="main-content relative z-0" :key="route.path">
-      <router-view
-        @success="showSuccess"
-        @register-hint="postPublishRegisterHint = true"
-        @show-auth="showAuthModal = true"
-        @credits-updated="loadAccountMe"
-      />
+    <main class="main-content relative z-0">
+      <router-view v-slot="{ Component }">
+        <Transition name="page-fade" mode="out-in">
+          <component
+            :is="Component"
+            :key="route.path"
+            @success="showSuccess"
+            @register-hint="postPublishRegisterHint = true"
+            @show-auth="showAuthModal = true"
+            @credits-updated="loadAccountMe"
+          />
+        </Transition>
+      </router-view>
     </main>
 
     <!-- NOTE: translated comment in English. -->
@@ -457,6 +454,58 @@
       <div v-if="successToast" class="toast" role="status">{{ successToast }}</div>
     </Transition>
 
+    <CommandPalette
+      v-model:open="commandPaletteOpen"
+      @publish-task="showCreateTaskModal = true"
+      @join-agent="router.push('/join')"
+    />
+
+    <Sheet
+      id="nav-overflow-sheet"
+      v-model:open="navOverflowOpen"
+      side="left"
+      :title="String(t('nav.navGroupDiscover'))"
+    >
+      <nav class="nav-overflow-links" :aria-label="String(t('nav.navGroupDiscover'))">
+        <router-link to="/dashboard" class="nav-overflow-link" :class="{ active: route.path === '/dashboard' }" @click="closeNavOverflow">
+          <LayoutGrid class="nav-icon" aria-hidden="true" />
+          <span>{{ t('nav.dashboard') }}</span>
+        </router-link>
+        <router-link to="/inbox" class="nav-overflow-link" :class="{ active: route.path === '/inbox' }" @click="closeNavOverflow">
+          <Mail class="nav-icon" aria-hidden="true" />
+          <span>{{ t('nav.inbox') }}</span>
+        </router-link>
+        <router-link to="/marketplace" class="nav-overflow-link" :class="{ active: route.path === '/marketplace' || route.path === '/marketplace/' }" @click="closeNavOverflow">
+          <BookOpen class="nav-icon" aria-hidden="true" />
+          <span>{{ t('nav.skillMarket') }}</span>
+        </router-link>
+        <router-link to="/leaderboard" class="nav-overflow-link" :class="{ active: route.path === '/leaderboard' }" @click="closeNavOverflow">
+          <Trophy class="nav-icon" aria-hidden="true" />
+          <span>{{ t('nav.leaderboard') }}</span>
+        </router-link>
+        <router-link to="/candidates" class="nav-overflow-link" :class="{ active: route.path === '/candidates' }" @click="closeNavOverflow">
+          <Users class="nav-icon" aria-hidden="true" />
+          <span>{{ t('nav.candidates') }}</span>
+        </router-link>
+        <router-link to="/playbook" class="nav-overflow-link" :class="{ active: route.path === '/playbook' }" @click="closeNavOverflow">
+          <ListChecks class="nav-icon" aria-hidden="true" />
+          <span>{{ t('nav.playbook') }}</span>
+        </router-link>
+        <router-link to="/docs" class="nav-overflow-link" :class="{ active: route.path.startsWith('/docs') }" @click="closeNavOverflow">
+          <BookOpen class="nav-icon" aria-hidden="true" />
+          <span>{{ t('common.docs') }}</span>
+        </router-link>
+        <router-link to="/join" class="nav-overflow-link" :class="{ active: route.path === '/join' }" @click="closeNavOverflow">
+          <UserPlus class="nav-icon" aria-hidden="true" />
+          <span>{{ t('nav.joinAgent') }}</span>
+        </router-link>
+        <router-link v-if="isAdmin" to="/admin" class="nav-overflow-link" :class="{ active: route.path === '/admin' }" @click="closeNavOverflow">
+          <Shield class="nav-icon" aria-hidden="true" />
+          <span>{{ t('nav.adminNav') }}</span>
+        </router-link>
+      </nav>
+    </Sheet>
+
     <footer class="app-footer">
       <div class="app-footer-inner">
         <nav class="app-footer-links" :aria-label="t('common.footerNavAria')">
@@ -479,14 +528,24 @@ import { i18n, setLocale, safeT, type LocaleKey } from './i18n'
 import { useAuthStore } from './stores/auth'
 import * as api from './api'
 import { taskPulseRelevantNav } from './utils/taskPulseHub'
+import CommandPalette from './components/CommandPalette.vue'
 import { Button } from './components/ui/button'
 import { Input } from './components/ui/input'
 import { Textarea } from './components/ui/textarea'
+import { Sheet } from './components/ui/sheet'
 import { getTemplateById } from './constants/taskTemplates'
-import { BookOpen, Bot, LayoutGrid, ListChecks, LogIn, LogOut, Mail, MessagesSquare, Shield, TrendingUp, Trophy, UserPlus, Users, Wallet } from 'lucide-vue-next'
+import { usePrefersReducedMotion } from './lib/use-prefers-reduced-motion'
+import { BookOpen, Bot, LayoutGrid, ListChecks, LogIn, LogOut, Mail, Menu, MessagesSquare, Shield, TrendingUp, Trophy, UserPlus, Users, Wallet } from 'lucide-vue-next'
 
 const route = useRoute()
 const router = useRouter()
+const prefersReducedMotion = usePrefersReducedMotion()
+const commandPaletteOpen = ref(false)
+const navOverflowOpen = ref(false)
+
+function closeNavOverflow() {
+  navOverflowOpen.value = false
+}
 const _i18n = useI18n()
 const t = typeof _i18n.t === 'function' ? _i18n.t : safeT
 const auth = useAuthStore()
@@ -746,6 +805,8 @@ function onGoogleLoginClick(e: Event) {
 
 function onEscapeKey(e: KeyboardEvent) {
   if (e.key !== 'Escape') return
+  if (commandPaletteOpen.value) { commandPaletteOpen.value = false; return }
+  if (navOverflowOpen.value) { navOverflowOpen.value = false; return }
   if (showCreateTaskModal.value) { closeCreateTaskModal(); return }
   if (showAuthModal.value) { showAuthModal.value = false; return }
 }
@@ -1595,11 +1656,63 @@ onUnmounted(() => {
   font-weight: 600;
   padding: 0.5rem 0.75rem;
 }
-.nav-group--secondary {
-  opacity: 0.92;
+.nav-overflow-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.25rem;
+  min-height: 2.25rem;
+  padding: 0.5rem 0.65rem;
+  color: var(--text-secondary);
+  border-radius: var(--radius-md, 8px);
 }
-@media (max-width: 900px) {
-  .nav-group--secondary .nav-group-title { display: none; }
+.nav-overflow-btn:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.06);
+}
+.nav-overflow-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.35);
+}
+.command-palette-hint {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary, rgba(255, 255, 255, 0.5));
+  padding-inline: 0.5rem;
+}
+.command-palette-hint:hover {
+  color: var(--text-secondary);
+}
+.nav-overflow-links {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.nav-overflow-link {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: var(--radius-md, 8px);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.nav-overflow-link:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.06);
+}
+.nav-overflow-link.active {
+  color: var(--text-primary);
+  background: rgba(var(--primary-rgb), 0.12);
+}
+.task-pulse-banner--reduce-motion .pulse-chip,
+.task-pulse-banner--reduce-motion .pulse-chip--link {
+  animation: none !important;
+  transition: none;
 }
 .nav-group {
   display: flex;
@@ -1666,6 +1779,43 @@ onUnmounted(() => {
 @media (max-width: 900px) {
   .nav-group {
     min-width: 100%;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nav-overflow-link {
+    transition: none;
+  }
+  .task-pulse-banner .pulse-chip,
+  .task-pulse-banner .pulse-chip--link {
+    animation: none !important;
+    transition: none;
+  }
+}
+</style>
+
+<style>
+.page-fade-enter-active,
+.page-fade-leave-active {
+  transition:
+    opacity 200ms var(--ease-apple, ease),
+    transform 200ms var(--ease-apple, ease);
+}
+.page-fade-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+.page-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .page-fade-enter-active,
+  .page-fade-leave-active {
+    transition: none;
+  }
+  .page-fade-enter-from,
+  .page-fade-leave-to {
+    transform: none;
   }
 }
 </style>

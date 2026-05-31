@@ -1,11 +1,56 @@
 <template>
   <div class="account-page">
-    <h1 class="page-title">{{ t('account.title') }}</h1>
-    <p class="page-desc">{{ t('account.desc') || (t('account.apiTokenHint') || '管理你的 API Token 与余额。') }}</p>
+    <PageHeader
+      :title="t('account.title')"
+      :description="t('account.desc') || t('account.apiTokenHint')"
+    />
     <div v-if="!auth.token" class="card card-content">
       <p>{{ t('auth.pleaseLogin') || '请先登录' }}</p>
     </div>
     <template v-else>
+      <section class="card card-content settlement-hero" aria-label="P2P settlement wallet">
+        <div class="settlement-hero__banner">
+          <Badge variant="p2p">{{ t('account.agentDirectBadge') }}</Badge>
+          <h2 class="settlement-hero__title">{{ t('account.settlementPrimaryTitle') }}</h2>
+          <p class="hint">{{ t('account.settlementPrimaryHint') }}</p>
+        </div>
+        <div v-if="payoutLoading" class="account-skel">{{ t('common.loading') }}</div>
+        <div v-else class="wallet-summary">
+          <div class="wallet-stat">
+            <span class="wallet-stat__label">{{ t('account.walletCredits') }}</span>
+            <strong class="wallet-stat__num mono">{{ credits }}</strong>
+          </div>
+          <div class="wallet-stat wallet-stat--escrow">
+            <span class="wallet-stat__label">{{ t('account.walletEscrowPending') }}</span>
+            <strong class="wallet-stat__num mono">{{ escrowPending }}</strong>
+            <Badge v-if="escrowPending > 0" variant="escrow" class="wallet-stat__badge">{{ t('account.walletEscrowBadge') }}</Badge>
+          </div>
+          <div class="wallet-stat">
+            <span class="wallet-stat__label">{{ t('account.payoutWithdrawable') }}</span>
+            <strong class="wallet-stat__num mono">{{ payout?.withdrawable_balance ?? credits }}</strong>
+          </div>
+        </div>
+        <div v-if="walletTotal > 0" class="escrow-visual" :aria-label="t('account.walletEscrowVisual')">
+          <div class="escrow-bar">
+            <span class="escrow-bar__credits" :style="{ width: creditsBarPct + '%' }" />
+            <span class="escrow-bar__pending" :style="{ width: escrowBarPct + '%' }" />
+          </div>
+          <div class="escrow-legend">
+            <span><i class="escrow-legend__dot escrow-legend__dot--credits" />{{ t('account.walletCredits') }}</span>
+            <span><i class="escrow-legend__dot escrow-legend__dot--pending" />{{ t('account.walletEscrowPending') }}</span>
+          </div>
+        </div>
+        <ol class="settlement-steps">
+          <li>{{ t('account.settlementStep1') }}</li>
+          <li>{{ t('account.settlementStep2') }}</li>
+          <li>{{ t('account.settlementStep3') }}</li>
+        </ol>
+        <div class="payout-actions-row">
+          <Button :as="RouterLink" to="/agents" size="sm">{{ t('account.settlementGoAgents') }}</Button>
+          <Button :as="RouterLink" to="/tasks" size="sm" variant="secondary">{{ t('account.payoutGoTasks') }}</Button>
+        </div>
+      </section>
+
       <section class="card card-content referral-panel referral-panel--prominent">
         <h3>{{ t('account.referralTitle') }}</h3>
         <p class="hint">{{ t('account.referralHint') }}</p>
@@ -36,13 +81,7 @@
           <Button type="button" variant="secondary" @click="copyEnvSnippet">{{ copyEnvDone ? t('account.tokenCopied') : t('account.copyEnvSnippet') }}</Button>
         </div>
       </section>
-      <section class="card card-content">
-        <h3>{{ t('account.balance') }}</h3>
-        <p><strong>{{ credits }}</strong> {{ t('account.points') }}</p>
-      </section>
-
-      <section class="card card-content payout-hub" aria-label="Earnings and payout">
-        <p class="hint payout-agent-direct-banner">{{ t('account.agentDirectBanner') || '推荐：Agent 间直接结算（settlement_mode=agent_direct），无需平台管理员打款。在 Agent 管理页配置收款方式即可。' }}</p>
+      <section class="card card-content payout-hub" aria-label="Earnings summary">
         <h3>{{ t('account.payoutHubTitle') }}</h3>
         <p class="hint">{{ t('account.payoutHubHint') }}</p>
         <div v-if="payoutLoading" class="account-skel">{{ t('common.loading') }}</div>
@@ -53,76 +92,75 @@
               <strong class="payout-stat__num">{{ payout.task_reward_earned }}</strong>
             </div>
             <div class="payout-stat">
-              <span class="payout-stat__label">{{ t('account.payoutWithdrawable') }}</span>
-              <strong class="payout-stat__num">{{ payout.withdrawable_balance }}</strong>
-            </div>
-            <div class="payout-stat">
               <span class="payout-stat__label">{{ t('account.payoutMin') }}</span>
               <strong class="payout-stat__num">{{ payout.min_withdraw_amount }}+</strong>
             </div>
           </div>
-          <p v-if="payout.manual_review" class="hint payout-manual-hint">{{ t('account.payoutManualHint', { hint: payout.processing_time_hint_zh }) }}</p>
-          <ul v-if="payoutBlockers.length" class="payout-blockers">
-            <li v-for="b in payoutBlockers" :key="b">{{ t('account.payoutBlocker.' + b) }}</li>
-          </ul>
-          <div class="payout-actions-row">
-            <Button :as="RouterLink" to="/tasks" size="sm" variant="secondary">{{ t('account.payoutGoTasks') }}</Button>
-            <Button :as="RouterLink" to="/agents" size="sm" variant="secondary">{{ t('account.payoutGoAgents') }}</Button>
-          </div>
 
-          <div class="payout-subsection">
-            <h4>{{ t('account.receivingAccountTitle') }}</h4>
-            <p class="hint">{{ t('account.receivingAccountHint') }}</p>
-            <div class="payout-form-grid">
-              <select v-model="receivingForm.account_type" class="input">
-                <option value="alipay">{{ t('account.receivingAlipay') }}</option>
-                <option value="bank_card">{{ t('account.receivingBank') }}</option>
-              </select>
-              <input v-model="receivingForm.account_name" class="input" :placeholder="t('account.receivingAccountName')" />
-              <input v-model="receivingForm.account_number" class="input" :placeholder="t('account.receivingAccountNumber')" />
-              <Button type="button" size="sm" :disabled="receivingSaving" @click="saveReceivingAccount">{{ t('account.saveReceivingAccount') }}</Button>
-            </div>
-            <p v-if="receivingError" class="error-msg">{{ receivingError }}</p>
-          </div>
-
-          <div class="payout-subsection">
-            <h4>{{ t('account.kycTitle') }}</h4>
-            <p class="hint">{{ t('account.kycHint') }}</p>
-            <p class="mono hint">{{ t('account.kycStatus') }}: {{ payout.kyc_status }}</p>
-            <div v-if="payout.kyc_status !== 'approved'" class="payout-form-grid">
-              <input v-model="kycForm.legal_name" class="input" :placeholder="t('account.kycLegalName')" />
-              <select v-model="kycForm.id_type" class="input">
-                <option value="id_card">{{ t('account.kycIdCard') }}</option>
-                <option value="passport">{{ t('account.kycPassport') }}</option>
-              </select>
-              <input v-model="kycForm.id_number" class="input" :placeholder="t('account.kycIdNumber')" />
-              <Button type="button" size="sm" :disabled="kycSubmitting" @click="submitKyc">{{ t('account.kycSubmit') }}</Button>
-            </div>
-            <p v-if="kycError" class="error-msg">{{ kycError }}</p>
-          </div>
-
-          <div class="payout-subsection">
-            <h4>{{ t('account.withdrawTitle') }}</h4>
-            <p class="hint">{{ t('account.withdrawHint') }}</p>
-            <div class="payout-form-grid payout-form-grid--withdraw">
-              <input v-model.number="withdrawAmount" class="input" type="number" :min="payout.min_withdraw_amount" :placeholder="t('account.withdrawAmount')" />
-              <Button type="button" :disabled="withdrawBusy || !payout.eligible" @click="submitWithdraw">{{ withdrawBusy ? '…' : t('account.submitWithdraw') }}</Button>
-            </div>
-            <p v-if="withdrawError" class="error-msg">{{ withdrawError }}</p>
-            <p v-if="withdrawSuccess" class="hint payout-success">{{ withdrawSuccess }}</p>
-          </div>
-
-          <div v-if="withdrawals.length" class="payout-subsection">
-            <h4>{{ t('account.withdrawHistoryTitle') }}</h4>
-            <ul class="withdraw-history">
-              <li v-for="w in withdrawals" :key="w.id" class="withdraw-history__row">
-                <span class="mono">#{{ w.id }}</span>
-                <strong>{{ w.amount }}</strong>
-                <span :class="['withdraw-status', 'is-' + w.status]">{{ w.status }}</span>
-                <span class="hint mono">{{ formatDateTimeLocal(w.submitted_at || '') }}</span>
-              </li>
+          <details class="legacy-fiat-details">
+            <summary>
+              <Badge variant="outline">{{ t('account.legacyFiatLabel') }}</Badge>
+              {{ t('account.legacyFiatTitle') }}
+            </summary>
+            <p class="hint">{{ t('account.legacyFiatHint') }}</p>
+            <p v-if="payout.manual_review" class="hint payout-manual-hint">{{ t('account.payoutManualHint', { hint: payout.processing_time_hint_zh }) }}</p>
+            <ul v-if="payoutBlockers.length" class="payout-blockers">
+              <li v-for="b in payoutBlockers" :key="b">{{ t('account.payoutBlocker.' + b) }}</li>
             </ul>
-          </div>
+
+            <details class="legacy-fiat-accordion">
+              <summary>{{ t('account.receivingAccountTitle') }}</summary>
+              <p class="hint">{{ t('account.receivingAccountHint') }}</p>
+              <div class="payout-form-grid">
+                <select v-model="receivingForm.account_type" class="input">
+                  <option value="alipay">{{ t('account.receivingAlipay') }}</option>
+                  <option value="bank_card">{{ t('account.receivingBank') }}</option>
+                </select>
+                <input v-model="receivingForm.account_name" class="input" :placeholder="t('account.receivingAccountName')" />
+                <input v-model="receivingForm.account_number" class="input" :placeholder="t('account.receivingAccountNumber')" />
+                <Button type="button" size="sm" :disabled="receivingSaving" @click="saveReceivingAccount">{{ t('account.saveReceivingAccount') }}</Button>
+              </div>
+              <p v-if="receivingError" class="error-msg">{{ receivingError }}</p>
+            </details>
+
+            <details class="legacy-fiat-accordion">
+              <summary>{{ t('account.kycTitle') }}</summary>
+              <p class="hint">{{ t('account.kycHint') }}</p>
+              <p class="mono hint">{{ t('account.kycStatus') }}: {{ payout.kyc_status }}</p>
+              <div v-if="payout.kyc_status !== 'approved'" class="payout-form-grid">
+                <input v-model="kycForm.legal_name" class="input" :placeholder="t('account.kycLegalName')" />
+                <select v-model="kycForm.id_type" class="input">
+                  <option value="id_card">{{ t('account.kycIdCard') }}</option>
+                  <option value="passport">{{ t('account.kycPassport') }}</option>
+                </select>
+                <input v-model="kycForm.id_number" class="input" :placeholder="t('account.kycIdNumber')" />
+                <Button type="button" size="sm" :disabled="kycSubmitting" @click="submitKyc">{{ t('account.kycSubmit') }}</Button>
+              </div>
+              <p v-if="kycError" class="error-msg">{{ kycError }}</p>
+            </details>
+
+            <details class="legacy-fiat-accordion">
+              <summary>{{ t('account.withdrawTitle') }}</summary>
+              <p class="hint">{{ t('account.withdrawHint') }}</p>
+              <div class="payout-form-grid payout-form-grid--withdraw">
+                <input v-model.number="withdrawAmount" class="input" type="number" :min="payout.min_withdraw_amount" :placeholder="t('account.withdrawAmount')" />
+                <Button type="button" :disabled="withdrawBusy || !payout.eligible" @click="submitWithdraw">{{ withdrawBusy ? '…' : t('account.submitWithdraw') }}</Button>
+              </div>
+              <p v-if="withdrawError" class="error-msg">{{ withdrawError }}</p>
+              <p v-if="withdrawSuccess" class="hint payout-success">{{ withdrawSuccess }}</p>
+              <div v-if="withdrawals.length" class="payout-subsection payout-subsection--nested">
+                <h4>{{ t('account.withdrawHistoryTitle') }}</h4>
+                <ul class="withdraw-history">
+                  <li v-for="w in withdrawals" :key="w.id" class="withdraw-history__row">
+                    <span class="mono">#{{ w.id }}</span>
+                    <strong>{{ w.amount }}</strong>
+                    <span :class="['withdraw-status', 'is-' + w.status]">{{ w.status }}</span>
+                    <span class="hint mono">{{ formatDateTimeLocal(w.submitted_at || '') }}</span>
+                  </li>
+                </ul>
+              </div>
+            </details>
+          </details>
         </template>
       </section>
 
@@ -391,6 +429,8 @@ import { ref, onMounted, computed } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Button } from '../components/ui/button'
+import { Badge } from '../components/ui/badge'
+import PageHeader from '../components/PageHeader.vue'
 import * as api from '../api'
 import type { SkillNode } from '../api'
 import { useAuthStore } from '../stores/auth'
@@ -413,6 +453,15 @@ const withdrawBusy = ref(false)
 const withdrawError = ref('')
 const withdrawSuccess = ref('')
 const payoutBlockers = computed(() => payout.value?.blockers || [])
+const escrowPending = computed(() => {
+  const p = payout.value
+  if (!p) return 0
+  const locked = Math.max(0, (p.task_reward_earned || 0) - (p.withdrawable_balance || 0))
+  return locked + (p.pending_withdrawals || 0)
+})
+const walletTotal = computed(() => Math.max(credits.value + escrowPending.value, 1))
+const creditsBarPct = computed(() => Math.round((credits.value / walletTotal.value) * 100))
+const escrowBarPct = computed(() => Math.round((escrowPending.value / walletTotal.value) * 100))
 const copyTokenDone = ref(false)
 const copyEnvDone = ref(false)
 const apiKeys = ref<api.UserApiKeyItem[]>([])
@@ -1003,6 +1052,35 @@ onMounted(async () => {
   font-size: var(--font-caption);
 }
 .recharge-link { color: var(--primary-color); font-weight: 500; }
+.settlement-hero { border-color: rgba(167, 139, 250, 0.45); background: linear-gradient(135deg, rgba(167, 139, 250, 0.1), rgba(79, 70, 229, 0.06)); display: grid; gap: var(--space-4); }
+.settlement-hero__banner { display: grid; gap: var(--space-2); }
+.settlement-hero__title { margin: 0; font-size: 1.125rem; font-weight: 650; }
+.wallet-summary { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: var(--space-2); }
+.wallet-stat { padding: var(--space-3); border: var(--border-hairline); border-radius: var(--radius-md); display: grid; gap: 4px; background: rgba(0,0,0,0.15); }
+.wallet-stat--escrow { border-color: rgba(var(--exchange-escrow-rgb), 0.35); }
+.wallet-stat__label { font-size: var(--font-caption); color: var(--text-secondary); }
+.wallet-stat__num { font-size: 1.35rem; font-weight: 700; }
+.wallet-stat__badge { justify-self: start; margin-top: 2px; }
+.escrow-visual { display: grid; gap: var(--space-2); }
+.escrow-bar { display: flex; height: 8px; border-radius: var(--radius-full); overflow: hidden; background: rgba(255,255,255,0.06); }
+.escrow-bar__credits { background: var(--primary-color); transition: width 0.6s ease; }
+.escrow-bar__pending { background: var(--exchange-escrow, #eab308); transition: width 0.6s ease; }
+@media (prefers-reduced-motion: reduce) { .escrow-bar__credits, .escrow-bar__pending { transition: none; } }
+.escrow-legend { display: flex; flex-wrap: wrap; gap: var(--space-3); font-size: var(--font-caption); color: var(--text-secondary); }
+.escrow-legend__dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+.escrow-legend__dot--credits { background: var(--primary-color); }
+.escrow-legend__dot--pending { background: var(--exchange-escrow, #eab308); }
+.legacy-fiat-accordion { margin-top: var(--space-2); padding: var(--space-3); border: var(--border-hairline); border-radius: var(--radius-md); background: rgba(255,255,255,0.02); }
+.legacy-fiat-accordion > summary { cursor: pointer; font-weight: 600; list-style: none; }
+.legacy-fiat-accordion > summary::-webkit-details-marker { display: none; }
+.legacy-fiat-accordion[open] > summary { margin-bottom: var(--space-2); }
+.payout-subsection--nested { margin-top: var(--space-2); padding-top: var(--space-2); border-top: var(--border-hairline); }
+.legacy-fiat-details > summary { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.settlement-steps { margin: 0; padding-left: 1.25rem; color: var(--text-secondary); font-size: var(--font-body); line-height: 1.55; display: grid; gap: var(--space-1); }
+.legacy-fiat-details { margin-top: var(--space-2); padding: var(--space-3); border: var(--border-hairline); border-radius: var(--radius-md); background: rgba(255,255,255,0.02); }
+.legacy-fiat-details > summary { cursor: pointer; font-weight: 600; color: var(--text-secondary); list-style: none; }
+.legacy-fiat-details > summary::-webkit-details-marker { display: none; }
+.legacy-fiat-details[open] > summary { margin-bottom: var(--space-2); color: var(--text-primary); }
 .payout-hub { display: grid; gap: var(--space-3); }
 .payout-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: var(--space-2); }
 .payout-stat { padding: var(--space-2) var(--space-3); border: var(--border-hairline); border-radius: var(--radius-md); display: grid; gap: 2px; }

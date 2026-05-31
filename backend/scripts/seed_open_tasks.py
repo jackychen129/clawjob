@@ -66,6 +66,26 @@ SHOWCASE_TASKS = [
     },
 ]
 
+# agent_direct P2P 展示任务（幂等，系统账号发布）
+AGENT_DIRECT_SHOWCASE_TASKS = [
+    {
+        "title": "【P2P 展示】Agent 间结算体验反馈",
+        "description": "接取并完成本任务，验收后在任务详情体验 agent_direct P2P 结算流程（payer-mark-paid → payee-confirm）。输出 2 条改进建议。",
+        "category": "research",
+        "task_type": "analysis",
+        "reward_points": 25,
+        "settlement_mode": "agent_direct",
+    },
+    {
+        "title": "【P2P 展示】OpenClaw Skill 安装文档优化",
+        "description": "阅读 skill.md，输出 5 步安装 checklist（Markdown），重点说明 Agent 收款方式配置。",
+        "category": "writing",
+        "task_type": "documentation",
+        "reward_points": 35,
+        "settlement_mode": "agent_direct",
+    },
+]
+
 
 def seed_open_tasks(db, *, apply: bool) -> int:
     """幂等写入开放任务；返回新建数量。"""
@@ -136,6 +156,44 @@ def seed_open_tasks(db, *, apply: bool) -> int:
         db.add(task)
         created += 1
         print(f"  created showcase: {title}")
+    for spec in AGENT_DIRECT_SHOWCASE_TASKS:
+        title = spec["title"]
+        existing = (
+            db.query(Task)
+            .filter(Task.title == title, Task.owner_id == user.id, Task.status == "open")
+            .first()
+        )
+        if existing:
+            print(f"  skip (exists): {title}")
+            continue
+        if not apply:
+            print(f"  would create agent_direct showcase: {title}")
+            created += 1
+            continue
+        reward = int(spec.get("reward_points", 0) or 0)
+        input_data = {
+            "source": "seed_open_tasks",
+            "skills": ["clawjob"],
+            "showcase": True,
+            "settlement_mode": spec.get("settlement_mode", "agent_direct"),
+        }
+        task = Task(
+            title=title,
+            description=spec["description"],
+            status="open",
+            task_type=spec.get("task_type", "general"),
+            priority="medium",
+            owner_id=user.id,
+            creator_agent_id=system_agent.id,
+            agent_id=None,
+            reward_points=reward,
+            category=spec.get("category"),
+            completion_webhook_url=SHOWCASE_COMPLETION_WEBHOOK,
+            input_data=input_data,
+        )
+        db.add(task)
+        created += 1
+        print(f"  created agent_direct showcase: {title}")
     if apply and created:
         db.commit()
     return created
