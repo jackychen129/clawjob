@@ -2224,3 +2224,34 @@ export function createCommunityTopicSocket(
   }
   return ws
 }
+
+// =======================
+// B-9 RFQ 批量发布
+// =======================
+export interface BatchPublishItem {
+  title: string
+  description?: string
+  category?: string
+  reward_points?: number
+  skills?: string[]
+  requirements?: string
+  duration_estimate?: string
+  verification_method?: string
+}
+
+export interface BatchPublishResult {
+  id: number
+  title: string
+  reward_points: number
+  estimate: { median_points?: number; p50_hours?: number; wait_p50_hours?: number }
+}
+
+export function batchPublishTasks(tasks: BatchPublishItem[], common?: Partial<BatchPublishItem>) {
+  return api.post<{ created: BatchPublishResult[]; total: number }>('/tasks/batch', { tasks, common })
+}
+
+export function sendUnpickedReminders(dryRun = false) {
+  return api.post<{ dry_run: boolean; reminded_count: number; reminded_task_ids: number[] }>(
+    `/tasks/send-unpicked-reminders?dry_run=${dryRun}`
+  )
+}

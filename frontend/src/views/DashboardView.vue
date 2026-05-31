@@ -73,6 +73,51 @@
         </div>
       </section>
 
+      <!-- Publisher Insights (logged-in only) -->
+      <section v-if="auth.isLoggedIn" class="dash-card bento bento--insights" :aria-busy="insightsLoading">
+        <div class="card-content">
+          <div class="dash-bento-head">
+            <h2 class="section-title">{{ t('dashboard.insightsTitle') }}</h2>
+            <div class="dash-roi-period" role="group">
+              <button v-for="d in insightsDayOptions" :key="d" type="button" class="dash-roi-period-btn" :class="{ 'dash-roi-period-btn--active': insightsDays === d }" @click="setInsightsDays(d)">{{ d }}</button>
+            </div>
+          </div>
+          <div v-if="insightsLoading" class="dash-insights-skeleton">
+            <div v-for="i in 4" :key="i" class="tw-skeleton" style="height:3.2rem;border-radius:var(--radius-md)"></div>
+          </div>
+          <div v-else-if="insights" class="dash-insights-body">
+            <div class="dash-insights-kpis">
+              <div class="dash-insights-kpi">
+                <span class="dash-kpi-value mono">{{ insights.net_spent_points }}</span>
+                <span class="dash-kpi-label">{{ t('dashboard.insightsNetSpent') }}</span>
+              </div>
+              <div class="dash-insights-kpi">
+                <span class="dash-kpi-value mono">{{ (insights.tasks.completion_rate * 100).toFixed(1) }}%</span>
+                <span class="dash-kpi-label">{{ t('dashboard.insightsCompletionRate') }}</span>
+              </div>
+              <div class="dash-insights-kpi">
+                <span class="dash-kpi-value mono">{{ insights.tasks.total }}</span>
+                <span class="dash-kpi-label">{{ t('dashboard.insightsTasks') }}</span>
+              </div>
+              <div class="dash-insights-kpi">
+                <span class="dash-kpi-value mono">{{ insights.tasks.in_progress + insights.tasks.open }}</span>
+                <span class="dash-kpi-label">{{ t('dashboard.insightsActive') }}</span>
+              </div>
+            </div>
+            <div v-if="insightsTopCategories.length" class="dash-insights-cats">
+              <div v-for="cat in insightsTopCategories" :key="cat.name" class="dash-insights-cat-row">
+                <span class="dash-insights-cat-name">{{ cat.name }}</span>
+                <div class="dash-insights-cat-bar-wrap">
+                  <div class="dash-insights-cat-bar" :style="{ width: cat.pct + '%' }"></div>
+                </div>
+                <span class="dash-insights-cat-pts mono">{{ cat.pts }}</span>
+              </div>
+            </div>
+          </div>
+          <p v-else class="dash-feed-empty-hint">{{ t('dashboard.insightsEmpty') }}</p>
+        </div>
+      </section>
+
       <section class="dash-card bento bento--tree">
         <div class="card-content">
           <div class="dash-bento-head">
@@ -143,8 +188,10 @@ import { Button } from '../components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import PageHeader from '../components/PageHeader.vue'
 import * as api from '../api'
+import { useAuthStore } from '../stores/auth'
 
 const { t } = useI18n()
+const auth = useAuthStore()
 
 const stats = ref<Record<string, number>>({})
 const recentAgents7d = ref(0)
@@ -157,6 +204,19 @@ const roiDayOptions = [7, 14, 30] as const
 const roiDays = ref<7 | 14 | 30>(14)
 const skillTree = ref<api.SkillNode[]>([])
 let pollTimer: ReturnType<typeof setInterval> | null = null
+
+// Publisher insights
+const insights = ref<api.PublisherInsights | null>(null)
+const insightsLoading = ref(false)
+const insightsDayOptions = [30, 60, 90] as const
+const insightsDays = ref<30 | 60 | 90>(30)
+
+const insightsTopCategories = computed(() => {
+  const cats = insights.value?.spending_by_category || {}
+  const entries = Object.entries(cats).sort((a, b) => b[1] - a[1]).slice(0, 5)
+  const max = entries[0]?.[1] || 1
+  return entries.map(([name, pts]) => ({ name, pts, pct: Math.round((pts / max) * 100) }))
+})
 
 const openJobsCount = computed(() => {
   if (typeof (stats.value as Record<string, number>).tasks_open === 'number') return (stats.value as Record<string, number>).tasks_open
@@ -279,6 +339,25 @@ function setRoiDays(d: 7 | 14 | 30) {
   void loadRoiSeries()
 }
 
+async function loadInsights() {
+  if (!auth.isLoggedIn) return
+  insightsLoading.value = true
+  try {
+    const res = await api.fetchMyInsights(insightsDays.value)
+    insights.value = res.data
+  } catch {
+    insights.value = null
+  } finally {
+    insightsLoading.value = false
+  }
+}
+
+function setInsightsDays(d: 30 | 60 | 90) {
+  if (insightsDays.value === d) return
+  insightsDays.value = d
+  void loadInsights()
+}
+
 async function reloadAll() {
   statsLoading.value = true
   activityLoading.value = true
@@ -315,6 +394,7 @@ async function reloadAll() {
   } catch {
     skillTree.value = []
   }
+  void loadInsights()
 }
 </script>
 
@@ -355,6 +435,8 @@ async function reloadAll() {
   }
   .bento--kpi { grid-column: 1 / 2; }
   .bento--roi { grid-column: 1 / 2; }
+  .bento--insights { grid-column: 1 / 2; }
+  .bento--tree { grid-column: 1 / 2; }
   .bento--feed {
     grid-column: 2 / 3;
     grid-row: 1 / span 2;
@@ -527,6 +609,19 @@ async function reloadAll() {
   margin-bottom: var(--space-2);
 }
 .roi-line { width: 100%; height: 180px; display: block; }
+.bento--insights { background-color: var(--card-background); border-radius: var(--radius-xl); border: var(--border-hairline); }
+.dash-insights-body { display: flex; flex-direction: column; gap: var(--space-4); }
+.dash-insights-kpis { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-3); }
+@media (min-width: 640px) { .dash-insights-kpis { grid-template-columns: repeat(4, 1fr); } }
+.dash-insights-kpi { padding: var(--space-4); border-radius: var(--radius-md); background: rgba(255,255,255,0.03); border: var(--border-hairline); }
+.dash-insights-skeleton { display: grid; grid-template-columns: repeat(2,1fr); gap: var(--space-3); }
+@media (min-width:640px) { .dash-insights-skeleton { grid-template-columns: repeat(4,1fr); } }
+.dash-insights-cats { display: flex; flex-direction: column; gap: var(--space-2); }
+.dash-insights-cat-row { display: grid; grid-template-columns: 7rem 1fr 3.5rem; gap: var(--space-2); align-items: center; }
+.dash-insights-cat-name { font-size: var(--font-caption); color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dash-insights-cat-bar-wrap { height: 0.5rem; border-radius: 999px; background: rgba(148,163,184,0.2); overflow: hidden; }
+.dash-insights-cat-bar { height: 100%; border-radius: 999px; background: linear-gradient(90deg, rgba(34,197,94,0.8), rgba(168,85,247,0.6)); transition: width 0.4s var(--ease-apple); }
+.dash-insights-cat-pts { font-size: var(--font-caption); color: var(--text-secondary); text-align: right; font-variant-numeric: tabular-nums; }
 .skill-tree-grid { display: grid; grid-template-columns: 1fr; gap: var(--space-3); }
 @media (min-width: 768px) { .skill-tree-grid { grid-template-columns: repeat(2, 1fr); } }
 .skill-tree-node { border: var(--border-hairline); border-radius: var(--radius-md); padding: var(--space-3); background: rgba(255,255,255,0.02); }

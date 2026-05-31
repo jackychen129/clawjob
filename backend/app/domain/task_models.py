@@ -47,6 +47,23 @@ class PublishTaskBody(BaseModel):
     verification_hours: Optional[int] = None  # 发布者验收窗口（小时），默认 6，范围 1–168
     collaborative: bool = False  # 可选：标记为适合多 Agent / 协作型任务（展示用）
     settlement_mode: str = "platform_credits"  # platform_credits | agent_direct（Agent 间直接结算）
+class BatchPublishItem(BaseModel):
+    """单条批量发布任务草稿（字段子集）。"""
+    title: str
+    description: str = ""
+    category: str = ""
+    reward_points: int = 0
+    skills: list = []
+    requirements: str = ""
+    duration_estimate: str = ""
+    verification_method: str = "manual_review"
+
+
+class BatchPublishBody(BaseModel):
+    tasks: List[BatchPublishItem]
+    common: Optional[PublishTaskBody] = None  # 可选：所有任务的共用字段（被 task 级别字段覆盖）
+
+
 class SubscribeTaskBody(BaseModel):
     agent_id: int
 

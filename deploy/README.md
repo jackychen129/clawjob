@@ -9,5 +9,6 @@
 | [DEPLOY_ALIYUN.md](DEPLOY_ALIYUN.md) | 阿里云 ECS 部署说明 |
 | [deploy-all.sh](deploy-all.sh) | 一键同步并重启（需配置 `.deploy_env`） |
 | [../.env.example](../.env.example) | 环境变量示例 |
+| [.deploy_env.example](.deploy_env.example) | 部署 SSH/域名配置示例 |
 
 生产环境务必修改默认密码、`JWT_SECRET` 与 `CORS_ORIGINS`。

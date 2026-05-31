@@ -5154,3 +5154,68 @@ def test_admin_pending_settlements_and_stats_fields():
     client.post(f"/tasks/{task_id}/settlement/payee-confirm", headers=exe_headers)
     pending3 = client.get("/admin/settlements/pending", headers=admin_headers)
     assert not any(it.get("task_id") == task_id for it in (pending3.json().get("items") or []))
+
+
+def test_send_unpicked_reminders_dry_run():
+    """24h 无人接取提醒：dry_run 模式只返回任务列表，不写数据库。"""
+    u = f"reminder_dry_{_unique()}"
+    _register_user(u, f"{u}@example.com", "pw123")
+    headers = {"Authorization": f"Bearer {client.post('/auth/login', json={'username': u, 'password': 'pw123'}).json()['access_token']}"}
+
+    # 发布一个任务（无奖励点，不需要 webhook）
+    tr = client.post("/tasks", json={"title": "Dry run reminder task", "reward_points": 0}, headers=headers)
+    task_id = tr.json()["id"]
+
+    # 手动把任务的 created_at 往前推 25h
+    from app.database.relational_db import SessionLocal, Task as TaskModel
+    from datetime import datetime, timedelta
+    db = SessionLocal()
+    try:
+        t = db.query(TaskModel).filter(TaskModel.id == task_id).first()
+        assert t is not None
+        t.created_at = datetime.utcnow() - timedelta(hours=25)
+        db.commit()
+    finally:
+        db.close()
+
+    r = client.post("/tasks/send-unpicked-reminders?dry_run=true", headers=headers)
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["dry_run"] is True
+    assert task_id in data["reminded_task_ids"]
+    # dry_run 不应写站内信
+    inbox_r = client.get("/inbox", headers=headers)
+    msgs = inbox_r.json().get("messages") or []
+    assert not any(m.get("related_task_id") == task_id and "24h" in m.get("title", "") for m in msgs)
+
+
+def test_send_unpicked_reminders_actual():
+    """24h 无人接取提醒：实际发送后，站内信可见，且同任务不重复发送。"""
+    u = f"reminder_act_{_unique()}"
+    _register_user(u, f"{u}@example.com", "pw123")
+    headers = {"Authorization": f"Bearer {client.post('/auth/login', json={'username': u, 'password': 'pw123'}).json()['access_token']}"}
+
+    tr = client.post("/tasks", json={"title": "Actual reminder task", "reward_points": 0}, headers=headers)
+    task_id = tr.json()["id"]
+
+    from app.database.relational_db import SessionLocal, Task as TaskModel
+    from datetime import datetime, timedelta
+    db = SessionLocal()
+    try:
+        t = db.query(TaskModel).filter(TaskModel.id == task_id).first()
+        t.created_at = datetime.utcnow() - timedelta(hours=26)
+        db.commit()
+    finally:
+        db.close()
+
+    # First call — should remind
+    r1 = client.post("/tasks/send-unpicked-reminders", headers=headers)
+    assert r1.status_code == 200, r1.text
+    d1 = r1.json()
+    assert task_id in d1["reminded_task_ids"]
+
+    # Second call — should skip (already reminded)
+    r2 = client.post("/tasks/send-unpicked-reminders", headers=headers)
+    d2 = r2.json()
+    assert task_id not in d2["reminded_task_ids"]
+    assert d2["skipped_already_reminded"] > 0

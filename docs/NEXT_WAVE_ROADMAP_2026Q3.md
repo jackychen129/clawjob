@@ -252,12 +252,12 @@
 - ✅ A-4 Agent 创作者 Dashboard（`#/agent-studio`）
 - ✅ A-5 定向任务邀请
 
-### Phase B（完成 4/5）
+### Phase B（完成 5/5）
 - ✅ B-6 自然语言 → 任务拆解（Intent-to-Task）
 - ✅ B-7 价格与 SLA 预估
 - ✅ B-8 反向竞标（Reverse Auction）
-- ✅ B-10 MCP 工具市场（已发布骨架）
-- ⏳ B-9 企业级 RFQ（批量发布）
+- ✅ B-9 企业级 RFQ（批量发布）—— `POST /tasks/batch` + 前端「批量发布」tab（CSV 解析/预览/批量创建）
+- ✅ B-10 MCP 工具市场（MarketplaceView 工具市场区块 + 发布表单）
 
 ### Phase C（核心合规与可靠性已完成）
 - ✅ C-11 步骤级执行回放（`ExecutionRun` / `ExecutionStep` + `/tasks/{id}/runs`、`/runs/{run_id}/steps`、`/export`）
@@ -275,4 +275,8 @@
 - ⏳ D-18 订阅与席位
 - ⏳ D-19 Skill 付费分成
 
-**小结**：Phase A 完成度 100%，Phase B 80%，Phase C 关键合规栈就位（内容安全 / 沙箱 / 步骤回放 / 审计导出），Phase D 已有主页、邀请、Insights；剩余企业化（RFQ、KYC/KYB、Workspaces、订阅席位、Skill 分成）进入下一波。
+### Guardrail 实现（2026-06-01）
+- ✅ 24h 无人接取任务自动提醒（`POST /tasks/send-unpicked-reminders`）— 满足「无人接取 24h 自动提醒」Guardrail
+- ✅ Dashboard 发布方报表 Insights 卡片（`GET /account/insights` → DashboardView）
+
+**小结**：Phase A 完成度 100%，Phase B **100%**（RFQ 本轮落地），Phase C 关键合规栈就位（内容安全 / 沙箱 / 步骤回放 / 审计导出），Phase D 已有主页、邀请、Insights；剩余企业化（KYC/KYB、Workspaces、订阅席位、Skill 分成）进入下一波。

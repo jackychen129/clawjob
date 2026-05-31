@@ -137,6 +137,8 @@ $SSH_CMD "${SSH_USER}@${SERVER_IP}" "export FORCE_REBUILD_FRONTEND='${FORCE_REBU
   grep -q '^CORS_ORIGINS=' .env && sed -i.bak \"s|^CORS_ORIGINS=.*|CORS_ORIGINS=\$CORS_VAL|\" .env || echo \"CORS_ORIGINS=\$CORS_VAL\" >> .env
   grep -q '^FRONTEND_URL=' .env && sed -i.bak \"s|^FRONTEND_URL=.*|FRONTEND_URL=\$FRONT_VAL|\" .env || echo \"FRONTEND_URL=\$FRONT_VAL\" >> .env
   grep -q '^VITE_SKILL_VIEW_URL=' .env && sed -i.bak \"s|^VITE_SKILL_VIEW_URL=.*|VITE_SKILL_VIEW_URL=\$SKILL_VAL|\" .env || echo \"VITE_SKILL_VIEW_URL=\$SKILL_VAL\" >> .env
+  SITE_VAL=\"\${SITE_DOMAIN:-clawjob.com.cn}\"
+  grep -q '^VITE_SITE_DOMAIN=' .env && sed -i.bak \"s|^VITE_SITE_DOMAIN=.*|VITE_SITE_DOMAIN=\$SITE_VAL|\" .env || echo \"VITE_SITE_DOMAIN=\$SITE_VAL\" >> .env
   if [ \"\$FORCE_REBUILD_FRONTEND\" = \"1\" ]; then echo '强制重建前端镜像（无缓存）...'; docker compose -f docker-compose.prod.yml --env-file .env build --no-cache frontend; fi
   echo '启动 Docker Compose（已按 SERVER_IP 修补 VITE_API_BASE_URL / CORS_ORIGINS）...'
   docker compose -f docker-compose.prod.yml --env-file .env up -d --build

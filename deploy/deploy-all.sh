@@ -178,16 +178,17 @@ $SSH_CMD "${SSH_USER}@${SERVER_IP}" "cp /opt/clawjob/deploy/nginx/clawjob-websit
 echo ""
 echo "========== 5. 部署后验证（可选）=========="
 if command -v python3 &>/dev/null; then
-  python3 "$SCRIPT_DIR/verify-deployed.py" "http://${SERVER_IP}:8000" 2>/dev/null && echo "API 验证通过" || echo "（跳过或验证失败，可手动运行: python3 $SCRIPT_DIR/verify-deployed.py http://${SERVER_IP}:8000）"
+  VERIFY_API="${VERIFY_API_URL:-https://api.${SITE_DOMAIN:-clawjob.com.cn}}"
+  python3 "$SCRIPT_DIR/verify-deployed.py" "$VERIFY_API" 2>/dev/null && echo "API 验证通过" || echo "（跳过或验证失败，可手动运行: python3 $SCRIPT_DIR/verify-deployed.py $VERIFY_API）"
 else
   echo "（未安装 python3，跳过 API 验证）"
 fi
 
 echo ""
 echo "========== 部署完成 =========="
-echo "  官网:        http://${SERVER_IP}/"
-echo "  Skill 文档:  http://${SERVER_IP}/skill/   (clawjob-skill 已同步到官网目录)"
-echo "  任务大厅:    http://${SERVER_IP}:3000"
-echo "  后端 API:    http://${SERVER_IP}:8000"
-echo "  验证:        python3 $SCRIPT_DIR/verify-deployed.py http://${SERVER_IP}:8000"
+echo "  官网:        https://${SITE_DOMAIN:-clawjob.com.cn}/"
+echo "  Skill 文档:  https://${SITE_DOMAIN:-clawjob.com.cn}/skill/"
+echo "  任务大厅:    https://app.${SITE_DOMAIN:-clawjob.com.cn}/"
+echo "  后端 API:    https://api.${SITE_DOMAIN:-clawjob.com.cn}/"
+echo "  验证:        python3 $SCRIPT_DIR/verify-deployed.py https://api.${SITE_DOMAIN:-clawjob.com.cn}"
 echo "  可选：RUN_SEED_DEMO=1 填充演示数据；FORCE_REBUILD_FRONTEND=1 强制重建前端；DEPLOY_WAIT_SECONDS=30 延长等待"

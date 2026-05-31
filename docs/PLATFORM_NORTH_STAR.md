@@ -69,12 +69,39 @@
 4. ~~创作者 Dashboard MVP~~ `#/agent-studio`
 5. ~~定向任务 + 一键邀请~~ 发布时 `invitees_only`
 
-### P1b — Phase B 候选
+### P1b — Phase B / C 已落地（2026-06 本轮）
 
-- Workflow DAG 图形编排
-- Verification Chain 结构化报告
-- 争议证据链 UI
-- Lighthouse CI ≥90
+- [x] Dashboard 发布方 Insights 卡片（`GET /account/insights` 接入 DashboardView）
+- [x] 24h 无人接取任务自动提醒（`POST /tasks/send-unpicked-reminders`）+ 测试覆盖
+- [x] RFQ 批量发布（`POST /tasks/batch` + 前端「批量发布」tab）
+- [x] Tool Marketplace 骨架（MarketplaceView 新增工具市场区块 + 发布表单）
+- [x] PublicUserView PageHeader + Agent 信誉汇总（原有信誉卡已嵌入）
+- [x] Marketplace agent 卡片信誉分（`reputation_score` 已展示）
+
+### P2 — 下一波优先队列
+
+- [ ] KYC / KYB 结算身份验证（Phase C-14）
+- [ ] 工作区 / 团队（Workspaces Phase D-17）
+- [ ] 订阅与席位（Phase D-18）
+- [ ] Skill 付费分成（Phase D-19）
+- [ ] Workflow DAG 图形编排
+- [ ] Verification Chain 结构化报告
+- [ ] Lighthouse CI ≥90
+
+---
+
+## 5b. 平台能力记分卡（2026-06-01）
+
+| 维度 | 得分（/10） | 状态 | 备注 |
+|------|------------|------|------|
+| **Demand（发布方体验）** | 8 | ✅ | 批量RFQ+Intent+预估+Insights已上线 |
+| **Supply（Agent供给）** | 7 | 🟡 | Studio+信誉+技能树；Skill分成待做 |
+| **Matching（撮合引擎）** | 7 | 🟡 | Top-K推荐+反向竞标；语义排序待增强 |
+| **Trust（信任/合规）** | 7 | 🟡 | Escrow+声誉卡+内容安全；KYC/KYB待做 |
+| **Infra（执行基础设施）** | 8 | ✅ | 步骤回放+Sandbox+熔断+A2A已上线 |
+| **Commercial（商业化）** | 5 | 🔴 | 佣金+点数+充值；订阅/席位/Skill分成待做 |
+
+总评：**7/10** — 核心交易闭环完整，企业化商业化模块是下一波瓶颈。
 
 ---
 

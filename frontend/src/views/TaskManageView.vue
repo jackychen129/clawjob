@@ -36,6 +36,7 @@
             <button type="button" class="task-tab" :class="{ active: tab === 'available' }" @click="tab = 'available'">{{ t('taskManage.available') || '可接取任务' }}</button>
             <button type="button" class="task-tab" :class="{ active: tab === 'mine' }" @click="tab = 'mine'">{{ t('taskManage.myAccepted') || '我接取的任务' }}</button>
             <button type="button" class="task-tab" :class="{ active: tab === 'published' }" @click="tab = 'published'">{{ t('taskManage.tabPublished') || '我发布的' }}</button>
+            <button v-if="auth.isLoggedIn" type="button" class="task-tab" :class="{ active: tab === 'batch' }" @click="tab = 'batch'">{{ t('taskManage.tabBatch') || '批量发布' }}</button>
             <button
               v-if="showDisputesTab"
               type="button"
@@ -494,6 +495,49 @@
                 </template>
               </EmptyState>
             </template>
+          </template>
+
+          <template v-else-if="tab === 'batch'">
+            <div class="batch-publish-panel">
+              <div class="batch-publish-header">
+                <h3 class="section-title">{{ t('taskManage.batchTitle') || '批量发布任务（RFQ）' }}</h3>
+                <p class="batch-publish-desc">{{ t('taskManage.batchDesc') || '粘贴 CSV 或逐行填写，最多 50 条，平台自动批量估价。' }}</p>
+              </div>
+              <div class="batch-publish-body">
+                <label class="batch-label">{{ t('taskManage.batchInput') || '任务列表（每行：标题, 分类, 奖励点）' }}</label>
+                <textarea
+                  v-model="batchRawInput"
+                  class="batch-textarea"
+                  rows="8"
+                  :placeholder="t('taskManage.batchPlaceholder') || '修复登录 Bug, development, 20\n数据清洗 Python, data, 15\n撰写产品文案, writing, 10'"
+                ></textarea>
+                <div v-if="batchParseError" class="batch-error">{{ batchParseError }}</div>
+                <div v-if="batchPreview.length" class="batch-preview">
+                  <div v-for="(item, idx) in batchPreview" :key="idx" class="batch-preview-row">
+                    <span class="batch-preview-idx mono">{{ idx + 1 }}</span>
+                    <span class="batch-preview-title">{{ item.title }}</span>
+                    <span class="batch-preview-meta mono">{{ item.category || '—' }}</span>
+                    <span class="batch-preview-pts mono">{{ item.reward_points || 0 }} pts</span>
+                  </div>
+                </div>
+                <div class="batch-actions">
+                  <Button type="button" variant="secondary" size="sm" @click="parseBatchInput">{{ t('taskManage.batchParseBtn') || '解析预览' }}</Button>
+                  <Button type="button" variant="default" size="sm" :disabled="!batchPreview.length || batchSubmitting" @click="submitBatch">
+                    <span v-if="batchSubmitting">{{ t('taskManage.batchSubmitting') || '提交中…' }}</span>
+                    <span v-else>{{ t('taskManage.batchSubmitBtn') || '批量发布' }}（{{ batchPreview.length }}）</span>
+                  </Button>
+                </div>
+                <div v-if="batchResult" class="batch-result">
+                  <p class="batch-result-ok">{{ t('taskManage.batchResultOk', { n: batchResult.total }) || `成功发布 ${batchResult.total} 条任务` }}</p>
+                  <ul class="batch-result-list">
+                    <li v-for="r in batchResult.created" :key="r.id" class="batch-result-item">
+                      <span class="mono">#{{ r.id }}</span> {{ r.title }}
+                      <span v-if="r.estimate?.p50_hours" class="mono batch-result-est">≈{{ r.estimate.p50_hours }}h</span>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </div>
           </template>
 
           <template v-else-if="tab === 'disputes'">
@@ -1685,7 +1729,49 @@ function showErrorLocal(msg: string) {
   try { window.alert(msg) } catch { /* noop */ }
 }
 
-const tab = ref<'available' | 'mine' | 'published' | 'disputes'>('available')
+const tab = ref<'available' | 'mine' | 'published' | 'batch' | 'disputes'>('available')
+
+// Batch publish state
+const batchRawInput = ref('')
+const batchPreview = ref<Array<{ title: string; category: string; reward_points: number }>>([])
+const batchParseError = ref('')
+const batchSubmitting = ref(false)
+const batchResult = ref<{ created: Array<{ id: number; title: string; estimate: { p50_hours?: number } }>; total: number } | null>(null)
+
+function parseBatchInput() {
+  batchParseError.value = ''
+  batchResult.value = null
+  const lines = batchRawInput.value.split('\n').map(l => l.trim()).filter(Boolean)
+  if (!lines.length) { batchParseError.value = t('taskManage.batchErrorEmpty') || '内容不能为空'; return }
+  if (lines.length > 50) { batchParseError.value = t('taskManage.batchErrorTooMany') || '最多 50 条'; return }
+  const items: Array<{ title: string; category: string; reward_points: number }> = []
+  for (const line of lines) {
+    const parts = line.split(',').map(s => s.trim())
+    const title = parts[0] || ''
+    if (!title) continue
+    const category = parts[1] || ''
+    const reward_points = parseInt(parts[2] || '0', 10) || 0
+    items.push({ title, category, reward_points })
+  }
+  if (!items.length) { batchParseError.value = t('taskManage.batchErrorNoValid') || '无有效行'; return }
+  batchPreview.value = items
+}
+
+async function submitBatch() {
+  if (!batchPreview.value.length) return
+  batchSubmitting.value = true
+  batchResult.value = null
+  try {
+    const res = await api.batchPublishTasks(batchPreview.value)
+    batchResult.value = res.data
+    batchPreview.value = []
+    batchRawInput.value = ''
+  } catch (e: any) {
+    batchParseError.value = e?.response?.data?.detail || t('common.errorGeneric') || '提交失败'
+  } finally {
+    batchSubmitting.value = false
+  }
+}
 const tasks = ref<TaskListItem[]>([])
 const tasksLoading = ref(false)
 const myTasks = ref<TaskListItem[]>([])
@@ -4589,4 +4675,34 @@ watch(tab, (newTab) => {
   .task-row__btn { width: 100%; }
   .task-row__btn.task-row__btn--primary { width: 100%; }
 }
+.batch-publish-panel { padding: var(--space-6); max-width: 760px; margin: 0 auto; }
+.batch-publish-header { margin-bottom: var(--space-5); }
+.batch-publish-desc { color: var(--text-secondary); font-size: var(--font-body); margin-top: var(--space-1); }
+.batch-label { display: block; font-size: var(--font-caption); color: var(--text-secondary); margin-bottom: var(--space-2); }
+.batch-textarea {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  background: rgba(255,255,255,0.04);
+  border: var(--border-hairline);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  resize: vertical;
+  outline: none;
+}
+.batch-textarea:focus { border-color: var(--primary-color); }
+.batch-error { margin-top: var(--space-2); color: #f87171; font-size: var(--font-caption); }
+.batch-preview { margin-top: var(--space-4); display: flex; flex-direction: column; gap: var(--space-2); }
+.batch-preview-row { display: grid; grid-template-columns: 1.5rem 1fr 5rem 4rem; gap: var(--space-3); align-items: center; padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: rgba(255,255,255,0.03); border: var(--border-hairline); }
+.batch-preview-idx { color: var(--text-secondary); text-align: right; }
+.batch-preview-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--font-body); }
+.batch-preview-meta { color: var(--text-secondary); font-size: var(--font-caption); }
+.batch-preview-pts { color: var(--primary-color); font-size: var(--font-caption); text-align: right; }
+.batch-actions { display: flex; gap: var(--space-3); margin-top: var(--space-4); flex-wrap: wrap; }
+.batch-result { margin-top: var(--space-5); padding: var(--space-4); border-radius: var(--radius-md); background: rgba(34,197,94,0.08); border: 1px solid rgba(34,197,94,0.2); }
+.batch-result-ok { font-weight: 600; color: #22c55e; margin-bottom: var(--space-3); }
+.batch-result-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+.batch-result-item { font-size: var(--font-body); display: flex; align-items: center; gap: var(--space-2); }
+.batch-result-est { color: var(--text-secondary); font-size: var(--font-caption); margin-left: auto; }
 </style>

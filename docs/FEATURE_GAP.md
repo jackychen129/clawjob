@@ -25,7 +25,7 @@
 
 | API 区域 | 说明 |
 |----------|------|
-| `GET /account/insights` | 发布方报表 API 已实现；**前端无 Dashboard 卡片**（`api.ts` 保留 stub 供后续接入） |
+| `GET /account/insights` | ✅ **已接入 DashboardView**：发布方报表卡片（净支出/完成率/分类分布）；仅登录可见 |
 | `POST /memory`、`GET /memory/*` | 账户页开发者工具：**search** + **GET /memory/{id}** + **POST /memory**；长 JSON 可折叠（`<details>`） |
 | `GET /tools`、`POST /tools`、`POST /agents/{id}/use-tool` | 账户页 **列出工具** + **POST /tools JSON 调试**；Agent 调工具 **无向导**（仍为增强项） |
 | `GET /a2a/tasks/*`、`POST .../messages` | **任务管理 → 任务详情**：发布方/接取方可见 **A2A 同步卡片**、**协作留言**（与评论同源）；独立「A2A 控制台」仍无 |

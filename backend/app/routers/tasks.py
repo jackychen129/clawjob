@@ -35,7 +35,8 @@ from app.domain.task_helpers import (
     task_verification_hours, validate_verification_submission,
 )
 from app.domain.task_models import (
-    A2AMessageBody, BatchConfirmBody, CloseAuctionBody, ConfirmTaskBody, EscrowDisputeBody,
+    A2AMessageBody, BatchConfirmBody, BatchPublishBody, BatchPublishItem, CloseAuctionBody,
+    ConfirmTaskBody, EscrowDisputeBody,
     PayerMarkPaidBody, PlaceBidBody, PostCommentBody, PublishTaskBody, RejectCompletionBody,
     SubscribeTaskBody, SubmitCompletionBody, WorkflowPlanBody,
 )
@@ -131,6 +132,123 @@ def draft_task_from_intent(
     draft["draft_source"] = "intent"
     draft["user_id"] = uid
     return draft
+
+
+@router.post("/tasks/batch")
+def batch_publish_tasks(
+    body: BatchPublishBody,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """批量发布任务（RFQ MVP）。
+
+    - 单次最多 50 条。
+    - `body.common` 可指定所有任务共用的字段（被 task 级覆盖）。
+    - 对每条任务调用发布流程（扣点、写库）；任意条失败则整批回滚。
+    - 返回 `{ created: [{id, title, estimate}] }`。
+    """
+    from app.domain.task_helpers import compute_publish_fee
+    from app.services.price_sla_estimator import estimate_price_sla
+
+    items = body.tasks
+    if not items:
+        raise HTTPException(status_code=400, detail="tasks 不可为空")
+    if len(items) > 50:
+        raise HTTPException(status_code=400, detail="单次最多批量发布 50 条任务")
+
+    uid = int(current_user["user_id"])
+    user = db.query(User).filter(User.id == uid).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+
+    # Pre-check total cost
+    common = body.common
+    total_cost = 0
+    for item in items:
+        points = item.reward_points if item.reward_points else (common.reward_points if common else 0)
+        fee = compute_publish_fee(points)
+        total_cost += points + fee
+    if total_cost > 0 and (user.credits or 0) < total_cost:
+        raise HTTPException(
+            status_code=402,
+            detail=f"余额不足：需要 {total_cost} 点，当前 {user.credits or 0} 点",
+        )
+
+    created = []
+    now = datetime.utcnow()
+    for item in items:
+        points = item.reward_points if item.reward_points else (common.reward_points if common else 0)
+        fee = compute_publish_fee(points)
+        total_deduct = points + fee
+
+        # Safety check on text
+        safe_title = _safety.sanitize_text(None, item.title, source="batch_publish", user_id=uid)
+        safe_desc = _safety.sanitize_text(None, item.description, source="batch_publish", user_id=uid)
+
+        task = Task(
+            title=safe_title,
+            description=safe_desc,
+            status="open",
+            owner_id=uid,
+            reward_points=points,
+            category=item.category or (common.category if common else ""),
+            requirements=item.requirements or (common.requirements if common else ""),
+            skills=item.skills or (common.skills if common else []),
+            duration_estimate=item.duration_estimate or (common.duration_estimate if common else ""),
+            verification_method=normalize_verification_method(
+                item.verification_method or (common.verification_method if common else "manual_review")
+            ),
+            task_type=(common.task_type if common else "general"),
+            input_data={"draft_source": "batch_rfq", "batch_published_at": now.isoformat() + "Z"},
+        )
+        db.add(task)
+        db.flush()
+
+        if total_deduct > 0:
+            user.credits = (user.credits or 0) - total_deduct
+            if fee > 0:
+                db.add(CreditTransaction(
+                    user_id=uid,
+                    amount=-fee,
+                    type="publish_fee",
+                    description=f"批量发布费用 task#{task.id}",
+                ))
+            if points > 0:
+                db.add(CreditTransaction(
+                    user_id=uid,
+                    amount=-points,
+                    type="task_publish",
+                    description=f"批量发布奖励锁定 task#{task.id}",
+                ))
+
+        # Quick estimate for response
+        try:
+            est = estimate_price_sla(
+                db,
+                skill=(item.skills[0] if item.skills else None),
+                category=item.category or None,
+            )
+        except Exception:
+            est = {}
+
+        created.append({
+            "id": task.id,
+            "title": task.title,
+            "reward_points": points,
+            "estimate": {
+                "median_points": est.get("median_points"),
+                "p50_hours": est.get("p50_hours"),
+                "wait_p50_hours": est.get("wait_p50_hours"),
+            },
+        })
+
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="批量发布失败，请稍后重试")
+
+    return {"created": created, "total": len(created)}
 
 
 def _category_completion_counts(db: Session) -> Dict[str, int]:
@@ -2305,6 +2423,71 @@ def export_task_run(
         "steps": [_replay.serialize_step(s) for s in steps],
         "exported_at": datetime.utcnow().isoformat() + "Z",
     }
+
+
+@router.post("/tasks/send-unpicked-reminders")
+def send_unpicked_reminders(
+    dry_run: bool = False,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """扫描发布超过 24h 且尚无人接取的任务，给发布方发站内提醒信。
+
+    - 每个任务只提醒一次（`input_data.reminder_24h_sent = true` 标记防重）。
+    - `dry_run=true` 时只返回待提醒列表，不写入数据库。
+    - 需要登录；平台内部 / cron 调用均可。
+    """
+    from app.database.relational_db import InternalMessage
+    cutoff = datetime.utcnow() - timedelta(hours=24)
+    candidates = (
+        db.query(Task)
+        .filter(
+            Task.status == "open",
+            Task.agent_id.is_(None),
+            Task.created_at <= cutoff,
+        )
+        .all()
+    )
+    reminded: List[int] = []
+    skipped: List[int] = []
+    for task in candidates:
+        input_data = task.input_data if isinstance(task.input_data, dict) else {}
+        if input_data.get("reminder_24h_sent"):
+            skipped.append(task.id)
+            continue
+        reminded.append(task.id)
+        if dry_run:
+            continue
+        if task.owner_id:
+            db.add(InternalMessage(
+                sender_user_id=int(task.owner_id),
+                recipient_user_id=int(task.owner_id),
+                title=f"任务 #{task.id} 已超 24h 无人接取",
+                content=(
+                    f"你发布的任务「{task.title}」已发布超过 24 小时，尚未有 Agent 接取。\n"
+                    f"建议检查任务描述是否清晰、奖励点数是否合理，或手动邀请候选接单人。"
+                ),
+                related_task_id=task.id,
+            ))
+        new_data = dict(input_data)
+        new_data["reminder_24h_sent"] = True
+        new_data["reminder_24h_sent_at"] = datetime.utcnow().isoformat() + "Z"
+        task.input_data = new_data
+        flag_modified(task, "input_data")
+    if not dry_run and reminded:
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise HTTPException(status_code=500, detail="提醒写入失败")
+    return {
+        "dry_run": dry_run,
+        "reminded_count": len(reminded),
+        "skipped_already_reminded": len(skipped),
+        "reminded_task_ids": reminded,
+    }
+
+
 @router.get("/tasks/estimate")
 def estimate_task_price_sla(
     skill: Optional[str] = None,
