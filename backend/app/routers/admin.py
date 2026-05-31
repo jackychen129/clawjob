@@ -29,7 +29,7 @@ from app.services import payout as _payout
 from app.services import settlement as _settlement
 from app.security import get_current_user
 
-router = APIRouter(prefix="", tags=["admin"])
+router = APIRouter(prefix="", tags=["Admin · 运营"])
 
 
 def get_superuser_dep(get_current_user: Callable, get_db_fn: Callable):
@@ -67,6 +67,67 @@ def admin_dispatch_community_hot(
     res = _community.dispatch_hot_topics(db, top_limit=top_limit)
     db.commit()
     return {"ok": True, **res}
+
+
+@router.get("/overview")
+def get_admin_overview(db: Session = Depends(get_db)):
+    """运营仪表盘聚合：核心指标 + 待处理结算/争议/KYC/提现（减少 Admin UI 往返）。"""
+    from app.services import settlement as _settlement
+
+    now = datetime.utcnow()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    hour_ago = now - timedelta(hours=1)
+
+    tasks_total = db.query(Task).count()
+    tasks_open = db.query(Task).filter(Task.status == "open").count()
+    tasks_completed = db.query(Task).filter(Task.status == "completed").count()
+    tasks_pending_verification = db.query(Task).filter(Task.status == "pending_verification").count()
+    tasks_disputed = db.query(Task).filter(Task.status == "disputed").count()
+
+    users_total = db.query(User).count()
+    users_new_today = db.query(User).filter(User.created_at >= today_start).count()
+    agents_total = db.query(Agent).count()
+    agents_new_today = db.query(Agent).filter(Agent.created_at >= today_start).count()
+
+    rewards_paid = db.query(func.coalesce(func.sum(Task.reward_points), 0)).filter(
+        Task.status == "completed", Task.reward_points.isnot(None)
+    ).scalar() or 0
+
+    kyc_pending = db.query(KycRecord).filter(KycRecord.status == "pending").count()
+    withdrawals_pending = db.query(WithdrawalRequest).filter(WithdrawalRequest.status == "pending").count()
+    settlement_counts = _settlement.count_unpaid_settlements(db)
+
+    requests_last_hour = db.query(SystemLog).filter(
+        SystemLog.category == "request", SystemLog.created_at >= hour_ago,
+    ).count()
+    errors_last_hour = db.query(SystemLog).filter(
+        SystemLog.level == "error", SystemLog.created_at >= hour_ago,
+    ).count()
+
+    return {
+        "generated_at": now.isoformat() + "Z",
+        "tasks": {
+            "total": tasks_total,
+            "open": tasks_open,
+            "completed": tasks_completed,
+            "pending_verification": tasks_pending_verification,
+            "disputed": tasks_disputed,
+        },
+        "users": {"total": users_total, "new_today": users_new_today},
+        "agents": {"total": agents_total, "new_today": agents_new_today},
+        "rewards_paid": int(rewards_paid),
+        "pending": {
+            "kyc_reviews": kyc_pending,
+            "withdrawals": withdrawals_pending,
+            "disputed_tasks": tasks_disputed,
+            "pending_verification_tasks": tasks_pending_verification,
+            "settlements": settlement_counts,
+        },
+        "observability": {
+            "requests_last_hour": int(requests_last_hour),
+            "errors_last_hour": int(errors_last_hour),
+        },
+    }
 
 
 @router.get("/metrics")

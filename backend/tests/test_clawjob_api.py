@@ -4890,7 +4890,7 @@ def test_sync_skills_from_github_hot(monkeypatch):
             }
         ]
 
-    monkeypatch.setattr("app.routers.skills._fetch_github_hot_skill_repos", _fake_fetch)
+    monkeypatch.setattr(app_main, "_fetch_github_hot_skill_repos", _fake_fetch)
     u = f"sync_skill_{_unique()}"
     token = _register_user(u, f"{u}@example.com", "pass123")["access_token"]
     headers = {"Authorization": f"Bearer {token}"}

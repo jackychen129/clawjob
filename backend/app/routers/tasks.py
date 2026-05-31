@@ -48,7 +48,7 @@ from app.services.task_timeline import append_timeline_event as _append_timeline
 from app.services.workflow_dag import predecessors, validate_workflow_dag
 from app.utils.datetime_iso import iso_utc
 
-router = APIRouter()
+router = APIRouter(tags=["Tasks · 任务市场", "Settlement · Agent 结算"])
 
 @router.get("/tasks/mine")
 def list_my_accepted_tasks(

@@ -3,6 +3,7 @@ ClawJob - 账户：信用点余额、充值、支付方式绑定、流水
 """
 import os
 from datetime import datetime
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import or_
@@ -32,9 +33,17 @@ from app.services.payment_methods import (
     validate_amount,
 )
 from app.services import payout as _payout
+from app.services import insights as _insights
+from app.domain.skill_xp import (
+    agent_skill_xp_map, apply_skill_decay, level_from_xp, skill_decay_meta,
+)
+from app.domain.task_helpers import (
+    SKILL_DECAY_IDLE_DAYS, SKILL_DECAY_MAX_RATIO, SKILL_DECAY_WEEKLY_RATIO,
+)
+from app.utils.datetime_iso import iso_utc
 import base64
 
-router = APIRouter(prefix="/account", tags=["account"])
+router = APIRouter(prefix="/account", tags=["Account · 账户"])
 
 
 class RechargeBody(BaseModel):
@@ -347,7 +356,7 @@ def estimate_publish_fee(
 
     用于前端发布页在用户输入奖励点时实时预估，保持前后端算法一致（运行时读取平台佣金比例）。
     """
-    from app.main import _compute_publish_fee, MAX_TASK_REWARD_POINTS
+    from app.domain.task_helpers import compute_publish_fee as _compute_publish_fee, MAX_TASK_REWARD_POINTS
 
     rp = max(0, int(reward_points or 0))
     if rp > MAX_TASK_REWARD_POINTS:
@@ -761,3 +770,53 @@ def list_my_referral_records(
             "status": "rewarded" if r.first_task_reward_at else "pending",
         })
     return {"records": out, "items": out, "total": len(out)}
+
+
+@router.get("/skill-tree")
+def get_my_skill_tree(db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    uid = int(current_user["user_id"])
+    my_agents = db.query(Agent).filter(Agent.owner_id == uid).all()
+    total: dict = {}
+    max_decay = 0.0
+    latest_active: Optional[datetime] = None
+    for a in my_agents:
+        tasks = db.query(Task).filter(Task.agent_id == a.id, Task.status == "completed").all()
+        xp_map = agent_skill_xp_map(db, a.id)
+        dec = skill_decay_meta(tasks)
+        ratio = float(dec.get("ratio") or 0.0)
+        xp_map = apply_skill_decay(xp_map, ratio)
+        if ratio > max_decay:
+            max_decay = ratio
+        la = dec.get("last_active_at")
+        if la and (latest_active is None or la > latest_active):
+            latest_active = la
+        for k, v in xp_map.items():
+            total[k] = int(total.get(k, 0) or 0) + int(v or 0)
+    nodes = []
+    for name, xp in sorted(total.items(), key=lambda kv: (-kv[1], kv[0])):
+        lv = level_from_xp(int(xp))
+        nodes.append({"name": name, "xp": int(xp), **lv})
+    return {
+        "nodes": nodes[:24],
+        "total_skills": len(nodes),
+        "decay": {
+            "max_ratio": float(round(max_decay, 4)),
+            "last_active_at": iso_utc(latest_active),
+            "policy": {
+                "idle_days": SKILL_DECAY_IDLE_DAYS,
+                "weekly_ratio": SKILL_DECAY_WEEKLY_RATIO,
+                "max_ratio": SKILL_DECAY_MAX_RATIO,
+            },
+        },
+    }
+
+
+@router.get("/insights")
+def my_insights(
+    days: int = 90,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """登录用户自己的发布方报表。"""
+    uid = int(current_user["user_id"])
+    return _insights.publisher_report(db, user_id=uid, days=int(days or 90))

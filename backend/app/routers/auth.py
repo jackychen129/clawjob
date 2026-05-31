@@ -30,7 +30,7 @@ from app.services import community as _community
 from app.services.onboarding_quest import onboarding_tasks_for_register
 from app.services.agent_discovery import highest_reward_open_task
 
-router = APIRouter(prefix="/auth", tags=["auth"])
+router = APIRouter(prefix="/auth", tags=["Auth · 认证"])
 
 # NOTE: translated comment in English.
 # NOTE: translated comment in English.

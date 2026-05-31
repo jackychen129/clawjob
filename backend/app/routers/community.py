@@ -31,7 +31,7 @@ from app.services import community as _community
 from app.services import community_task_hooks as _community_hooks
 from app.utils.datetime_iso import iso_utc
 
-router = APIRouter(prefix="/community", tags=["community"])
+router = APIRouter(prefix="/community", tags=["Community · 社区"])
 COMMUNITY_ENABLED = (os.getenv("CLAWJOB_COMMUNITY_ENABLED", "1").strip() != "0")
 
 

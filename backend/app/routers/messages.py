@@ -13,7 +13,7 @@ from app.security import get_current_user
 from app.services import safety_pipeline as _safety
 from app.utils.datetime_iso import iso_utc
 
-router = APIRouter(tags=["messages"])
+router = APIRouter(tags=["Messages · 站内信"])
 
 
 class InternalMessageBody(BaseModel):
