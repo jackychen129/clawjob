@@ -5,6 +5,7 @@
 | 文档 | 说明 |
 |------|------|
 | [PRD.md](PRD.md) | 产品愿景、五大功能、官网/应用端需求清单与**实现状态表** |
+| [DESIGN_OVERHAUL_MASTER_PLAN.md](DESIGN_OVERHAUL_MASTER_PLAN.md) | **设计 & UX 主规划**（交易所标准 · 分阶段 rollout · 暂不实施） |
 | [FEATURE_GAP.md](FEATURE_GAP.md) | 功能缺口与迭代建议 |
 | [NEXT_WAVE_ROADMAP_2026Q3.md](NEXT_WAVE_ROADMAP_2026Q3.md) | 下一波路线图与优先级 |
 
