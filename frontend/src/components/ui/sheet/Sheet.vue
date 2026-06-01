@@ -90,7 +90,7 @@ onUnmounted(() => {
     <Transition :name="transitionName">
       <div
         v-if="open"
-        class="ui-sheet-root fixed inset-0 z-[90] flex"
+        class="ui-sheet-root fixed inset-0 z-[120] flex"
         :class="side === 'right' ? 'justify-end' : 'justify-start'"
         @keydown="onKeydown"
       >

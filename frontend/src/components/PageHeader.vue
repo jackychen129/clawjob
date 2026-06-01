@@ -13,7 +13,7 @@ defineProps<{
   <header
     :class="
       cn(
-        'page-header mb-6 flex flex-col gap-4 border-b border-[var(--border-hairline)] pb-4 sm:flex-row sm:items-start sm:justify-between',
+        'page-header mb-4 flex flex-col gap-3 border-b border-[var(--border-hairline)] pb-3 sm:flex-row sm:items-start sm:justify-between',
         $props.class,
       )
     "

@@ -465,8 +465,15 @@
       id="nav-overflow-sheet"
       v-model:open="navOverflowOpen"
       side="left"
-      :title="String(t('nav.navGroupDiscover'))"
     >
+      <template #header>
+        <div class="nav-overflow-sheet-head">
+          <h2 class="nav-overflow-sheet-title">{{ t('nav.navGroupDiscover') }}</h2>
+          <Button type="button" variant="ghost" size="sm" class="nav-overflow-close" :aria-label="t('common.close') || '关闭'" @click="closeNavOverflow">
+            ✕
+          </Button>
+        </div>
+      </template>
       <nav class="nav-overflow-links" :aria-label="String(t('nav.navGroupDiscover'))">
         <router-link to="/agent-studio" class="nav-overflow-link" :class="{ active: route.path === '/agent-studio' }" @click="closeNavOverflow">
           <Bot class="nav-overflow-icon" aria-hidden="true" />
@@ -1688,6 +1695,26 @@ onUnmounted(() => {
 }
 .command-palette-hint:hover {
   color: var(--text-secondary);
+}
+.nav-overflow-sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  width: 100%;
+}
+.nav-overflow-sheet-title {
+  margin: 0;
+  font-size: var(--font-body);
+  font-weight: 650;
+  color: var(--text-primary);
+}
+.nav-overflow-close {
+  min-width: 2rem;
+  min-height: 2rem;
+  padding: 0;
+  font-size: 1.1rem;
+  line-height: 1;
 }
 .nav-overflow-links {
   display: flex;

@@ -221,6 +221,7 @@
         <div v-for="tool in toolsList" :key="tool.name" class="tool-card">
           <div class="tool-card-header">
             <span class="tool-card-name">{{ tool.name }}</span>
+            <span class="tool-card-mcp">MCP</span>
             <span class="tool-card-cat mono">{{ tool.category }}</span>
           </div>
           <p class="tool-card-desc">{{ tool.description }}</p>
@@ -622,11 +623,36 @@ onMounted(() => {
 .tool-cards { display: grid; grid-template-columns: 1fr; gap: var(--space-4); margin-bottom: var(--space-6); }
 @media (min-width: 640px) { .tool-cards { grid-template-columns: repeat(2, 1fr); } }
 @media (min-width: 900px) { .tool-cards { grid-template-columns: repeat(4, 1fr); } }
-.tool-card { padding: var(--space-4); border-radius: var(--radius-lg); border: var(--border-hairline); background: rgba(255,255,255,0.03); display: flex; flex-direction: column; gap: var(--space-2); }
-.tool-card--skeleton { min-height: 5rem; }
-.tool-card-header { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); }
-.tool-card-name { font-weight: 600; font-size: var(--font-body); color: var(--text-primary); }
-.tool-card-cat { font-size: var(--font-caption); color: var(--primary-color); background: rgba(34,197,94,0.12); padding: 2px 6px; border-radius: var(--radius-sm); }
+.tool-card {
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  border: var(--border-hairline);
+  background: var(--card-background);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  transition: border-color var(--duration-m) var(--ease-apple), transform var(--duration-m) var(--ease-apple), box-shadow var(--duration-m) var(--ease-apple);
+}
+.tool-card:hover {
+  border-color: rgba(var(--primary-rgb), 0.22);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-card-hover);
+}
+.tool-card--skeleton { min-height: 5rem; pointer-events: none; }
+.tool-card-header { display: flex; justify-content: flex-start; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.tool-card-name { font-weight: 650; font-size: var(--font-body); color: var(--text-primary); margin-right: auto; }
+.tool-card-mcp {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--primary-color);
+  background: rgba(var(--primary-rgb), 0.12);
+  border: 1px solid rgba(var(--primary-rgb), 0.25);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+}
+.tool-card-cat { font-size: var(--font-caption); color: var(--text-secondary); background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: var(--radius-sm); }
 .tool-card-desc { font-size: var(--font-caption); color: var(--text-secondary); line-height: 1.5; flex: 1; }
 .tool-card-meta { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: auto; }
 .tool-card-meta-item { font-size: 0.75rem; color: var(--text-secondary); background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: var(--radius-sm); }

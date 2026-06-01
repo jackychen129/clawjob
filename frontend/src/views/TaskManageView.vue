@@ -4409,6 +4409,10 @@ watch(tab, (newTab) => {
 .task-market-page-header :deep(.market-stats-bar) {
   min-width: min(100%, 22rem);
 }
+.task-market-page-header :deep(.page-header) {
+  margin-bottom: var(--space-3);
+}
+.task-layout { margin-top: var(--space-2); }
 .task-layout--mine-only { grid-template-columns: minmax(0, 1fr) 260px; }
 .task-layout--mine-only .task-center { min-width: 0; }
 .task-right { display: flex; flex-direction: column; gap: var(--space-6); position: sticky; top: 92px; }

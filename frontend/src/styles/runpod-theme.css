@@ -64,7 +64,7 @@ body {
   width: 100%;
   max-width: 72rem;
   margin: 0 auto;
-  padding: var(--space-6) var(--space-4) var(--space-10);
+  padding: var(--space-3) var(--space-4) var(--space-8);
 }
 
 @media (min-width: 768px) {
@@ -355,7 +355,7 @@ a.btn {
 /* Main Content · 呼吸感留白、最大宽度统一 */
 .main-content {
   flex: 1;
-  padding: 3rem 1.5rem 3.5rem;
+  padding: 1rem 1rem 2.5rem;
   max-width: 1280px;
   margin: 0 auto;
   width: 100%;
@@ -412,10 +412,10 @@ a.btn {
 }
 @media (min-width: 769px) {
   .main-content {
-    padding-left: 2rem;
-    padding-right: 2rem;
-    padding-top: 3.5rem;
-    padding-bottom: 4rem;
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+    padding-top: 1.25rem;
+    padding-bottom: 3rem;
   }
 }
 @media (max-width: 768px) {
@@ -1204,27 +1204,46 @@ a.link:hover,
 
 @media (max-width: 768px) {
   .app-header {
-    padding: 0.6rem 0.75rem;
+    padding: 0.5rem 0.75rem;
   }
   .header-content {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 0.5rem;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 0.35rem;
+  }
+  .header-brand {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+  .header-brand .header-brand-logo,
+  .header-content h1 {
+    font-size: 1.05rem;
   }
   .header-nav {
-    order: 0;
-    width: 100%;
+    order: unset;
+    width: auto;
+    flex: 1 1 auto;
+    min-width: 0;
     flex-wrap: nowrap;
     overflow-x: auto;
-    padding-bottom: 4px;
+    padding-bottom: 0;
+    margin-left: 0;
+    scrollbar-width: none;
+  }
+  .header-nav::-webkit-scrollbar {
+    display: none;
+  }
+  .header-actions {
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    justify-content: flex-end;
   }
   .header-nav .nav-link {
     flex-shrink: 0;
     white-space: nowrap;
-  }
-  .header-actions {
-    flex-wrap: wrap;
-    justify-content: flex-end;
+    padding: 0.4rem 0.55rem;
+    font-size: 0.8125rem;
   }
   .dashboard-grid {
     grid-template-columns: 1fr;
