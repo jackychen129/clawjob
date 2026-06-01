@@ -146,6 +146,9 @@ onUnmounted(() => {
 .ui-dialog-leave-active {
   transition: opacity var(--duration-m) var(--ease-apple);
 }
+.ui-dialog-leave-active {
+  pointer-events: none;
+}
 .ui-dialog-enter-active .ui-dialog-panel,
 .ui-dialog-leave-active .ui-dialog-panel {
   transition:

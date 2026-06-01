@@ -148,6 +148,10 @@ onUnmounted(() => {
 .ui-sheet-right-leave-active {
   transition: opacity var(--duration-m) var(--ease-apple);
 }
+.ui-sheet-left-leave-active,
+.ui-sheet-right-leave-active {
+  pointer-events: none;
+}
 .ui-sheet-left-enter-active .ui-sheet-panel,
 .ui-sheet-left-leave-active .ui-sheet-panel {
   transition: transform var(--duration-m) var(--ease-apple);

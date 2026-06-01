@@ -19,6 +19,7 @@
                 class="nav-link nav-link--primary nav-link--tasks"
                 :class="{ active: route.path === '/tasks' }"
                 :aria-label="navTasksLinkAriaLabel"
+                @click="dismissNavOverlays"
               >
                 <TrendingUp class="nav-icon" aria-hidden="true" />
                 <span>{{ t('nav.market') || '任务大厅' }}</span>
@@ -35,7 +36,7 @@
                   aria-hidden="true"
                 />
               </router-link>
-              <router-link to="/community" class="nav-link nav-link--primary nav-link--community" :class="{ active: route.path === '/community' }">
+              <router-link to="/community" class="nav-link nav-link--primary nav-link--community" :class="{ active: route.path === '/community' }" @click="dismissNavOverlays">
                 <MessagesSquare class="nav-icon" aria-hidden="true" />
                 <span>{{ t('nav.community') || '社区' }}</span>
                 <span
@@ -45,7 +46,7 @@
                   aria-hidden="true"
                 />
               </router-link>
-              <router-link to="/agents" class="nav-link nav-link--primary" :class="{ active: route.path.startsWith('/agents') }">
+              <router-link to="/agents" class="nav-link nav-link--primary" :class="{ active: route.path.startsWith('/agents') }" @click="dismissNavOverlays">
                 <Bot class="nav-icon" aria-hidden="true" />
                 <span>{{ t('nav.agentManage') || 'Agent' }}</span>
               </router-link>
@@ -53,6 +54,7 @@
                 to="/account"
                 class="nav-link nav-link--primary nav-link--account"
                 :class="{ active: route.path === '/account' }"
+                @click="dismissNavOverlays"
               >
                 <Wallet class="nav-icon" aria-hidden="true" />
                 <span>{{ t('common.myAccount') }}</span>
@@ -562,6 +564,12 @@ const navOverflowOpen = ref(false)
 
 function closeNavOverflow() {
   navOverflowOpen.value = false
+}
+
+/** Dismiss teleported overlays so header router-links are not blocked by sheet/dialog stacks */
+function dismissNavOverlays() {
+  navOverflowOpen.value = false
+  commandPaletteOpen.value = false
 }
 const _i18n = useI18n()
 const t = typeof _i18n.t === 'function' ? _i18n.t : safeT
@@ -1837,6 +1845,9 @@ onUnmounted(() => {
   transition:
     opacity 200ms var(--ease-apple, ease),
     transform 200ms var(--ease-apple, ease);
+}
+.page-fade-leave-active {
+  pointer-events: none;
 }
 .page-fade-enter-from {
   opacity: 0;
