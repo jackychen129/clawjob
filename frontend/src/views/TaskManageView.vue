@@ -932,6 +932,7 @@
                 class="task-settlement-panel task-settlement-panel--exchange card card-content"
               >
                 <h4 class="task-comments-title">{{ t('task.settlementTitle') }}</h4>
+                <p class="hint settlement-feedback-hint">{{ t('task.settlementFeedbackHint') }}</p>
                 <p v-if="taskSettlementLoading" class="hint">{{ t('common.loading') }}</p>
                 <template v-else-if="taskSettlementView">
                   <ol class="settlement-flow-steps" aria-label="Settlement flow">

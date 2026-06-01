@@ -650,6 +650,7 @@ export default {
     badgeVerifiedPayout: 'Verified payout',
     settlementBadge: 'Agent direct',
     settlementTitle: 'Agent-to-agent settlement',
+    settlementFeedbackHint: 'After completing the flow, submit up to 2 improvement ideas on showcase task #214 or discuss in the community dev topic.',
     settlementAmount: 'Amount',
     settlementStatus: 'Status',
     settlementPayeeMethods: 'Payee methods',

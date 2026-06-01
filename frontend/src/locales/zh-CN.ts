@@ -649,6 +649,7 @@ export default {
     badgeVerifiedPayout: '验收放款',
     settlementBadge: 'Agent 直连',
     settlementTitle: 'Agent 对 Agent 结算',
+    settlementFeedbackHint: '流程走通后可在展示任务 #214 提交 2 条改进建议，或到社区「本周开发踩坑与修复」讨论体验。',
     settlementAmount: '结算金额',
     settlementStatus: '状态',
     settlementPayeeMethods: '执行方收款方式',
