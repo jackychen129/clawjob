@@ -1050,6 +1050,18 @@
                   <span class="verification-chain-chip verification-chain-chip--warn">{{ t('task.verificationChainWarn', { n: verificationStats.warn }) }}</span>
                   <span class="verification-chain-chip verification-chain-chip--blocker">{{ t('task.verificationChainBlock', { n: verificationStats.blockers }) }}</span>
                 </div>
+                <div v-if="verificationFailureGroups.length" class="verification-failure-groups">
+                  <p class="verification-failure-groups__title">{{ t('task.verificationFailureGroupsTitle') }}</p>
+                  <div v-for="g in verificationFailureGroups" :key="g.key" class="verification-failure-group">
+                    <strong>{{ g.label }}</strong>
+                    <span class="hint">×{{ g.count }}</span>
+                    <ul class="verification-chain-ul verification-chain-ul--compact">
+                      <li v-for="(item, gi) in g.samples" :key="gi" :class="verificationCheckClass(item)">
+                        <span class="mono">{{ item.name }}</span> — {{ item.message }}
+                      </li>
+                    </ul>
+                  </div>
+                </div>
                 <div v-if="verificationChainData" class="verification-chain-cards">
                   <div class="verification-chain-card">
                     <p class="verification-chain-card__title">{{ t('task.verificationChainDeclaration') }}</p>
@@ -2473,6 +2485,43 @@ const verificationStats = computed(() => {
   return { total, blockers, warn, passed }
 })
 
+type VerificationFailureGroup = { key: string; label: string; count: number; samples: PreflightCheckRow[] }
+
+const verificationFailureGroups = computed((): VerificationFailureGroup[] => {
+  const checks = (verificationChainData.value?.sandbox?.checks || []) as PreflightCheckRow[]
+  const failed = checks.filter((c) => {
+    const st = String(c?.status || '').toLowerCase()
+    return st === 'fail' || st === 'warn'
+  })
+  if (!failed.length) return []
+  const buckets = new Map<string, PreflightCheckRow[]>()
+  for (const c of failed) {
+    const sev = String(c?.severity || 'other').toLowerCase()
+    const name = String(c?.name || 'unknown')
+    const key = `${sev}::${name.split(/[._-]/)[0] || name}`
+    const arr = buckets.get(key) || []
+    arr.push(c)
+    buckets.set(key, arr)
+  }
+  return [...buckets.entries()]
+    .map(([key, items]) => {
+      const sev = key.split('::')[0]
+      const label =
+        sev === 'blocker'
+          ? String(t('task.verificationGroupBlocker'))
+          : sev === 'warn'
+            ? String(t('task.verificationGroupWarn'))
+            : String(t('task.verificationGroupOther'))
+      return {
+        key,
+        label: `${label} · ${items[0]?.name || key}`,
+        count: items.length,
+        samples: items.slice(0, 3),
+      }
+    })
+    .sort((a, b) => b.count - a.count)
+})
+
 function crossVerificationRecordLines(rec: unknown): string[] {
   if (rec == null || typeof rec !== 'object') return []
   const o = rec as Record<string, unknown>
@@ -3750,6 +3799,24 @@ watch(tab, (newTab) => {
 .verification-chain-li--blocker { color: rgba(248, 113, 113, 0.95); }
 .verification-chain-li--warn { color: rgba(251, 191, 36, 0.95); }
 .verification-chain-sev { font-size: 0.75em; opacity: 0.9; }
+.verification-failure-groups {
+  margin: var(--space-3) 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  background: rgba(239, 68, 68, 0.06);
+}
+.verification-failure-groups__title {
+  font-size: var(--font-caption);
+  font-weight: 600;
+  margin: 0 0 var(--space-2);
+}
+.verification-failure-group {
+  margin-bottom: var(--space-3);
+}
+.verification-failure-group:last-child {
+  margin-bottom: 0;
+}
 .verification-chain-summary {
   display: flex;
   flex-wrap: wrap;

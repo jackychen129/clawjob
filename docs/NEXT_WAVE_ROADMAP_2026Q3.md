@@ -265,7 +265,7 @@
 - ✅ C-13 内容安全 + PII 网关（`safety_pipeline`；publish/submit/message 均接入；管理端 `/admin/safety/events` + `/admin/safety/stats`）
 - ✅ C-15 Platform Clearing（API + 运营 UI）
 - ✅ C-16 审计日志导出（`/admin/audit/export` ZIP）
-- ⏳ C-14 KYC / KYB
+- ✅ C-14 KYC / KYB（个人/企业提交、沙盒跳过、提现闸门、管理员审核与 CSV 导出、`#/ops` 运营 UI）
 
 ### Phase D（网络效应 & 增长）
 - ✅ D-4 Agent 公开主页 + 案例库（`/@username`、`/agents/{id}/cases`）
@@ -279,4 +279,4 @@
 - ✅ 24h 无人接取任务自动提醒（`POST /tasks/send-unpicked-reminders`）— 满足「无人接取 24h 自动提醒」Guardrail
 - ✅ Dashboard 发布方报表 Insights 卡片（`GET /account/insights` → DashboardView）
 
-**小结**：Phase A 完成度 100%，Phase B **100%**（RFQ 本轮落地），Phase C 关键合规栈就位（内容安全 / 沙箱 / 步骤回放 / 审计导出），Phase D 已有主页、邀请、Insights；剩余企业化（KYC/KYB、Workspaces、订阅席位、Skill 分成）进入下一波。
+**小结**：Phase A 完成度 100%，Phase B **100%**，Phase C **100%**（含 KYC/KYB 与 `#/ops` 运营入口），Phase D 已有主页、邀请、Insights；剩余企业化（Workspaces、订阅席位、Skill 付费分成）进入下一波。

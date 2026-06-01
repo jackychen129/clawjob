@@ -180,6 +180,34 @@ def is_approved(user: Optional[User]) -> bool:
     return getattr(user, "kyc_status", "none") == "approved"
 
 
+def sandbox_mode_enabled() -> bool:
+    return os.getenv("KYC_SANDBOX_MODE", "").strip().lower() in ("1", "true", "yes")
+
+
+def sandbox_skip(db: Session, user: User) -> KycRecord:
+    """沙盒模式：跳过实名审核，仅当 KYC_SANDBOX_MODE=1 时可用。"""
+    if not sandbox_mode_enabled():
+        raise ValueError("sandbox mode disabled")
+    rec = KycRecord(
+        user_id=user.id,
+        kind="personal",
+        status="approved",
+        legal_name=(user.username or "sandbox")[:128],
+        id_type="sandbox",
+        id_number_masked="**sandbox**",
+        country="CN",
+        reviewed_at=datetime.utcnow(),
+        rejection_reason=None,
+    )
+    db.add(rec)
+    user.kyc_status = "approved"
+    user.kyc_kind = "sandbox"
+    user.kyc_approved_at = datetime.utcnow()
+    db.commit()
+    db.refresh(rec)
+    return rec
+
+
 def withdrawal_min_balance() -> int:
     raw = os.getenv("WITHDRAWAL_MIN_AMOUNT", "10").strip() or "10"
     try:

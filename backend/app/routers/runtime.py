@@ -1,11 +1,14 @@
 """Preflight, circuit breakers, memory & tool systems (legacy agent runtime)."""
 from __future__ import annotations
 
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.systems import memory_system, runtime_guard, tool_system
+from app.database.relational_db import User
 from app.database.relational_db import SystemLog, User, get_db
 from app.security import get_current_user
 from app.services.preflight import run_preflight
@@ -26,6 +29,19 @@ class CircuitBreakerControlBody(BaseModel):
     action: str  # reset | open | half_open | close
 
 
+class CircuitBreakerConfigBody(BaseModel):
+    threshold: Optional[int] = None
+    open_seconds: Optional[int] = None
+
+
+def _require_superuser(db: Session, current_user: dict) -> User:
+    uid = int(current_user["user_id"])
+    me = db.query(User).filter(User.id == uid).first()
+    if not me or not bool(getattr(me, "is_superuser", False)):
+        raise HTTPException(status_code=403, detail="仅管理员可配置熔断策略")
+    return me
+
+
 @router.get("/preflight/check")
 def preflight_check(
     context: str = "default",
@@ -42,6 +58,40 @@ def runtime_circuit_breakers(
 ):
     _ = current_user
     return runtime_guard.snapshot()
+
+
+@router.get("/runtime/circuit-breakers/config")
+def runtime_circuit_breakers_config(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    _require_superuser(db, current_user)
+    cfg = runtime_guard.update_config()
+    return {"ok": True, **cfg}
+
+
+@router.patch("/runtime/circuit-breakers/config")
+def patch_runtime_circuit_breakers_config(
+    body: CircuitBreakerConfigBody,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    reviewer = _require_superuser(db, current_user)
+    if body.threshold is None and body.open_seconds is None:
+        raise HTTPException(status_code=400, detail="至少提供 threshold 或 open_seconds")
+    cfg = runtime_guard.update_config(threshold=body.threshold, open_seconds=body.open_seconds)
+    try:
+        db.add(SystemLog(
+            level="info",
+            category="runtime_guard",
+            message="circuit_breaker_config",
+            user_id=reviewer.id,
+            extra=cfg,
+        ))
+        db.commit()
+    except Exception:
+        db.rollback()
+    return {"ok": True, **cfg, "snapshot": runtime_guard.snapshot()}
 
 
 @router.post("/runtime/circuit-breakers/control")

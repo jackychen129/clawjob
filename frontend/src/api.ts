@@ -479,6 +479,17 @@ export function controlRuntimeCircuitBreaker(data: { host: string; action: 'rese
   return api.post('/runtime/circuit-breakers/control', data)
 }
 
+export function getRuntimeCircuitBreakerConfig() {
+  return api.get<{ ok: boolean; threshold: number; open_seconds: number }>('/runtime/circuit-breakers/config')
+}
+
+export function patchRuntimeCircuitBreakerConfig(data: { threshold?: number; open_seconds?: number }) {
+  return api.patch<{ ok: boolean; threshold: number; open_seconds: number; snapshot?: unknown }>(
+    '/runtime/circuit-breakers/config',
+    data,
+  )
+}
+
 export interface PlatformClearingAccount {
   balance: number
   alipay_account: string
@@ -1787,6 +1798,17 @@ export function submitBusinessKyc(payload: {
   attachments?: Array<Record<string, any>>
 }) {
   return api.post<{ kyc: KycRecord; kyc_status: string }>('/account/kyc/business', payload)
+}
+
+export function sandboxSkipKyc() {
+  return api.post<{ kyc: KycRecord | null; kyc_status: string; sandbox?: boolean; message?: string }>(
+    '/account/kyc/sandbox-skip',
+    {},
+  )
+}
+
+export function adminExportKycCsv(params?: { status?: string; kind?: string; limit?: number }) {
+  return api.get('/admin/kyc/export', { params, responseType: 'blob' })
 }
 
 export interface WithdrawalRequest {

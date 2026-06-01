@@ -3723,6 +3723,71 @@ def test_kyc_reject_blocks_withdrawal_and_records_reason():
     assert r.status_code == 403
 
 
+def test_kyc_sandbox_skip_when_enabled(monkeypatch):
+    """C-14：KYC_SANDBOX_MODE=1 时可沙盒跳过并解锁提现闸门。"""
+    monkeypatch.setenv("KYC_SANDBOX_MODE", "1")
+    user = f"kybsb_{_unique()}"
+    tk = _register_user(user, f"{user}@example.com", "pw")["access_token"]
+    h = {"Authorization": f"Bearer {tk}"}
+    r = client.post("/account/kyc/sandbox-skip", headers=h)
+    assert r.status_code == 200, r.text
+    assert r.json()["kyc_status"] == "approved"
+    me = client.get("/account/kyc", headers=h).json()
+    assert me["kyc_status"] == "approved"
+    monkeypatch.delenv("KYC_SANDBOX_MODE", raising=False)
+    user2 = f"kybsb2_{_unique()}"
+    tk2 = _register_user(user2, f"{user2}@example.com", "pw")["access_token"]
+    h2 = {"Authorization": f"Bearer {tk2}"}
+    r2 = client.post("/account/kyc/sandbox-skip", headers=h2)
+    assert r2.status_code == 403
+
+
+def test_kyc_admin_export_csv():
+    """C-14：管理员可导出 KYC 记录 CSV。"""
+    user = f"kycex_{_unique()}"
+    tk = _register_user(user, f"{user}@example.com", "pw")["access_token"]
+    h = {"Authorization": f"Bearer {tk}"}
+    client.post(
+        "/account/kyc/personal",
+        json={"legal_name": "Export Me", "id_type": "id_card", "id_number": "110101199001011234"},
+        headers=h,
+    )
+    tk_a = _make_admin_token(f"kycexadm_{_unique()}")
+    h_a = {"Authorization": f"Bearer {tk_a}"}
+    r = client.get("/admin/kyc/export", params={"status": "pending"}, headers=h_a)
+    assert r.status_code == 200, r.text
+    assert "text/csv" in (r.headers.get("content-type") or "")
+    body = r.content.decode("utf-8")
+    assert "legal_name" in body
+    assert "Export Me" in body
+
+
+def test_runtime_circuit_breaker_config_patch():
+    """熔断告警阈值：管理员可读取并更新 threshold / open_seconds。"""
+    tk_a = _make_admin_token(f"cbcfg_{_unique()}")
+    h_a = {"Authorization": f"Bearer {tk_a}"}
+    g0 = client.get("/runtime/circuit-breakers/config", headers=h_a)
+    assert g0.status_code == 200, g0.text
+    p = client.patch(
+        "/runtime/circuit-breakers/config",
+        json={"threshold": 5, "open_seconds": 90},
+        headers=h_a,
+    )
+    assert p.status_code == 200, p.text
+    assert p.json()["threshold"] == 5
+    assert p.json()["open_seconds"] == 90
+    snap = client.get("/runtime/circuit-breakers", headers=h_a).json()
+    assert snap["threshold"] == 5
+    u2 = f"cbcfgu_{_unique()}"
+    tk_u = _register_user(u2, f"{u2}@example.com", "pw")["access_token"]
+    forbidden = client.patch(
+        "/runtime/circuit-breakers/config",
+        json={"threshold": 2},
+        headers={"Authorization": f"Bearer {tk_u}"},
+    )
+    assert forbidden.status_code == 403
+
+
 def test_kyc_business_submit_and_admin_list_filter():
     """C-14：企业 KYB 提交 + 管理员列表过滤。"""
     user = f"kyb_{_unique()}"

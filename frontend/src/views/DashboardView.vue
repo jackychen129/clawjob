@@ -67,6 +67,25 @@
               :aria-label="roiChartAriaLabel || undefined"
             >
               <polyline :points="roiPoints" fill="none" stroke="rgba(34,197,94,0.95)" stroke-width="3" stroke-linecap="round" />
+              <g v-for="(pt, idx) in roiChartPoints" :key="pt.date">
+                <circle
+                  :cx="pt.x"
+                  :cy="pt.y"
+                  r="5"
+                  fill="rgba(34,197,94,0.95)"
+                  stroke="rgba(0,0,0,0.35)"
+                  stroke-width="1"
+                >
+                  <title>{{ roiPointTooltip(pt) }}</title>
+                </circle>
+                <text
+                  v-if="idx === 0 || idx === roiChartPoints.length - 1 || idx === Math.floor(roiChartPoints.length / 2)"
+                  :x="pt.x"
+                  :y="Math.max(12, pt.y - 10)"
+                  text-anchor="middle"
+                  class="roi-point-label"
+                >{{ pt.rewards }}</text>
+              </g>
             </svg>
             <div class="dash-roi-x"><span v-for="p in roiXLabels" :key="p.date">{{ p.date.slice(5) }}</span></div>
           </div>
@@ -252,13 +271,35 @@ const roiXLabels = computed(() => {
 const roiPoints = computed(() => {
   const arr = roiSeries.value
   if (!arr.length) return ''
+  return roiChartPoints.value.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
+})
+
+const roiChartPoints = computed(() => {
+  const arr = roiSeries.value
+  if (!arr.length) return [] as Array<{ date: string; rewards: number; tasks: number; x: number; y: number }>
   const max = Math.max(...arr.map((x) => Number(x.rewards || 0)), 1)
   return arr.map((p, i) => {
     const x = (i / Math.max(1, arr.length - 1)) * 640
     const y = 170 - (Number(p.rewards || 0) / max) * 150
-    return `${x.toFixed(1)},${y.toFixed(1)}`
-  }).join(' ')
+    return {
+      date: p.date,
+      rewards: Number(p.rewards || 0),
+      tasks: Number(p.tasks || 0),
+      x,
+      y,
+    }
+  })
 })
+
+function roiPointTooltip(pt: { date: string; rewards: number; tasks: number }) {
+  return String(
+    t('dashboard.roiPointTooltip', {
+      date: pt.date,
+      rewards: pt.rewards,
+      tasks: pt.tasks,
+    }),
+  )
+}
 
 const roiChartEmpty = computed(() => {
   const arr = roiSeries.value
@@ -602,6 +643,11 @@ async function reloadAll() {
   color: var(--text-secondary);
   line-height: 1.5;
   max-width: 28rem;
+}
+.roi-point-label {
+  fill: var(--text-secondary);
+  font-size: 10px;
+  pointer-events: none;
 }
 .dash-roi-wrap {
   min-height: 160px;

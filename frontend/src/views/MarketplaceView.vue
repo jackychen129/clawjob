@@ -233,6 +233,7 @@
         </div>
         <div v-if="!toolsList.length" class="tool-empty">
           <p class="hint">{{ t('marketplace.toolsEmpty') }}</p>
+          <p class="hint"><router-link to="/account">{{ t('marketplace.toolsDevLink') }}</router-link></p>
         </div>
       </div>
 

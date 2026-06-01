@@ -515,6 +515,10 @@
           <Shield class="nav-icon" aria-hidden="true" />
           <span>{{ t('nav.adminNav') }}</span>
         </router-link>
+        <router-link v-if="isAdmin" to="/ops" class="nav-overflow-link" :class="{ active: route.path === '/ops' }" @click="closeNavOverflow">
+          <Shield class="nav-icon" aria-hidden="true" />
+          <span>{{ t('nav.opsNav') }}</span>
+        </router-link>
       </nav>
     </Sheet>
 

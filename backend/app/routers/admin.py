@@ -681,6 +681,67 @@ def approve_kyc(
     return _kyc.serialize(rec)
 
 
+@router.get("/kyc/export")
+def export_kyc_records(
+    status: Optional[str] = None,
+    kind: Optional[str] = None,
+    limit: int = Query(5000, ge=1, le=20000),
+    db: Session = Depends(get_db),
+):
+    """导出 KYC/KYB 审核记录 CSV（脱敏字段），供合规归档。"""
+    q = db.query(KycRecord).order_by(desc(KycRecord.submitted_at))
+    if status:
+        q = q.filter(KycRecord.status == status)
+    if kind:
+        q = q.filter(KycRecord.kind == kind)
+    rows = q.limit(min(limit, 20000)).all()
+
+    buf = io.StringIO()
+    writer = csv.writer(buf, quoting=csv.QUOTE_MINIMAL)
+    writer.writerow([
+        "id",
+        "user_id",
+        "kind",
+        "status",
+        "legal_name",
+        "id_type",
+        "id_number_masked",
+        "business_name",
+        "business_id",
+        "country",
+        "contact_email",
+        "submitted_at",
+        "reviewed_at",
+        "reviewer_id",
+        "rejection_reason",
+    ])
+    for r in rows:
+        writer.writerow([
+            r.id,
+            r.user_id,
+            r.kind or "",
+            r.status or "",
+            r.legal_name or "",
+            r.id_type or "",
+            r.id_number_masked or "",
+            r.business_name or "",
+            r.business_id or "",
+            r.country or "",
+            r.contact_email or "",
+            r.submitted_at.isoformat() + "Z" if r.submitted_at else "",
+            r.reviewed_at.isoformat() + "Z" if r.reviewed_at else "",
+            r.reviewer_id if r.reviewer_id is not None else "",
+            r.rejection_reason or "",
+        ])
+    buf.seek(0)
+    filename = f"kyc_export_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.csv"
+    return StreamingResponse(
+        iter([buf.getvalue().encode("utf-8")]),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.post("/kyc/records/{record_id}/reject")
 def reject_kyc(
     record_id: int,

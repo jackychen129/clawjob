@@ -182,6 +182,9 @@
               <Button size="sm" variant="secondary" type="button" :disabled="kycLoading" @click="reloadKyc">
                 {{ t('common.retry') || '刷新' }}
               </Button>
+              <Button size="sm" variant="secondary" type="button" :disabled="kycExporting" @click="exportKycCsv">
+                {{ t('admin.kycExport') || '导出 CSV' }}
+              </Button>
             </div>
             <div class="admin-log-table">
               <div class="admin-log-row admin-log-row--head admin-dispute-row">
@@ -233,6 +236,16 @@
             <p class="hint admin-cb-hint">
               {{ t('admin.circuitRuntimeHint', { n: cbThreshold, s: cbOpenSeconds }) }}
             </p>
+            <div class="admin-cb-config">
+              <label class="hint">{{ t('admin.circuitConfigThreshold') }}</label>
+              <input v-model.number="cbConfigThreshold" class="input admin-cb-config-input" type="number" min="1" max="50" />
+              <label class="hint">{{ t('admin.circuitConfigOpenSeconds') }}</label>
+              <input v-model.number="cbConfigOpenSeconds" class="input admin-cb-config-input" type="number" min="5" max="3600" />
+              <Button size="sm" type="button" :disabled="cbConfigSaving" @click="saveCircuitConfig">
+                {{ cbConfigSaving ? '…' : t('admin.circuitConfigSave') }}
+              </Button>
+              <p v-if="cbConfigError" class="error-msg">{{ cbConfigError }}</p>
+            </div>
             <div class="admin-log-table">
               <div class="admin-log-row admin-log-row--head">
                 <div>Host</div>
@@ -448,8 +461,13 @@ const withdrawalsLoading = ref(false)
 const withdrawals = ref<(api.WithdrawalRequest & { user_id?: number })[]>([])
 const withdrawDecideLoading = ref<number | null>(null)
 const kycLoading = ref(false)
+const kycExporting = ref(false)
 const kycRecords = ref<api.KycRecord[]>([])
 const kycDecideLoading = ref<number | null>(null)
+const cbConfigThreshold = ref(3)
+const cbConfigOpenSeconds = ref(60)
+const cbConfigSaving = ref(false)
+const cbConfigError = ref('')
 const adminTab = ref('disputes')
 const pendingSettlementsLoading = ref(false)
 const pendingSettlements = ref<api.AdminPendingSettlementItem[]>([])
@@ -536,6 +554,39 @@ function rejectKyc(id: number) {
     .finally(() => { kycDecideLoading.value = null })
 }
 
+function exportKycCsv() {
+  kycExporting.value = true
+  api.adminExportKycCsv({ status: 'pending', limit: 5000 })
+    .then((res) => {
+      const url = URL.createObjectURL(res.data as Blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `kyc_export_${Date.now()}.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+    })
+    .finally(() => { kycExporting.value = false })
+}
+
+function saveCircuitConfig() {
+  cbConfigError.value = ''
+  cbConfigSaving.value = true
+  api.patchRuntimeCircuitBreakerConfig({
+    threshold: Math.max(1, Math.floor(cbConfigThreshold.value || 3)),
+    open_seconds: Math.max(5, Math.floor(cbConfigOpenSeconds.value || 60)),
+  })
+    .then((res) => {
+      cbThreshold.value = res.data.threshold
+      cbOpenSeconds.value = res.data.open_seconds
+      reloadCircuitBreakers()
+    })
+    .catch((e: unknown) => {
+      const ax = e as { response?: { data?: { detail?: string } } }
+      cbConfigError.value = ax.response?.data?.detail || String(e)
+    })
+    .finally(() => { cbConfigSaving.value = false })
+}
+
 function reloadLogs(reset = false) {
   if (reset) skip.value = 0
   logsLoading.value = true
@@ -602,6 +653,8 @@ function reloadCircuitBreakers() {
       cbRows.value = res.data.items || []
       cbThreshold.value = Number(res.data.threshold || 0)
       cbOpenSeconds.value = Number(res.data.open_seconds || 0)
+      cbConfigThreshold.value = cbThreshold.value
+      cbConfigOpenSeconds.value = cbOpenSeconds.value
     })
     .catch(() => {
       cbRows.value = []

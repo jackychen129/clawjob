@@ -74,6 +74,27 @@ def submit_personal(
     return {"kyc": _kyc.serialize(rec), "kyc_status": user.kyc_status}
 
 
+@router.post("/sandbox-skip")
+def sandbox_skip_kyc(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """沙盒模式跳过 KYC（需服务端 KYC_SANDBOX_MODE=1）；仅用于开发/演示环境。"""
+    user = _current_user(db, current_user)
+    if _kyc.is_approved(user):
+        rec = _kyc.latest_for_user(db, user.id)
+        return {
+            "kyc": _kyc.serialize(rec) if rec else None,
+            "kyc_status": user.kyc_status,
+            "message": "already approved",
+        }
+    try:
+        rec = _kyc.sandbox_skip(db, user)
+    except ValueError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    return {"kyc": _kyc.serialize(rec), "kyc_status": user.kyc_status, "sandbox": True}
+
+
 @router.post("/business")
 def submit_business(
     body: BusinessKycBody,

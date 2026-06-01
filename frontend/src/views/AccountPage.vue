@@ -113,7 +113,11 @@
               <summary>{{ t('account.kycTitle') }}</summary>
               <p class="hint">{{ t('account.kycHint') }}</p>
               <p class="mono hint">{{ t('account.kycStatus') }}: {{ payout.kyc_status }}</p>
-              <div v-if="payout.kyc_status !== 'approved'" class="payout-form-grid">
+              <div v-if="payout.kyc_status !== 'approved'" class="kyc-kind-tabs" role="tablist">
+                <button type="button" class="kyc-kind-tab" :class="{ active: kycKindTab === 'personal' }" @click="kycKindTab = 'personal'">{{ t('account.kycTabPersonal') }}</button>
+                <button type="button" class="kyc-kind-tab" :class="{ active: kycKindTab === 'business' }" @click="kycKindTab = 'business'">{{ t('account.kycTabBusiness') }}</button>
+              </div>
+              <div v-if="payout.kyc_status !== 'approved' && kycKindTab === 'personal'" class="payout-form-grid">
                 <input v-model="kycForm.legal_name" class="input" :placeholder="t('account.kycLegalName')" />
                 <select v-model="kycForm.id_type" class="input">
                   <option value="id_card">{{ t('account.kycIdCard') }}</option>
@@ -121,6 +125,13 @@
                 </select>
                 <input v-model="kycForm.id_number" class="input" :placeholder="t('account.kycIdNumber')" />
                 <Button type="button" size="sm" :disabled="kycSubmitting" @click="submitKyc">{{ t('account.kycSubmit') }}</Button>
+                <Button type="button" size="sm" variant="secondary" :disabled="kycSubmitting" @click="sandboxSkipKycNow">{{ t('account.kycSandboxSkip') }}</Button>
+              </div>
+              <div v-if="payout.kyc_status !== 'approved' && kycKindTab === 'business'" class="payout-form-grid">
+                <input v-model="kybForm.business_name" class="input" :placeholder="t('account.kybBusinessName')" />
+                <input v-model="kybForm.business_id" class="input" :placeholder="t('account.kybBusinessId')" />
+                <input v-model="kybForm.legal_name" class="input" :placeholder="t('account.kycLegalName')" />
+                <Button type="button" size="sm" :disabled="kycSubmitting" @click="submitKyb">{{ t('account.kybSubmit') }}</Button>
               </div>
               <p v-if="kycError" class="error-msg">{{ kycError }}</p>
             </details>
@@ -314,12 +325,17 @@
         <p class="hint">{{ t('account.skillTreeHint') || '根据你名下所有 Agent 完成任务所关联的技能经验汇总。' }}</p>
         <Button type="button" size="sm" variant="secondary" :disabled="skillTreeLoading" @click="loadSkillTree">{{ t('common.retry') || '刷新' }}</Button>
         <div v-if="skillTreeLoading && !skillNodes.length" class="account-skel">{{ t('common.loading') || '加载中…' }}</div>
-        <ul v-else-if="skillNodes.length" class="skill-tree-list">
-          <li v-for="n in skillNodes" :key="n.name" class="skill-tree-row">
-            <span class="skill-tree-name">{{ n.name }}</span>
-            <span class="skill-tree-meta">{{ t('account.skillLevel') || '等级' }} {{ n.level }} · XP {{ n.xp }}</span>
-          </li>
-        </ul>
+        <div v-else-if="skillNodes.length" class="skill-tree-viz">
+          <div v-for="n in skillNodes" :key="n.name" class="skill-tree-viz-row">
+            <div class="skill-tree-viz-head">
+              <span class="skill-tree-name">{{ n.name }}</span>
+              <span class="skill-tree-meta">L{{ n.level }} · {{ n.xp }} XP</span>
+            </div>
+            <div class="skill-tree-viz-bar" role="presentation">
+              <div class="skill-tree-viz-fill" :style="{ width: skillXpPercent(n) + '%' }" />
+            </div>
+          </div>
+        </div>
         <p v-else class="hint">{{ t('account.skillTreeEmpty') || '暂无技能数据；多接取并完成带技能标签的任务后会在此累计。' }}</p>
         <p v-if="skillTreeTotal > 0" class="hint">{{ t('account.skillTreeTotal', { n: skillTreeTotal }) || `共 ${skillTreeTotal} 项技能` }}</p>
         <p v-if="skillTreeDecayMaxRatio > 0" class="hint">
@@ -472,7 +488,9 @@ const withdrawals = ref<api.WithdrawalRequest[]>([])
 const receivingForm = ref({ account_type: 'alipay', account_name: '', account_number: '' })
 const receivingSaving = ref(false)
 const receivingError = ref('')
+const kycKindTab = ref<'personal' | 'business'>('personal')
 const kycForm = ref({ legal_name: '', id_type: 'id_card', id_number: '' })
+const kybForm = ref({ business_name: '', business_id: '', legal_name: '' })
 const kycSubmitting = ref(false)
 const kycError = ref('')
 const withdrawAmount = ref<number>(50)
@@ -700,6 +718,37 @@ function submitKyc() {
       kycError.value = e?.response?.data?.detail || t('common.loadFailed')
     })
     .finally(() => { kycSubmitting.value = false })
+}
+
+function submitKyb() {
+  kycError.value = ''
+  if (!kybForm.value.business_name.trim() || !kybForm.value.business_id.trim() || !kybForm.value.legal_name.trim()) {
+    kycError.value = t('account.kybValidation')
+    return
+  }
+  kycSubmitting.value = true
+  api.submitBusinessKyc({ ...kybForm.value, country: 'CN' })
+    .then(() => loadPayoutHub())
+    .catch((e: any) => {
+      kycError.value = e?.response?.data?.detail || t('common.loadFailed')
+    })
+    .finally(() => { kycSubmitting.value = false })
+}
+
+function sandboxSkipKycNow() {
+  kycError.value = ''
+  kycSubmitting.value = true
+  api.sandboxSkipKyc()
+    .then(() => loadPayoutHub())
+    .catch((e: any) => {
+      kycError.value = e?.response?.data?.detail || t('account.kycSandboxDisabled')
+    })
+    .finally(() => { kycSubmitting.value = false })
+}
+
+function skillXpPercent(n: SkillNode): number {
+  const max = Math.max(...skillNodes.value.map((x) => Number(x.xp) || 0), 1)
+  return Math.min(100, Math.round(((Number(n.xp) || 0) / max) * 100))
 }
 
 function submitWithdraw() {
@@ -1138,6 +1187,13 @@ onMounted(async () => {
 .api-key-item { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); border: var(--border-hairline); border-radius: var(--radius-md); padding: var(--space-2) var(--space-3); }
 .skill-tree-list { list-style: none; padding: 0; margin: var(--space-4) 0 0; display: flex; flex-direction: column; gap: var(--space-2); }
 .skill-tree-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-2); border: var(--border-hairline); border-radius: var(--radius-md); padding: var(--space-2) var(--space-3); font-size: var(--font-caption); }
+.skill-tree-viz { margin-top: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); }
+.skill-tree-viz-head { display: flex; justify-content: space-between; gap: var(--space-2); font-size: var(--font-caption); }
+.skill-tree-viz-bar { height: 6px; border-radius: 999px; background: var(--surface-elevated); overflow: hidden; margin-top: var(--space-1); }
+.skill-tree-viz-fill { height: 100%; border-radius: inherit; background: linear-gradient(90deg, rgba(34, 197, 94, 0.55), rgba(34, 197, 94, 0.95)); }
+.kyc-kind-tabs { display: flex; gap: var(--space-2); margin: var(--space-3) 0; }
+.kyc-kind-tab { padding: var(--space-1) var(--space-3); border-radius: var(--radius-md); border: var(--border-hairline); background: transparent; color: var(--text-secondary); cursor: pointer; font-size: var(--font-caption); }
+.kyc-kind-tab.active { border-color: var(--accent); color: var(--text-primary); }
 .skill-tree-name { font-weight: 600; color: var(--text-primary); }
 .skill-tree-meta { color: var(--text-secondary); }
 .account-skel { margin-top: var(--space-3); color: var(--text-secondary); font-size: var(--font-caption); }

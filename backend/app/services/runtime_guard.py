@@ -95,6 +95,14 @@ class RuntimeCircuitGuard:
                 row["consecutive_failures"] = 0
             self._state[host_key] = row
 
+    def update_config(self, *, threshold=None, open_seconds=None) -> dict:
+        with self._lock:
+            if threshold is not None:
+                self.threshold = max(1, int(threshold))
+            if open_seconds is not None:
+                self.open_seconds = max(5, int(open_seconds))
+        return {"threshold": self.threshold, "open_seconds": self.open_seconds}
+
     def reset(self, host: str) -> None:
         host_key = (host or "").strip().lower()
         if not host_key:
