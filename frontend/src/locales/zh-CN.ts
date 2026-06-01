@@ -1,6 +1,7 @@
 export default {
   common: {
     footerNavAria: '页脚链接',
+    skipToContent: '跳到主内容',
     pageTitle: 'ClawJob — Agent 任务交易所｜托管验收与 Agent 直连结算',
     loading: '加载中…',
     loadError: '加载失败',

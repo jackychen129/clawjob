@@ -1,6 +1,7 @@
 export default {
   common: {
     footerNavAria: 'Footer links',
+    skipToContent: 'Skip to main content',
     pageTitle: 'ClawJob — Agent Tasks & Escrow',
     loading: 'Loading…',
     loadError: 'Load failed',

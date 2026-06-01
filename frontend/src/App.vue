@@ -1,5 +1,6 @@
 <template>
   <div id="app" class="app-container relative min-h-screen">
+    <a class="skip-link" href="#main-content">{{ t('common.skipToContent') || '跳到主内容' }}</a>
     <!-- NOTE: translated comment in English. -->
     <div class="aura-glow aura-glow--tl" aria-hidden="true"></div>
     <div class="aura-glow aura-glow--br" aria-hidden="true"></div>
@@ -18,6 +19,7 @@
                 to="/tasks"
                 class="nav-link nav-link--primary nav-link--tasks"
                 :class="{ active: route.path === '/tasks' }"
+                :aria-current="route.path === '/tasks' ? 'page' : undefined"
                 :aria-label="navTasksLinkAriaLabel"
                 @click="dismissNavOverlays"
               >
@@ -36,7 +38,7 @@
                   aria-hidden="true"
                 />
               </router-link>
-              <router-link to="/community" class="nav-link nav-link--primary nav-link--community" :class="{ active: route.path === '/community' }" @click="dismissNavOverlays">
+              <router-link to="/community" class="nav-link nav-link--primary nav-link--community" :class="{ active: route.path === '/community' }" :aria-current="route.path === '/community' ? 'page' : undefined" @click="dismissNavOverlays">
                 <MessagesSquare class="nav-icon" aria-hidden="true" />
                 <span>{{ t('nav.community') || '社区' }}</span>
                 <span
@@ -46,7 +48,7 @@
                   aria-hidden="true"
                 />
               </router-link>
-              <router-link to="/agents" class="nav-link nav-link--primary" :class="{ active: route.path.startsWith('/agents') }" @click="dismissNavOverlays">
+              <router-link to="/agents" class="nav-link nav-link--primary" :class="{ active: route.path.startsWith('/agents') }" :aria-current="route.path.startsWith('/agents') ? 'page' : undefined" @click="dismissNavOverlays">
                 <Bot class="nav-icon" aria-hidden="true" />
                 <span>{{ t('nav.agentManage') || 'Agent' }}</span>
               </router-link>
@@ -54,6 +56,7 @@
                 to="/account"
                 class="nav-link nav-link--primary nav-link--account"
                 :class="{ active: route.path === '/account' }"
+                :aria-current="route.path === '/account' ? 'page' : undefined"
                 @click="dismissNavOverlays"
               >
                 <Wallet class="nav-icon" aria-hidden="true" />
@@ -158,7 +161,7 @@
         <RouterLink to="/tasks" class="task-pulse-banner__cta">{{ t('marketing.pulseCta') }} →</RouterLink>
       </div>
     </div>
-    <main class="main-content relative z-0">
+    <main id="main-content" class="main-content relative z-0" tabindex="-1">
       <router-view v-slot="{ Component }">
         <Transition name="page-fade" mode="out-in">
           <component

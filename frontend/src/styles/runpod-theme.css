@@ -1380,3 +1380,83 @@ a.link:hover,
   background: rgba(var(--primary-rgb), 0.12);
   color: var(--primary-color);
 }
+
+/* ──────────────────────────────────────────────────────────────
+   Accessibility: skip-link + universal keyboard focus ring
+   These improve every mounted view at once without changing layout.
+   ────────────────────────────────────────────────────────────── */
+
+/* Skip-to-content: visually hidden until focused via keyboard */
+.skip-link {
+  position: fixed;
+  top: 0.5rem;
+  left: 0.5rem;
+  z-index: 200; /* above sticky header (130) */
+  transform: translateY(-160%);
+  padding: 0.6rem 1rem;
+  border-radius: var(--radius-sm);
+  background: var(--primary-color);
+  color: #04130a;
+  font-size: 0.875rem;
+  font-weight: 700;
+  text-decoration: none;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  transition: transform var(--duration-m) var(--ease-apple);
+}
+.skip-link:focus,
+.skip-link:focus-visible {
+  transform: translateY(0);
+  outline: none;
+}
+
+/* Universal focus ring (outline-based so it never fights component
+   box-shadow rings). Elements that already define a custom focus
+   style — .btn-*, ui-button, .input — have higher specificity and
+   keep their own ring; everything else now gets a visible one. */
+a:focus-visible,
+button:focus-visible,
+[role="button"]:focus-visible,
+[role="tab"]:focus-visible,
+[role="link"]:focus-visible,
+[role="menuitem"]:focus-visible,
+summary:focus-visible,
+.nav-link:focus-visible,
+.nav-overflow-link:focus-visible,
+.filter-chip:focus-visible,
+.step-tab:focus-visible,
+.task-tab:focus-visible,
+.app-footer-links a:focus-visible,
+[tabindex]:not([tabindex="-1"]):focus-visible {
+  outline: 2px solid rgba(var(--primary-rgb), 0.75);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Form controls: clearer keyboard ring without layout shift */
+select:focus-visible,
+input[type="checkbox"]:focus-visible,
+input[type="radio"]:focus-visible {
+  outline: 2px solid rgba(var(--primary-rgb), 0.75);
+  outline-offset: 2px;
+}
+
+/* Touch ergonomics: ensure ≥44px tap targets on touch devices */
+@media (pointer: coarse) {
+  .header-nav .nav-link {
+    min-height: 44px;
+    align-items: center;
+  }
+  .nav-overflow-btn,
+  .nav-overflow-close {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .locale-select {
+    min-height: 40px;
+  }
+  .app-footer-links a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 40px;
+  }
+}
