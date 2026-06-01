@@ -155,6 +155,7 @@ onUnmounted(() => {
 .ui-dialog-enter-from,
 .ui-dialog-leave-to {
   opacity: 0;
+  pointer-events: none;
 }
 .ui-dialog-enter-from .ui-dialog-panel,
 .ui-dialog-leave-to .ui-dialog-panel {

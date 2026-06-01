@@ -161,6 +161,7 @@ onUnmounted(() => {
 .ui-sheet-right-enter-from,
 .ui-sheet-right-leave-to {
   opacity: 0;
+  pointer-events: none;
 }
 .ui-sheet-left-enter-from .ui-sheet-panel,
 .ui-sheet-left-leave-to .ui-sheet-panel {

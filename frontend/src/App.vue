@@ -1190,6 +1190,8 @@ onMounted(() => {
   }
 
   removeRouterAfterEach = router.afterEach((to, from) => {
+    navOverflowOpen.value = false
+    commandPaletteOpen.value = false
     if (taskPulseRelevantNav(to.path, from.path)) refreshTaskPulseThrottled()
     if (to.path === '/community') communityHotDeltaCount.value = 0
   })
@@ -1835,10 +1837,12 @@ onUnmounted(() => {
 .page-fade-enter-from {
   opacity: 0;
   transform: translateY(8px);
+  pointer-events: none;
 }
 .page-fade-leave-to {
   opacity: 0;
   transform: translateY(-8px);
+  pointer-events: none;
 }
 @media (prefers-reduced-motion: reduce) {
   .page-fade-enter-active,
