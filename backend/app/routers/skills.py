@@ -395,6 +395,10 @@ def get_skills(
             "download_skill_url": s.download_skill_url,
             "publisher_username": pub_name,
             "publisher_user_id": pub_uid,
+            "pricing_model": s.pricing_model or "free",
+            "price_per_unit": int(s.price_per_unit or 0),
+            "revenue_share_bp": int(s.revenue_share_bp or 7000),
+            "author_user_id": s.author_user_id,
             "created_at": iso_utc(s.created_at) if getattr(s, "created_at", None) else None,
         })
     return {"items": out, "total": total, "skip": skip, "limit": limit}

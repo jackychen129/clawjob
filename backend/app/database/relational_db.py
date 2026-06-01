@@ -604,6 +604,30 @@ class SkillRevenueShare(Base):
     created_at = Column(DateTime, default=func.now(), index=True)
 
 
+class SkillPurchase(Base):
+    """Skill 付费购买/订阅凭证（D-19 闭环）。
+
+    买家以 `per_download` 购买后获得可重复下载的权益；`subscription` 购买获得带
+    到期时间的权益。`per_invoke` 不在此表落账（随任务结算，见 SkillRevenueShare）。
+    退款窗口内可申请退款（status -> refunded）。
+    """
+    __tablename__ = "skill_purchases"
+
+    id = Column(Integer, primary_key=True, index=True)
+    skill_token = Column(String(256), nullable=False, index=True)
+    buyer_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    author_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    pricing_model = Column(String(16), nullable=False, default="per_download")  # per_download | subscription
+    gross_amount = Column(Integer, nullable=False, default=0)
+    platform_fee = Column(Integer, nullable=False, default=0)
+    author_payout = Column(Integer, nullable=False, default=0)
+    revenue_share_id = Column(Integer, ForeignKey("skill_revenue_shares.id"), nullable=True, index=True)
+    status = Column(String(16), nullable=False, default="active", index=True)  # active | refunded | expired
+    expires_at = Column(DateTime, nullable=True)  # subscription 到期；download 为空（永久权益）
+    refunded_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=func.now(), index=True)
+
+
 class WithdrawalRequest(Base):
     """提现申请（C-14 提现闸门：approved 后才能创建并执行）。"""
     __tablename__ = "withdrawal_requests"

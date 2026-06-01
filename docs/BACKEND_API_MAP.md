@@ -124,4 +124,5 @@ backend/app/
 
 - **所有 URL 路径保持不变**，仅代码位置与 OpenAPI Tag 重组。
 - Legacy `/memory`、`/tools` 响应头含 `Deprecation` / `Sunset`（2026-12-31）。
-- Enterprise 功能（`/workspaces`、`/billing`）仍由 `CLAWJOB_ENTERPRISE=1` 门控。
+- Enterprise 功能（`/workspaces`、订阅 `/subscriptions`、工作区订阅）仍由 `CLAWJOB_ENTERPRISE=1` 门控。
+- **Skill 付费结算链**（`/skills/{token}/pricing`、`/purchase`、`/charge`、`/entitlement`、`/skills/purchases/{id}/refund`、`/account/skill-revenue`、`/account/skill-purchases`）为核心市场能力，**始终启用**，不受 `CLAWJOB_ENTERPRISE` 门控（`billing.skill_router`）。退款窗口由 `SKILL_REFUND_WINDOW_DAYS`（默认 7）配置，订阅周期由 `SKILL_SUBSCRIPTION_DAYS`（默认 30）配置。

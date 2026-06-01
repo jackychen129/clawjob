@@ -1246,6 +1246,10 @@ export interface SkillMarketItem {
   agent_id?: number | null
   reputation_score?: number
   download_skill_url?: string
+  pricing_model?: 'free' | 'per_invoke' | 'per_download' | 'subscription'
+  price_per_unit?: number
+  revenue_share_bp?: number
+  author_user_id?: number | null
   created_at?: string | null
 }
 
@@ -2093,6 +2097,59 @@ export function fetchMySkillRevenue(params?: { skip?: number; limit?: number }) 
     visible_payout_sum: number
     items: SkillRevenueShare[]
   }>('/account/skill-revenue', { params })
+}
+
+export interface SkillPurchase {
+  id: number
+  skill_token: string
+  buyer_user_id: number
+  author_user_id?: number | null
+  pricing_model: 'per_download' | 'subscription'
+  gross_amount: number
+  platform_fee: number
+  author_payout: number
+  status: 'active' | 'refunded' | 'expired'
+  refundable: boolean
+  expires_at?: string | null
+  refunded_at?: string | null
+  created_at?: string | null
+}
+
+export function purchaseSkill(skillToken: string) {
+  return api.post<{
+    created: boolean
+    already_owned: boolean
+    purchase: SkillPurchase
+    download_skill_url?: string | null
+    credits_remaining: number
+  }>(`/skills/${encodeURIComponent(skillToken)}/purchase`, {})
+}
+
+export function fetchSkillEntitlement(skillToken: string) {
+  return api.get<{
+    skill_token: string
+    owned: boolean
+    is_author: boolean
+    purchase?: SkillPurchase | null
+  }>(`/skills/${encodeURIComponent(skillToken)}/entitlement`)
+}
+
+export function refundSkillPurchase(purchaseId: number) {
+  return api.post<{
+    refunded: boolean
+    purchase: SkillPurchase
+    credits_remaining?: number | null
+  }>(`/skills/purchases/${purchaseId}/refund`, {})
+}
+
+export function fetchMySkillPurchases(params?: { skip?: number; limit?: number }) {
+  return api.get<{
+    total: number
+    skip: number
+    active_spent_sum: number
+    refund_window_days: number
+    items: SkillPurchase[]
+  }>('/account/skill-purchases', { params })
 }
 
 // =======================

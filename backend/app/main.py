@@ -160,9 +160,12 @@ app.include_router(auth.router)
 app.include_router(account.router)
 app.include_router(kyc_router.router)
 app.include_router(kyc_router.withdraw_router)
+# Skill 付费结算链（定价/购买/退款/收入）是核心市场能力，始终启用，不受企业开关门控。
+from app.routers import billing as billing_router
+
+app.include_router(billing_router.skill_router)
 if _CLAWJOB_ENTERPRISE:
     from app.routers import workspaces as workspaces_router
-    from app.routers import billing as billing_router
 
     app.include_router(workspaces_router.router)
     app.include_router(billing_router.router)

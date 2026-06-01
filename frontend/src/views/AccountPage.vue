@@ -347,6 +347,74 @@
         </p>
       </section>
 
+      <section class="card card-content">
+        <div class="skill-rev-head">
+          <h3>{{ t('account.skillRevenueTitle') || 'Skill 付费收入（作者）' }}</h3>
+          <Button type="button" size="sm" variant="ghost" :disabled="skillRevenueLoading" @click="loadSkillEarnings">{{ t('common.retry') || '刷新' }}</Button>
+        </div>
+        <p class="hint">{{ t('account.skillRevenueHint') || '你发布的付费 Skill 被购买/调用时的分成明细；作者收入计入可提现佣金余额。' }}</p>
+        <div class="skill-rev-summary">
+          <div class="skill-rev-metric">
+            <span class="skill-rev-metric-val">{{ skillRevenuePayoutSum.toLocaleString() }}</span>
+            <span class="skill-rev-metric-label">{{ t('account.skillRevenuePayout') || '累计作者分成（点）' }}</span>
+          </div>
+          <div class="skill-rev-metric">
+            <span class="skill-rev-metric-val">{{ skillRevenue.length }}</span>
+            <span class="skill-rev-metric-label">{{ t('account.skillRevenueCount') || '结算笔数' }}</span>
+          </div>
+        </div>
+        <div v-if="skillRevenueLoading && !skillRevenue.length" class="account-skel">{{ t('common.loading') || '加载中…' }}</div>
+        <div v-else-if="skillRevenue.length" class="skill-rev-list">
+          <div v-for="r in skillRevenue" :key="r.id" class="skill-rev-row">
+            <div class="skill-rev-row-main">
+              <span class="skill-rev-token mono">{{ r.skill_token }}</span>
+              <Badge :variant="r.event_kind === 'refund' ? 'destructive' : 'verified'" class="skill-rev-kind">{{ r.event_kind }}</Badge>
+            </div>
+            <div class="skill-rev-row-amt">
+              <span class="skill-rev-payout" :class="{ neg: (r.author_payout || 0) < 0 }">{{ (r.author_payout || 0) >= 0 ? '+' : '' }}{{ r.author_payout }} {{ t('marketplace.creditsUnit') || '点' }}</span>
+              <span class="hint mono">{{ t('account.skillRevenueGross') || '总额' }} {{ r.gross_amount }} · {{ t('account.skillRevenueFee') || '平台' }} {{ r.platform_fee }}</span>
+            </div>
+          </div>
+        </div>
+        <p v-else class="hint">{{ t('account.skillRevenueEmpty') || '暂无 Skill 收入。在 Marketplace 给已发布 Skill 设置定价，被购买/调用后会在此显示。' }}</p>
+        <div class="skill-rev-cta">
+          <Button :as="RouterLink" to="/marketplace#section-skill-market" size="sm" variant="secondary">{{ t('account.skillRevenueManageCta') || '去 Marketplace 定价' }}</Button>
+        </div>
+      </section>
+
+      <section class="card card-content">
+        <div class="skill-rev-head">
+          <h3>{{ t('account.skillPurchasesTitle') || '我购买的 Skill' }}</h3>
+          <Button type="button" size="sm" variant="ghost" :disabled="skillPurchasesLoading" @click="loadSkillPurchases">{{ t('common.retry') || '刷新' }}</Button>
+        </div>
+        <p class="hint">{{ t('account.skillPurchasesHint', { d: skillRefundWindowDays }) || `付费购买/订阅的 Skill；购买后 ${skillRefundWindowDays} 天内可申请退款。` }}</p>
+        <div v-if="skillPurchasesLoading && !skillPurchases.length" class="account-skel">{{ t('common.loading') || '加载中…' }}</div>
+        <div v-else-if="skillPurchases.length" class="skill-rev-list">
+          <div v-for="p in skillPurchases" :key="p.id" class="skill-rev-row">
+            <div class="skill-rev-row-main">
+              <span class="skill-rev-token mono">{{ p.skill_token }}</span>
+              <Badge :variant="p.status === 'active' ? 'status-open' : (p.status === 'refunded' ? 'destructive' : 'status-completed')" class="skill-rev-kind">
+                {{ p.status === 'active' ? (t('account.purchaseActive') || '有效') : (p.status === 'refunded' ? (t('account.purchaseRefunded') || '已退款') : (t('account.purchaseExpired') || '已过期')) }}
+              </Badge>
+            </div>
+            <div class="skill-rev-row-amt">
+              <span class="hint mono">-{{ p.gross_amount }} {{ t('marketplace.creditsUnit') || '点' }} · {{ p.pricing_model }}</span>
+              <Button
+                v-if="p.refundable"
+                type="button"
+                size="sm"
+                variant="outline"
+                :disabled="refundingId === p.id"
+                @click="refundPurchase(p)"
+              >
+                {{ refundingId === p.id ? (t('common.loading') || '处理中…') : (t('account.refund') || '申请退款') }}
+              </Button>
+            </div>
+          </div>
+        </div>
+        <p v-else class="hint">{{ t('account.skillPurchasesEmpty') || '还没有购买过付费 Skill。' }}</p>
+      </section>
+
       <section class="card card-content account-dev">
         <h3>{{ t('account.devToolsTitle') || '开发者工具（调试）' }}</h3>
         <p class="hint">{{ t('account.devToolsHint') || '调用平台已暴露的工具列表与记忆检索 API，便于本地 Agent 联调。' }}</p>
@@ -476,9 +544,11 @@ import { Tabs, TabList, Tab, TabPanel } from '../components/ui/tabs'
 import * as api from '../api'
 import type { SkillNode } from '../api'
 import { useAuthStore } from '../stores/auth'
+import { useToast } from '../composables/useToast'
 
 const { t } = useI18n()
 const auth = useAuthStore()
+const toast = useToast()
 const accountTab = ref('wallet')
 const enterpriseEnabled = ref(false)
 const credits = ref(0)
@@ -522,6 +592,61 @@ const skillTreeLastActiveAt = ref('')
 const skillTreeDecayIdleDays = ref(0)
 const skillTreeDecayWeeklyRatio = ref(0)
 const skillTreeDecayPolicyMaxRatio = ref(0)
+
+// Skill 付费分成（作者视角）+ 购买记录（买家视角）
+const skillRevenue = ref<api.SkillRevenueShare[]>([])
+const skillRevenuePayoutSum = ref(0)
+const skillRevenueLoading = ref(false)
+const skillPurchases = ref<api.SkillPurchase[]>([])
+const skillPurchasesSpent = ref(0)
+const skillRefundWindowDays = ref(7)
+const skillPurchasesLoading = ref(false)
+const refundingId = ref<number | null>(null)
+
+function loadSkillEarnings() {
+  if (!auth.token) return
+  skillRevenueLoading.value = true
+  api.fetchMySkillRevenue({ limit: 50 })
+    .then((res) => {
+      skillRevenue.value = res.data?.items ?? []
+      skillRevenuePayoutSum.value = res.data?.visible_payout_sum ?? 0
+    })
+    .catch(() => { skillRevenue.value = []; skillRevenuePayoutSum.value = 0 })
+    .finally(() => { skillRevenueLoading.value = false })
+}
+
+function loadSkillPurchases() {
+  if (!auth.token) return
+  skillPurchasesLoading.value = true
+  api.fetchMySkillPurchases({ limit: 50 })
+    .then((res) => {
+      skillPurchases.value = res.data?.items ?? []
+      skillPurchasesSpent.value = res.data?.active_spent_sum ?? 0
+      skillRefundWindowDays.value = res.data?.refund_window_days ?? 7
+    })
+    .catch(() => { skillPurchases.value = [] })
+    .finally(() => { skillPurchasesLoading.value = false })
+}
+
+async function refundPurchase(p: api.SkillPurchase) {
+  if (refundingId.value != null) return
+  const msg = (t('account.skillRefundConfirm') as string) || '确定申请退款？将冲正本次扣点。'
+  if (!window.confirm(msg)) return
+  refundingId.value = p.id
+  try {
+    const res = await api.refundSkillPurchase(p.id)
+    p.status = res.data.purchase.status
+    p.refundable = false
+    if (res.data.credits_remaining != null) credits.value = res.data.credits_remaining
+    toast.success(t('account.skillRefundDone') || '退款成功')
+    loadSkillPurchases()
+  } catch (e: any) {
+    const detail = e?.response?.data?.detail
+    toast.error((typeof detail === 'string' && detail) || (t('common.operationFailed') as string) || '退款失败')
+  } finally {
+    refundingId.value = null
+  }
+}
 
 const toolsLoading = ref(false)
 const toolsJson = ref('')
@@ -1060,6 +1185,8 @@ onMounted(async () => {
   loadPayoutHub()
   loadApiKeys()
   loadSkillTree()
+  loadSkillEarnings()
+  loadSkillPurchases()
   loadMyAgentsForTools()
   loadUseToolHistory()
   loadTools()
@@ -1070,6 +1197,21 @@ onMounted(async () => {
 
 <style scoped>
 .account-page { padding: 0; max-width: 720px; margin: 0 auto; min-width: 0; }
+.skill-rev-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.skill-rev-head h3 { margin: 0; }
+.skill-rev-summary { display: flex; gap: var(--space-5); margin: var(--space-3) 0; flex-wrap: wrap; }
+.skill-rev-metric { display: flex; flex-direction: column; }
+.skill-rev-metric-val { font-size: 1.4rem; font-weight: 700; color: var(--primary-color); line-height: 1.1; }
+.skill-rev-metric-label { font-size: var(--font-caption); color: var(--text-secondary); }
+.skill-rev-list { display: grid; gap: var(--space-2); margin-top: var(--space-3); }
+.skill-rev-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-2) var(--space-3); border: var(--border-hairline); border-radius: var(--radius-md); background: rgba(0,0,0,0.14); }
+.skill-rev-row-main { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.skill-rev-token { font-size: var(--font-caption); color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 16rem; }
+.skill-rev-kind { flex: none; text-transform: capitalize; }
+.skill-rev-row-amt { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex: none; }
+.skill-rev-payout { font-weight: 700; color: #22c55e; }
+.skill-rev-payout.neg { color: var(--danger-color); }
+.skill-rev-cta { margin-top: var(--space-3); }
 .page-desc { margin: 0 0 var(--space-6); font-size: var(--font-body); color: var(--text-secondary); line-height: var(--line-normal); }
 .card { margin-bottom: var(--space-5); }
 .account-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-3); }

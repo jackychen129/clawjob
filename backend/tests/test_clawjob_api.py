@@ -4403,6 +4403,137 @@ def test_skill_charge_idempotent_per_task():
     assert r2.json()["share"]["id"] == r3.json()["share"]["id"]
 
 
+def _publish_paid_skill_with_model(author_token, token_str, pricing_model, price):
+    from app.database.relational_db import SessionLocal, PublishedSkill as PS
+    db = SessionLocal()
+    try:
+        row = db.query(PS).filter(PS.skill_token == token_str).first()
+        if row is None:
+            row = PS(skill_token=token_str, name=f"Paid {token_str}", description="t", version_tag="v1")
+            db.add(row)
+            db.commit()
+    finally:
+        db.close()
+    h = {"Authorization": f"Bearer {author_token}"}
+    r = client.post(
+        f"/skills/{token_str}/pricing",
+        json={"pricing_model": pricing_model, "price_per_unit": price, "revenue_share_bp": 7000},
+        headers=h,
+    )
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_skill_purchase_download_idempotent_and_grants_entitlement():
+    """D-19：per_download 购买扣点、授予权益，重复购买幂等不重复扣点。"""
+    author = f"pauth_{_unique()}"
+    buyer = f"pbuy_{_unique()}"
+    tk_a = _register_user(author, f"{author}@example.com", "pw")["access_token"]
+    tk_b = _register_user(buyer, f"{buyer}@example.com", "pw")["access_token"]
+    token = f"dl-skill-{_unique()}"
+    _publish_paid_skill_with_model(tk_a, token, "per_download", 30)
+    h_b = {"Authorization": f"Bearer {tk_b}"}
+    client.post("/account/recharge", json={"amount": 100}, headers=h_b)
+
+    # 购买前无权益
+    ent0 = client.get(f"/skills/{token}/entitlement", headers=h_b)
+    assert ent0.status_code == 200 and ent0.json()["owned"] is False
+
+    r1 = client.post(f"/skills/{token}/purchase", headers=h_b)
+    assert r1.status_code == 200, r1.text
+    assert r1.json()["created"] is True
+    assert r1.json()["credits_remaining"] == 70
+
+    # 再次购买：幂等，不再扣点
+    r2 = client.post(f"/skills/{token}/purchase", headers=h_b)
+    assert r2.status_code == 200
+    assert r2.json()["created"] is False
+    assert r2.json()["already_owned"] is True
+    assert r2.json()["credits_remaining"] == 70
+
+    # 现已拥有权益
+    ent1 = client.get(f"/skills/{token}/entitlement", headers=h_b)
+    assert ent1.json()["owned"] is True
+
+    # 作者收入可见（70% of 30 = 21）
+    rev = client.get("/account/skill-revenue", headers={"Authorization": f"Bearer {tk_a}"})
+    found = [it for it in rev.json()["items"] if it["skill_token"] == token]
+    assert found and found[0]["author_payout"] == 21 and found[0]["platform_fee"] == 9
+
+
+def test_skill_purchase_refund_reverses_credits():
+    """D-19：退款窗口内退款冲正买家扣点与作者/平台分成。"""
+    author = f"rauth_{_unique()}"
+    buyer = f"rbuy_{_unique()}"
+    tk_a = _register_user(author, f"{author}@example.com", "pw")["access_token"]
+    tk_b = _register_user(buyer, f"{buyer}@example.com", "pw")["access_token"]
+    token = f"rf-skill-{_unique()}"
+    _publish_paid_skill_with_model(tk_a, token, "per_download", 40)
+    h_b = {"Authorization": f"Bearer {tk_b}"}
+    client.post("/account/recharge", json={"amount": 100}, headers=h_b)
+    pr = client.post(f"/skills/{token}/purchase", headers=h_b)
+    assert pr.json()["credits_remaining"] == 60
+    pid = pr.json()["purchase"]["id"]
+    assert pr.json()["purchase"]["refundable"] is True
+
+    refund = client.post(f"/skills/purchases/{pid}/refund", headers=h_b)
+    assert refund.status_code == 200, refund.text
+    assert refund.json()["credits_remaining"] == 100
+    assert refund.json()["purchase"]["status"] == "refunded"
+
+    # 权益失效
+    ent = client.get(f"/skills/{token}/entitlement", headers=h_b)
+    assert ent.json()["owned"] is False
+
+    # 二次退款被拒
+    refund2 = client.post(f"/skills/purchases/{pid}/refund", headers=h_b)
+    assert refund2.status_code == 400
+
+
+def test_skill_purchase_rejects_per_invoke_model():
+    """per_invoke 类型不能走购买路径（应随任务结算）。"""
+    author = f"iauth_{_unique()}"
+    buyer = f"ibuy_{_unique()}"
+    tk_a = _register_user(author, f"{author}@example.com", "pw")["access_token"]
+    tk_b = _register_user(buyer, f"{buyer}@example.com", "pw")["access_token"]
+    token = f"iv-skill-{_unique()}"
+    _publish_paid_skill_with_model(tk_a, token, "per_invoke", 20)
+    h_b = {"Authorization": f"Bearer {tk_b}"}
+    client.post("/account/recharge", json={"amount": 100}, headers=h_b)
+    r = client.post(f"/skills/{token}/purchase", headers=h_b)
+    assert r.status_code == 400
+
+
+def test_skill_purchase_insufficient_credits_rejected():
+    """余额不足时购买被拒，不产生权益。"""
+    author = f"nauth_{_unique()}"
+    buyer = f"nbuy_{_unique()}"
+    tk_a = _register_user(author, f"{author}@example.com", "pw")["access_token"]
+    tk_b = _register_user(buyer, f"{buyer}@example.com", "pw")["access_token"]
+    token = f"nf-skill-{_unique()}"
+    _publish_paid_skill_with_model(tk_a, token, "per_download", 999)
+    h_b = {"Authorization": f"Bearer {tk_b}"}
+    r = client.post(f"/skills/{token}/purchase", headers=h_b)
+    assert r.status_code == 400
+    purchases = client.get("/account/skill-purchases", headers=h_b)
+    assert purchases.status_code == 200
+    assert all(it["skill_token"] != token for it in purchases.json()["items"])
+
+
+def test_skill_pricing_appears_in_marketplace_listing():
+    """市场列表返回定价字段，供前端展示价格 Badge。"""
+    author = f"mauth_{_unique()}"
+    tk_a = _register_user(author, f"{author}@example.com", "pw")["access_token"]
+    token = f"mk-skill-{_unique()}"
+    _publish_paid_skill_with_model(tk_a, token, "per_download", 25)
+    lst = client.get("/skills", params={"limit": 200})
+    assert lst.status_code == 200
+    found = [it for it in lst.json()["items"] if it["skill_token"] == token]
+    assert found
+    assert found[0]["pricing_model"] == "per_download"
+    assert found[0]["price_per_unit"] == 25
+
+
 def test_workspace_rfq_blocked_by_safety_gate():
     """B-9 + C-13：RFQ 提交也走内容安全网关。"""
     os.environ["SAFETY_BLACKLIST"] = "forbidden_keyword_rfq"

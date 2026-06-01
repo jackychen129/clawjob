@@ -19,7 +19,11 @@ from app.services import skill_revenue as _skill_rev
 from app.services import workspaces as _ws
 
 
+# 企业版路由（订阅 / 工作区计费），由 CLAWJOB_ENTERPRISE 门控。
 router = APIRouter(tags=["billing"])
+
+# Skill 付费结算链路由（定价 / 购买 / 退款 / 收入），核心能力，始终启用。
+skill_router = APIRouter(tags=["billing · Skill 付费"])
 
 
 # ---------------- 订阅计划目录（公开） ----------------
@@ -130,7 +134,7 @@ class SkillPricingBody(BaseModel):
     revenue_share_bp: int = 7000
 
 
-@router.post("/skills/{skill_token}/pricing")
+@skill_router.post("/skills/{skill_token}/pricing")
 def set_skill_pricing(
     skill_token: str,
     body: SkillPricingBody,
@@ -170,7 +174,7 @@ def set_skill_pricing(
     }
 
 
-@router.post("/skills/{skill_token}/charge")
+@skill_router.post("/skills/{skill_token}/charge")
 def trigger_skill_charge(
     skill_token: str,
     related_task_id: Optional[int] = None,
@@ -205,7 +209,7 @@ def trigger_skill_charge(
     return {"charged": True, "share": _skill_rev.serialize_share(share)}
 
 
-@router.get("/account/skill-revenue")
+@skill_router.get("/account/skill-revenue")
 def list_my_skill_revenue(
     skip: int = 0,
     limit: int = 50,
@@ -222,4 +226,112 @@ def list_my_skill_revenue(
         "skip": skip,
         "visible_payout_sum": payout_sum,
         "items": [_skill_rev.serialize_share(r) for r in rows],
+    }
+
+
+# ---------------- Skill 购买 / 权益 / 退款 ----------------
+
+
+@skill_router.post("/skills/{skill_token}/purchase")
+def purchase_skill(
+    skill_token: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """买家购买/订阅付费 Skill。幂等：已拥有有效权益则直接返回，不重复扣点。
+
+    成功返回购买凭证与（如有）下载链接。`per_invoke` 类型不走此路径。
+    """
+    skill = (
+        db.query(PublishedSkill)
+        .filter(PublishedSkill.skill_token == skill_token)
+        .first()
+    )
+    if skill is None:
+        raise HTTPException(status_code=404, detail="Skill 未发布")
+    uid = int(current_user["user_id"])
+    buyer = db.query(User).filter(User.id == uid).first()
+    if buyer is None:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    try:
+        purchase, created = _skill_rev.purchase(db, skill=skill, buyer=buyer)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {
+        "created": created,
+        "already_owned": not created,
+        "purchase": _skill_rev.serialize_purchase(purchase),
+        "download_skill_url": skill.download_skill_url,
+        "credits_remaining": int(buyer.credits or 0),
+    }
+
+
+@skill_router.get("/skills/{skill_token}/entitlement")
+def get_skill_entitlement(
+    skill_token: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """查询当前用户对该 Skill 是否拥有有效权益（用于前端按钮态）。"""
+    skill = (
+        db.query(PublishedSkill)
+        .filter(PublishedSkill.skill_token == skill_token)
+        .first()
+    )
+    if skill is None:
+        raise HTTPException(status_code=404, detail="Skill 未发布")
+    uid = int(current_user["user_id"])
+    ent = _skill_rev.active_entitlement(
+        db, skill_token=skill_token, buyer_user_id=uid
+    )
+    is_author = skill.author_user_id == uid
+    return {
+        "skill_token": skill_token,
+        "owned": ent is not None or is_author,
+        "is_author": is_author,
+        "purchase": _skill_rev.serialize_purchase(ent) if ent else None,
+    }
+
+
+@skill_router.post("/skills/purchases/{purchase_id}/refund")
+def refund_skill_purchase(
+    purchase_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """退款：退款窗口内冲正扣点、作者分成与平台抽成。"""
+    uid = int(current_user["user_id"])
+    try:
+        purchase = _skill_rev.refund(db, purchase_id=purchase_id, buyer_user_id=uid)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    buyer = db.query(User).filter(User.id == uid).first()
+    return {
+        "refunded": True,
+        "purchase": _skill_rev.serialize_purchase(purchase),
+        "credits_remaining": int(buyer.credits or 0) if buyer else None,
+    }
+
+
+@skill_router.get("/account/skill-purchases")
+def list_my_skill_purchases(
+    skip: int = 0,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """买家视角：我购买/订阅过的 Skill 列表（含退款状态）。"""
+    uid = int(current_user["user_id"])
+    total, rows = _skill_rev.list_purchases_for_buyer(
+        db, buyer_user_id=uid, skip=skip, limit=limit
+    )
+    spent_sum = sum(
+        int(r.gross_amount or 0) for r in rows if r.status == "active"
+    )
+    return {
+        "total": total,
+        "skip": skip,
+        "active_spent_sum": spent_sum,
+        "refund_window_days": _skill_rev.refund_window_days(),
+        "items": [_skill_rev.serialize_purchase(r) for r in rows],
     }

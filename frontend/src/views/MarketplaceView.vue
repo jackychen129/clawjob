@@ -151,13 +151,18 @@
         <span class="market-stat">{{ (skillsStats.tasks_completed ?? 0).toLocaleString() }}+ {{ t('playbook.tasksCompleted') || '任务完成' }}</span>
       </div>
 
-      <div v-if="skillsLoading" class="market-loading">
-        <div class="spinner"></div>
-        <p>{{ t('common.loading') || '加载中…' }}</p>
+      <div v-if="skillsLoading" class="market-grid">
+        <div v-for="i in 3" :key="i" class="template-card skill-skeleton">
+          <span class="tw-skeleton" style="height:1.2rem;width:55%;border-radius:var(--radius-sm)"></span>
+          <span class="tw-skeleton" style="height:0.8rem;width:90%;border-radius:var(--radius-sm);margin-top:10px"></span>
+          <span class="tw-skeleton" style="height:0.8rem;width:70%;border-radius:var(--radius-sm);margin-top:6px"></span>
+          <span class="tw-skeleton" style="height:2rem;width:8rem;border-radius:var(--radius-md);margin-top:16px"></span>
+        </div>
       </div>
 
       <div v-else-if="skills.length === 0" class="market-empty">
         <p>{{ t('marketplace.skillMarketEmpty') || '暂无已发布的 Skill；你可以使用具备 Skill 的 OpenClaw 直接发布。' }}</p>
+        <Button :as="RouterLink" to="/agents" variant="secondary" size="sm">{{ t('marketplace.publishFirst') || '前往发布模板/Skill' }}</Button>
       </div>
 
       <div v-else class="market-grid">
@@ -166,6 +171,8 @@
             <div class="template-card-head">
               <CardTitle class="text-base">{{ s.name }}</CardTitle>
               <span v-if="s.verified" class="verified-badge" :title="t('marketplace.verifiedByProject') || '平台验证'">✓</span>
+              <Badge v-if="isPaid(s)" variant="settlement" class="price-badge">{{ priceLabel(s) }}</Badge>
+              <Badge v-else variant="status-open" class="price-badge">{{ t('marketplace.priceFree') || '免费' }}</Badge>
             </div>
             <p v-if="s.description" class="template-desc">{{ s.description }}</p>
             <p v-if="s.publisher_username" class="template-publisher">
@@ -179,16 +186,72 @@
               <span v-if="s.reputation_score != null && s.reputation_score > 0" class="template-rep mono" :title="t('marketplace.reputationScore')">
                 ★ {{ s.reputation_score }}
               </span>
+              <span v-if="isPaid(s) && s.revenue_share_bp != null" class="template-share" :title="t('marketplace.authorShareHint') || '作者分成比例'">
+                {{ t('marketplace.authorShare') || '作者分成' }} {{ Math.round((s.revenue_share_bp || 0) / 100) }}%
+              </span>
             </div>
             <div class="template-actions">
+              <!-- 作者本人 -->
+              <Badge v-if="isMine(s)" variant="verified" class="owner-tag">{{ t('marketplace.yourSkill') || '你的 Skill' }}</Badge>
+
+              <!-- per_download / subscription：购买 CTA -->
+              <template v-if="isPurchasable(s) && !isMine(s)">
+                <Button
+                  v-if="isOwned(s)"
+                  as="a"
+                  :href="s.download_skill_url || '#'"
+                  :target="s.download_skill_url ? '_blank' : undefined"
+                  rel="noopener noreferrer"
+                  size="sm"
+                  variant="secondary"
+                >
+                  {{ t('marketplace.ownedDownload') || '已购买 · 下载' }}
+                </Button>
+                <Button
+                  v-else
+                  type="button"
+                  size="sm"
+                  :disabled="purchasingToken === s.skill_token"
+                  :title="!auth.isLoggedIn ? (t('marketplace.loginToBuy') || '登录后购买') : ''"
+                  @click="onPurchase(s)"
+                >
+                  {{ purchasingToken === s.skill_token
+                    ? (t('common.loading') || '处理中…')
+                    : (t('marketplace.buyAndDownload') || '购买并下载') + ' · ' + priceLabel(s) }}
+                </Button>
+              </template>
+
+              <!-- per_invoke：随任务结算 -->
+              <Button
+                v-else-if="isPaid(s) && s.pricing_model === 'per_invoke'"
+                :as="RouterLink"
+                :to="{ path: '/tasks', query: { relatedSkillId: String(s.id) } }"
+                size="sm"
+                variant="secondary"
+                :title="t('marketplace.perInvokeHint') || '引用该 Skill 发布任务，验收后按次结算'"
+              >
+                {{ t('marketplace.useInTask') || '在任务中调用' }}
+              </Button>
+
+              <!-- 免费下载 -->
+              <Button v-else-if="s.download_skill_url" as="a" :href="s.download_skill_url" target="_blank" rel="noopener noreferrer" size="sm" variant="secondary">
+                {{ t('marketplace.downloadSkill') || '下载 Skill' }}
+              </Button>
+
               <Button v-if="s.agent_id" :as="RouterLink" :to="`/agents/${s.agent_id}`" size="sm" variant="ghost">
                 {{ t('marketplace.viewAgentProfile') }}
               </Button>
-              <Button v-if="s.download_skill_url" as="a" :href="s.download_skill_url" target="_blank" rel="noopener noreferrer" size="sm" variant="secondary">
-                {{ t('marketplace.downloadSkill') || '下载 Skill' }}
-              </Button>
               <Button :as="RouterLink" :to="{ path: '/tasks', query: { relatedSkillId: String(s.id) } }" size="sm" variant="ghost">
                 {{ t('marketplace.skillRelatedTasks') }}
+              </Button>
+              <Button
+                v-if="isMine(s)"
+                type="button"
+                size="sm"
+                variant="outline"
+                @click="togglePricing(s)"
+              >
+                {{ pricingEditToken === s.skill_token ? (t('common.cancel') || '取消') : (t('marketplace.setPricing') || '设置定价') }}
               </Button>
               <Button
                 v-if="auth.isLoggedIn && auth.userId != null && s.publisher_user_id === auth.userId"
@@ -200,6 +263,33 @@
               >
                 {{ t('marketplace.unpublishSkill') || '撤下' }}
               </Button>
+            </div>
+
+            <!-- 作者定价编辑器 -->
+            <div v-if="pricingEditToken === s.skill_token" class="pricing-editor">
+              <div class="pricing-field">
+                <label class="form-label">{{ t('marketplace.pricingModel') || '计费方式' }}</label>
+                <select v-model="pricingForm.pricing_model" class="input select-input">
+                  <option value="free">{{ t('marketplace.priceFree') || '免费' }}</option>
+                  <option value="per_download">{{ t('marketplace.modelPerDownload') || '按下载（一次性购买）' }}</option>
+                  <option value="per_invoke">{{ t('marketplace.modelPerInvoke') || '按任务调用结算' }}</option>
+                  <option value="subscription">{{ t('marketplace.modelSubscription') || '订阅（按月）' }}</option>
+                </select>
+              </div>
+              <div v-if="pricingForm.pricing_model !== 'free'" class="pricing-field">
+                <label class="form-label">{{ t('marketplace.pricePerUnit') || '单价（任务点）' }}</label>
+                <input v-model.number="pricingForm.price_per_unit" type="number" min="1" class="input" />
+              </div>
+              <div v-if="pricingForm.pricing_model !== 'free'" class="pricing-field">
+                <label class="form-label">{{ t('marketplace.authorShare') || '作者分成' }}（%）</label>
+                <input v-model.number="pricingSharePct" type="number" min="0" max="100" class="input" />
+                <p class="pricing-hint">{{ t('marketplace.pricingShareHint') || '其余作为平台抽成。默认 70%。' }}</p>
+              </div>
+              <div class="pricing-actions">
+                <Button type="button" size="sm" :disabled="pricingSaving" @click="savePricing(s)">
+                  {{ pricingSaving ? (t('common.loading') || '保存中…') : (t('common.save') || '保存定价') }}
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -312,14 +402,135 @@ import { useI18n } from 'vue-i18n'
 import { RouterLink, useRouter } from 'vue-router'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
+import { Badge } from '../components/ui/badge'
 import PageHeader from '../components/PageHeader.vue'
 import * as api from '../api'
 import type { AgentTemplateItem, SkillMarketItem } from '../api'
 import { useAuthStore } from '../stores/auth'
+import { useToast } from '../composables/useToast'
 
 const { t } = useI18n()
 const auth = useAuthStore()
 const router = useRouter()
+const toast = useToast()
+
+const ownedTokens = ref<Set<string>>(new Set())
+const purchasingToken = ref<string | null>(null)
+
+const pricingEditToken = ref<string | null>(null)
+const pricingSaving = ref(false)
+const pricingForm = ref<{ pricing_model: string; price_per_unit: number; revenue_share_bp: number }>({
+  pricing_model: 'per_download',
+  price_per_unit: 10,
+  revenue_share_bp: 7000,
+})
+const pricingSharePct = ref(70)
+
+function togglePricing(s: SkillMarketItem) {
+  if (pricingEditToken.value === s.skill_token) {
+    pricingEditToken.value = null
+    return
+  }
+  pricingEditToken.value = s.skill_token
+  pricingForm.value = {
+    pricing_model: s.pricing_model && s.pricing_model !== 'free' ? s.pricing_model : 'per_download',
+    price_per_unit: s.price_per_unit && s.price_per_unit > 0 ? s.price_per_unit : 10,
+    revenue_share_bp: s.revenue_share_bp ?? 7000,
+  }
+  if ((s.pricing_model || 'free') === 'free') pricingForm.value.pricing_model = 'free'
+  pricingSharePct.value = Math.round((s.revenue_share_bp ?? 7000) / 100)
+}
+
+async function savePricing(s: SkillMarketItem) {
+  pricingSaving.value = true
+  try {
+    const model = pricingForm.value.pricing_model
+    const bp = Math.max(0, Math.min(100, Number(pricingSharePct.value) || 0)) * 100
+    const price = model === 'free' ? 0 : Math.max(1, Number(pricingForm.value.price_per_unit) || 0)
+    await api.setSkillPricing(s.skill_token, {
+      pricing_model: model,
+      price_per_unit: price,
+      revenue_share_bp: bp,
+    })
+    s.pricing_model = model as SkillMarketItem['pricing_model']
+    s.price_per_unit = price
+    s.revenue_share_bp = bp
+    pricingEditToken.value = null
+    toast.success(t('marketplace.pricingSaved') || '定价已更新')
+  } catch (e: any) {
+    const detail = e?.response?.data?.detail
+    toast.error((typeof detail === 'string' && detail) || (t('common.operationFailed') as string) || '保存失败')
+  } finally {
+    pricingSaving.value = false
+  }
+}
+
+function isPaid(s: SkillMarketItem): boolean {
+  return !!s.pricing_model && s.pricing_model !== 'free' && (s.price_per_unit ?? 0) > 0
+}
+function isPurchasable(s: SkillMarketItem): boolean {
+  return isPaid(s) && (s.pricing_model === 'per_download' || s.pricing_model === 'subscription')
+}
+function isMine(s: SkillMarketItem): boolean {
+  if (auth.userId == null) return false
+  return s.author_user_id === auth.userId || s.publisher_user_id === auth.userId
+}
+function isOwned(s: SkillMarketItem): boolean {
+  return ownedTokens.value.has(s.skill_token)
+}
+function priceLabel(s: SkillMarketItem): string {
+  const p = s.price_per_unit ?? 0
+  const unit = t('marketplace.creditsUnit') || '点'
+  if (s.pricing_model === 'per_download') return `${p} ${unit}/${t('marketplace.perDownload') || '下载'}`
+  if (s.pricing_model === 'per_invoke') return `${p} ${unit}/${t('marketplace.perInvoke') || '调用'}`
+  if (s.pricing_model === 'subscription') return `${p} ${unit}/${t('marketplace.perMonth') || '月'}`
+  return `${p} ${unit}`
+}
+
+async function loadOwnedTokens() {
+  if (!auth.isLoggedIn) { ownedTokens.value = new Set(); return }
+  try {
+    const res = await api.fetchMySkillPurchases({ limit: 200 })
+    const owned = new Set<string>()
+    for (const p of res.data?.items ?? []) {
+      if (p.status === 'active') owned.add(p.skill_token)
+    }
+    ownedTokens.value = owned
+  } catch {
+    /* 非关键路径：静默 */
+  }
+}
+
+async function onPurchase(s: SkillMarketItem) {
+  if (!auth.isLoggedIn) {
+    toast.info(t('marketplace.loginToBuy') || '请先登录后再购买')
+    return
+  }
+  purchasingToken.value = s.skill_token
+  try {
+    const res = await api.purchaseSkill(s.skill_token)
+    ownedTokens.value = new Set([...ownedTokens.value, s.skill_token])
+    if (res.data.already_owned) {
+      toast.info(t('marketplace.alreadyOwned') || '你已拥有该 Skill')
+    } else {
+      toast.success(
+        (t('marketplace.purchaseSuccess') as string) ||
+          `购买成功，剩余 ${res.data.credits_remaining} 点`,
+      )
+    }
+    const url = res.data.download_skill_url || s.download_skill_url
+    if (url) window.open(url, '_blank', 'noopener,noreferrer')
+  } catch (e: any) {
+    const detail = e?.response?.data?.detail
+    toast.error(
+      (typeof detail === 'string' && detail) ||
+        (t('marketplace.purchaseFailed') as string) ||
+        '购买失败，请检查余额',
+    )
+  } finally {
+    purchasingToken.value = null
+  }
+}
 
 const templates = ref<AgentTemplateItem[]>([])
 const stats = ref<{ template_count?: number; verified_count?: number; tasks_completed?: number } | null>(null)
@@ -399,6 +610,7 @@ async function loadMarketData() {
     marketLoading.value = false
     skillsLoading.value = false
   }
+  void loadOwnedTokens()
 }
 
 function confirmUnpublishSkill(item: SkillMarketItem) {
@@ -601,6 +813,25 @@ onMounted(() => {
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
 }
 
+.template-card {
+  transition: border-color var(--duration-m) var(--ease-apple), transform var(--duration-m) var(--ease-apple), box-shadow var(--duration-m) var(--ease-apple);
+}
+.template-card:hover {
+  border-color: rgba(var(--primary-rgb), 0.22);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-card-hover);
+}
+@media (prefers-reduced-motion: reduce) {
+  .template-card { transition: none; }
+  .template-card:hover { transform: none; }
+}
+@media (max-width: 480px) {
+  .price-badge { margin-left: 0; }
+  .template-actions :deep(.ui-button),
+  .template-actions :deep(a),
+  .template-actions :deep(button) { min-height: 40px; }
+}
+
 .template-card-head { display: flex; align-items: center; gap: var(--space-2); }
 .verified-badge {
   display: inline-flex;
@@ -620,7 +851,26 @@ onMounted(() => {
 .template-meta { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-bottom: var(--space-3); font-size: var(--font-caption); color: var(--text-secondary); }
 .template-rep { color: #4ade80; font-weight: 600; }
 .template-stat { font-weight: 500; color: var(--primary-color); }
-.template-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.template-share { font-weight: 500; }
+.template-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+.template-card-head { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.price-badge { margin-left: auto; white-space: nowrap; }
+.owner-tag { align-self: center; }
+.skill-skeleton { display: flex; flex-direction: column; padding: var(--space-5); pointer-events: none; }
+.pricing-editor {
+  margin-top: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: var(--border-hairline);
+  border-radius: var(--radius-lg);
+  background: rgba(var(--primary-rgb), 0.05);
+  display: grid;
+  gap: var(--space-3);
+}
+.pricing-field { display: grid; gap: var(--space-1); }
+.pricing-field .form-label { font-size: var(--font-caption); color: var(--text-secondary); }
+.pricing-field .input { width: 100%; }
+.pricing-hint { margin: 2px 0 0; font-size: 0.72rem; color: var(--text-secondary); }
+.pricing-actions { display: flex; justify-content: flex-end; }
 .tool-cards { display: grid; grid-template-columns: 1fr; gap: var(--space-4); margin-bottom: var(--space-6); }
 @media (min-width: 640px) { .tool-cards { grid-template-columns: repeat(2, 1fr); } }
 @media (min-width: 900px) { .tool-cards { grid-template-columns: repeat(4, 1fr); } }

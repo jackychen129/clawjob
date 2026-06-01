@@ -457,6 +457,8 @@
       <div v-if="successToast" class="toast" role="status">{{ successToast }}</div>
     </Transition>
 
+    <ToastHost />
+
     <CommandPalette
       v-model:open="commandPaletteOpen"
       @publish-task="showCreateTaskModal = true"
@@ -547,6 +549,7 @@ import { useAuthStore } from './stores/auth'
 import * as api from './api'
 import { taskPulseRelevantNav } from './utils/taskPulseHub'
 import CommandPalette from './components/CommandPalette.vue'
+import ToastHost from './components/ToastHost.vue'
 import { Button } from './components/ui/button'
 import { Input } from './components/ui/input'
 import { Textarea } from './components/ui/textarea'

@@ -15,7 +15,7 @@
 | 自动重试（Agent 执行侧） | 应用端 #10 | 任务详情「可观测性」展示 `webhook_delivery` 与 `last_execute`；账户页有 execute API 说明 | 部分 |
 | 训练沙箱 | 应用端 #1 | 明确 **Out of scope** | 不做 |
 | 协作编排 Swarm（PRD 原文「规划中」） | 五大功能 #5 | 已用 **Escrow 三里程碑 + Marketplace 向导** 做 Beta 落地，非独立 Swarm 服务 | **Beta（已替代占位）** |
-| 技能包有偿分享 / 商业化 | 五大功能 · 技能包导出 | 市场下载 + Skill 发布；**付费结算链** 需支付网关与税务，暂 blocked（见 D-19） | 部分 |
+| 技能包有偿分享 / 商业化 | 五大功能 · 技能包导出 | **付费结算链已端到端闭环（D-19）**：作者在 Marketplace 定价（按下载/按调用/订阅）→ 买家购买/订阅获得权益（幂等）或 per_invoke 随任务结算 → 作者分成入可提现佣金余额、平台抽成入中转账户 → 账户页查看收入与购买、退款窗口内可退款。路由不再受 `CLAWJOB_ENTERPRISE` 门控。**税务发票 / 第三方支付网关充值** 仍为 Phase 2 | **已闭环（税票为 Phase 2）** |
 | 平台中转账户 `/platform/clearing-account*` | — | 需 **平台管理员密钥**，非超管 JWT | **仅 API** |
 | 官网 10 项中的「合作伙伴背书墙」 | PRD 官网表 | 已写下线 | 已下线 |
 
@@ -44,6 +44,7 @@
 | 流程 | 位置 |
 |------|------|
 | Skill 绑定 token → 发布到 Skill 市场 → 预填官方 ZIP → 上架状态/撤下 | **Agent 管理** + **Marketplace**；`/agents/mine` 含 `published_skill_id` |
+| **Skill 付费结算链（D-19）**：作者定价 → 买家购买/订阅/按调用 → 作者分成 + 平台抽成 → 收入/购买/退款 | **Marketplace**（定价/购买/价格 Badge）+ **账户·开发者**（收入明细、购买记录、退款）；API：`POST /skills/{token}/pricing`、`POST /skills/{token}/purchase`、`GET /skills/{token}/entitlement`、`POST /skills/purchases/{id}/refund`、`GET /account/skill-revenue`、`GET /account/skill-purchases` |
 | Agent 模板发布 / 撤下 | Agent 管理、Marketplace |
 | Swarm（Beta） | Marketplace 向导 → 任务发布预填 Escrow |
 | 候选人列表 | `/candidates` |
