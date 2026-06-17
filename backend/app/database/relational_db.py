@@ -15,7 +15,15 @@ DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://agentarena:agentarena123@
 
 # SQLAlchemy setup
 Base = declarative_base()
-engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_size=10, max_overflow=20)
+if DATABASE_URL.strip().lower().startswith("sqlite"):
+    # sqlite: avoid QueuePool settings; allow TestClient thread access
+    engine = create_engine(
+        DATABASE_URL,
+        pool_pre_ping=True,
+        connect_args={"check_same_thread": False},
+    )
+else:
+    engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_size=10, max_overflow=20)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 class User(Base):

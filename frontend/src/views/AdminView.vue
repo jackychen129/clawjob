@@ -62,6 +62,8 @@
           <Tab value="settlements">{{ t('admin.tabSettlements') }}</Tab>
           <Tab value="circuit">{{ t('admin.tabCircuit') }}</Tab>
           <Tab value="audit">{{ t('admin.tabAudit') }}</Tab>
+          <Tab value="safety">{{ t('admin.tabSafety') || '安全' }}</Tab>
+          <Tab value="insights">{{ t('admin.tabInsights') || '平台洞察' }}</Tab>
         </TabList>
 
         <TabPanel value="disputes">
@@ -366,6 +368,157 @@
             </div>
           </div>
         </TabPanel>
+
+        <TabPanel value="safety">
+          <div class="card admin-card">
+            <div class="admin-logs-head">
+              <h3 class="admin-logs-title">{{ t('admin.safetyStatsTitle') || '内容安全统计' }}</h3>
+              <div class="admin-logs-filters">
+                <select v-model.number="safetyDays" class="input select-input admin-filter" @change="reloadSafety">
+                  <option :value="7">7d</option>
+                  <option :value="30">30d</option>
+                  <option :value="90">90d</option>
+                </select>
+                <Button size="sm" variant="secondary" type="button" :disabled="safetyStatsLoading" @click="reloadSafety">
+                  {{ t('common.retry') || '刷新' }}
+                </Button>
+              </div>
+            </div>
+            <div v-if="safetyStatsLoading && !safetyStats" class="admin-logs-skeleton">
+              <div v-for="i in 3" :key="'ssk-'+i" class="tw-skeleton admin-log-skel-row"></div>
+            </div>
+            <div v-else-if="safetyStats" class="admin-safety-stats">
+              <div class="admin-metric-card admin-metric-card--ops">
+                <div class="admin-metric-title">{{ t('admin.safetyTotal') || '事件总数' }}</div>
+                <div class="admin-metric-value">{{ safetyStats.total }}</div>
+              </div>
+              <div class="admin-safety-breakdown">
+                <div v-for="(cnt, act) in safetyStats.by_action" :key="'act-'+act" class="admin-safety-chip">
+                  <span class="mono">{{ act }}</span> · {{ cnt }}
+                </div>
+                <div v-for="(cnt, src) in safetyStats.by_source" :key="'src-'+src" class="admin-safety-chip admin-safety-chip--muted">
+                  {{ src }} · {{ cnt }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card admin-card admin-logs">
+            <div class="admin-logs-head">
+              <h3 class="admin-logs-title">{{ t('admin.safetyEventsTitle') || '安全事件' }}</h3>
+              <div class="admin-logs-filters">
+                <select v-model="safetyActionFilter" class="input select-input admin-filter" @change="reloadSafetyEvents(true)">
+                  <option value="">{{ t('admin.allCategories') || '全部' }}</option>
+                  <option value="block">block</option>
+                  <option value="redact">redact</option>
+                </select>
+                <Button size="sm" variant="secondary" type="button" :disabled="safetyEventsLoading" @click="reloadSafetyEvents(true)">
+                  {{ t('common.retry') || '刷新' }}
+                </Button>
+              </div>
+            </div>
+            <div v-if="safetyEventsLoading && safetyEvents.length === 0" class="admin-logs-skeleton">
+              <div v-for="i in 6" :key="'sesk-'+i" class="tw-skeleton admin-log-skel-row"></div>
+            </div>
+            <div v-else class="admin-log-table">
+              <div class="admin-log-row admin-log-row--head admin-safety-row">
+                <div>{{ t('admin.safetyColTime') || '时间' }}</div>
+                <div>{{ t('admin.safetyColAction') || '动作' }}</div>
+                <div>{{ t('admin.safetyColSource') || '来源' }}</div>
+                <div>{{ t('admin.safetyColSnippet') || '片段' }}</div>
+              </div>
+              <div v-for="ev in safetyEvents" :key="ev.id" class="admin-log-row admin-safety-row">
+                <div class="admin-log-time">{{ (ev.created_at || '').slice(0, 19).replace('T', ' ') }}</div>
+                <div class="admin-log-level">{{ ev.action }}</div>
+                <div class="admin-log-cat">{{ ev.source }}</div>
+                <div>
+                  <div class="admin-log-msg-main">{{ ev.snippet || '-' }}</div>
+                  <div v-if="ev.reasons?.length" class="admin-log-msg-sub mono">{{ ev.reasons.join(', ') }}</div>
+                  <div v-if="ev.related_task_id" class="admin-log-msg-sub">task#{{ ev.related_task_id }}</div>
+                </div>
+              </div>
+              <p v-if="!safetyEvents.length && !safetyEventsLoading" class="empty">{{ t('admin.safetyEventsEmpty') || '暂无安全事件' }}</p>
+            </div>
+            <div class="admin-pagination">
+              <Button size="sm" variant="secondary" type="button" :disabled="safetyEventsSkip <= 0" @click="prevSafetyPage">{{ t('admin.prev') || '上一页' }}</Button>
+              <span class="admin-page-meta">{{ safetyEventsSkip + 1 }}–{{ Math.min(safetyEventsSkip + safetyEventsPageSize, safetyEventsTotal) }} / {{ safetyEventsTotal }}</span>
+              <Button size="sm" variant="secondary" type="button" :disabled="safetyEventsSkip + safetyEventsPageSize >= safetyEventsTotal" @click="nextSafetyPage">{{ t('admin.next') || '下一页' }}</Button>
+            </div>
+          </div>
+        </TabPanel>
+
+        <TabPanel value="insights">
+          <div class="card admin-card">
+            <div class="admin-logs-head">
+              <h3 class="admin-logs-title">{{ t('admin.platformInsightsTitle') || '平台洞察' }}</h3>
+              <div class="admin-logs-filters">
+                <select v-model.number="platformInsightsDays" class="input select-input admin-filter" @change="reloadPlatformInsights">
+                  <option :value="7">7d</option>
+                  <option :value="30">30d</option>
+                  <option :value="90">90d</option>
+                </select>
+                <Button size="sm" variant="secondary" type="button" :disabled="platformInsightsLoading" @click="reloadPlatformInsights">
+                  {{ t('common.retry') || '刷新' }}
+                </Button>
+              </div>
+            </div>
+            <div v-if="platformInsightsLoading && !platformInsights" class="admin-logs-skeleton">
+              <div v-for="i in 4" :key="'pisk-'+i" class="tw-skeleton admin-log-skel-row"></div>
+            </div>
+            <template v-else-if="platformInsights">
+              <div class="admin-metrics admin-metrics--insights">
+                <div class="admin-metric-card">
+                  <div class="admin-metric-title">GMV</div>
+                  <div class="admin-metric-value mono">{{ platformInsights.gmv }}</div>
+                </div>
+                <div class="admin-metric-card">
+                  <div class="admin-metric-title">{{ t('admin.insightsRevenue') || '平台收入' }}</div>
+                  <div class="admin-metric-value mono">{{ platformInsights.revenue }}</div>
+                </div>
+                <div class="admin-metric-card">
+                  <div class="admin-metric-title">{{ t('admin.insightsPublished') || '发布' }}</div>
+                  <div class="admin-metric-value">{{ platformInsights.funnel.published }}</div>
+                </div>
+                <div class="admin-metric-card">
+                  <div class="admin-metric-title">{{ t('admin.insightsCompleted') || '完成' }}</div>
+                  <div class="admin-metric-value">{{ platformInsights.funnel.completed }}</div>
+                </div>
+              </div>
+              <div class="admin-insights-funnel">
+                <div class="admin-insights-funnel-row">
+                  <span>{{ t('admin.insightsBidRate') || '出价率' }}</span>
+                  <span class="mono">{{ (platformInsights.funnel.bid_rate * 100).toFixed(1) }}%</span>
+                </div>
+                <div class="admin-insights-funnel-row">
+                  <span>{{ t('admin.insightsAssignRate') || '分配率' }}</span>
+                  <span class="mono">{{ (platformInsights.funnel.assign_rate * 100).toFixed(1) }}%</span>
+                </div>
+                <div class="admin-insights-funnel-row">
+                  <span>{{ t('admin.insightsCompletionRate') || '完成率' }}</span>
+                  <span class="mono">{{ (platformInsights.funnel.completion_rate * 100).toFixed(1) }}%</span>
+                </div>
+              </div>
+              <div v-if="platformInsights.daily?.length" class="admin-insights-daily">
+                <h4 class="admin-cb-history__title">{{ t('admin.insightsDaily') || '日趋势（最近）' }}</h4>
+                <div class="admin-log-table">
+                  <div class="admin-log-row admin-log-row--head admin-insights-daily-row">
+                    <div>{{ t('admin.insightsColDate') || '日期' }}</div>
+                    <div>{{ t('admin.insightsPublished') || '发布' }}</div>
+                    <div>{{ t('admin.insightsCompleted') || '完成' }}</div>
+                    <div>GMV</div>
+                  </div>
+                  <div v-for="row in platformInsights.daily.slice(-14)" :key="row.date" class="admin-log-row admin-insights-daily-row">
+                    <div class="admin-log-time">{{ row.date }}</div>
+                    <div class="mono">{{ row.published }}</div>
+                    <div class="mono">{{ row.completed }}</div>
+                    <div class="mono">{{ row.gmv }}</div>
+                  </div>
+                </div>
+              </div>
+            </template>
+            <p v-else class="empty">{{ t('admin.platformInsightsEmpty') || '暂无洞察数据' }}</p>
+          </div>
+        </TabPanel>
       </Tabs>
 
       <details class="card admin-card admin-withdrawals-demoted">
@@ -471,6 +624,18 @@ const cbConfigError = ref('')
 const adminTab = ref('disputes')
 const pendingSettlementsLoading = ref(false)
 const pendingSettlements = ref<api.AdminPendingSettlementItem[]>([])
+const safetyDays = ref(30)
+const safetyStatsLoading = ref(false)
+const safetyStats = ref<Awaited<ReturnType<typeof api.fetchSafetyStats>>['data'] | null>(null)
+const safetyEventsLoading = ref(false)
+const safetyEvents = ref<api.SafetyEventItem[]>([])
+const safetyEventsTotal = ref(0)
+const safetyEventsSkip = ref(0)
+const safetyEventsPageSize = 30
+const safetyActionFilter = ref('')
+const platformInsightsDays = ref(30)
+const platformInsightsLoading = ref(false)
+const platformInsights = ref<api.PlatformInsights | null>(null)
 
 function settlementPhaseLabel(phase: string) {
   if (phase === 'awaiting_payee') return t('admin.settlementAwaitingPayee') || '待确认到账'
@@ -484,6 +649,53 @@ function reloadPendingSettlements() {
     .then((res) => { pendingSettlements.value = res.data.items || [] })
     .catch(() => { pendingSettlements.value = [] })
     .finally(() => { pendingSettlementsLoading.value = false })
+}
+
+function reloadSafety() {
+  safetyStatsLoading.value = true
+  api.fetchSafetyStats(safetyDays.value)
+    .then((res) => { safetyStats.value = res.data })
+    .catch(() => { safetyStats.value = null })
+    .finally(() => { safetyStatsLoading.value = false })
+}
+
+function reloadSafetyEvents(reset = false) {
+  if (reset) safetyEventsSkip.value = 0
+  safetyEventsLoading.value = true
+  api.listSafetyEvents({
+    offset: safetyEventsSkip.value,
+    limit: safetyEventsPageSize,
+    action: safetyActionFilter.value || undefined,
+  })
+    .then((res) => {
+      safetyEvents.value = res.data.items || []
+      safetyEventsTotal.value = res.data.total || 0
+    })
+    .catch(() => {
+      safetyEvents.value = []
+      safetyEventsTotal.value = 0
+    })
+    .finally(() => { safetyEventsLoading.value = false })
+}
+
+function prevSafetyPage() {
+  if (safetyEventsSkip.value <= 0) return
+  safetyEventsSkip.value = Math.max(0, safetyEventsSkip.value - safetyEventsPageSize)
+  reloadSafetyEvents(false)
+}
+
+function nextSafetyPage() {
+  if (safetyEventsSkip.value + safetyEventsPageSize >= safetyEventsTotal.value) return
+  safetyEventsSkip.value += safetyEventsPageSize
+  reloadSafetyEvents(false)
+}
+
+function reloadPlatformInsights() {
+  platformInsightsLoading.value = true
+  api.fetchPlatformInsights(platformInsightsDays.value)
+    .then((res) => { platformInsights.value = res.data })
+    .catch(() => { platformInsights.value = null })
+    .finally(() => { platformInsightsLoading.value = false })
 }
 
 const filteredCbRows = computed(() => {
@@ -513,6 +725,9 @@ function reloadAll() {
   reloadWithdrawals()
   reloadKyc()
   reloadPendingSettlements()
+  reloadSafety()
+  reloadSafetyEvents(true)
+  reloadPlatformInsights()
 }
 
 function reloadWithdrawals() {
@@ -841,9 +1056,21 @@ onMounted(() => {
 .admin-page-meta { color: var(--text-secondary); font-size: var(--font-caption); }
 .admin-dispute-row { grid-template-columns: 1.2fr 6rem 1.2fr 14rem; }
 .admin-settlement-row { grid-template-columns: 1.4fr 5rem 8rem 10rem; }
+.admin-safety-row { grid-template-columns: 11rem 5rem 7rem 1fr; }
+.admin-insights-row { grid-template-columns: 8rem 5rem 5rem 6rem; }
 .admin-settlement-link { color: var(--primary-color); text-decoration: none; }
 .admin-settlement-link:hover { text-decoration: underline; }
 .admin-dispute-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.admin-safety-row { grid-template-columns: 9rem 5rem 7rem 1fr; }
+.admin-safety-stats { display: flex; flex-direction: column; gap: var(--space-4); }
+.admin-safety-breakdown { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.admin-safety-chip { padding: 0.35rem 0.65rem; border-radius: var(--radius-md); background: rgba(99,102,241,0.12); font-size: var(--font-caption); }
+.admin-safety-chip--muted { background: rgba(148,163,184,0.12); }
+.admin-metrics--insights { margin-top: var(--space-4); }
+.admin-insights-funnel { margin-top: var(--space-4); display: flex; flex-direction: column; gap: var(--space-2); }
+.admin-insights-funnel-row { display: flex; justify-content: space-between; padding: var(--space-2) 0; border-bottom: var(--border-hairline); font-size: var(--font-body); }
+.admin-insights-daily { margin-top: var(--space-5); }
+.admin-insights-daily-row { grid-template-columns: 7rem 5rem 5rem 5rem; }
 .admin-cb-history { margin-top: var(--space-4); border-top: var(--border-hairline); padding-top: var(--space-3); }
 .admin-cb-history__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
 .admin-cb-history__title { margin: 0; font-size: var(--font-caption); color: var(--text-secondary); }

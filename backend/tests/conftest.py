@@ -3,6 +3,8 @@ import os
 
 # Enterprise routers (KYC, workspace, billing) must load before app.main is imported by tests.
 os.environ.setdefault("CLAWJOB_ENTERPRISE", "1")
+# Tests generate many local requests quickly; keep rate limiting from flaking.
+os.environ.setdefault("RATE_LIMIT_DEFAULT", "1000000/minute")
 
 import pytest
 

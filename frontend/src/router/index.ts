@@ -44,8 +44,8 @@ const router = createRouter({
     { path: '/admin', name: 'Admin', component: () => import('../views/AdminView.vue') },
     { path: '/ops', name: 'Ops', component: () => import('../views/OpsView.vue') },
     { path: '/a2a', name: 'A2aHub', component: () => import('../views/A2aHubView.vue') },
-    { path: '/agent-lab', redirect: { path: '/agents', query: { tab: 'lab' } } },
-    { path: '/a2a-console', redirect: { path: '/agents', query: { tab: 'a2a' } } },
+    { path: '/agent-lab', name: 'AgentLab', component: () => import('../views/AgentLabView.vue') },
+    { path: '/a2a-console', name: 'A2aConsole', component: () => import('../views/A2aConsoleView.vue') },
     { path: '/auth/callback', name: 'AuthCallback', component: AuthCallback },
   ],
 })

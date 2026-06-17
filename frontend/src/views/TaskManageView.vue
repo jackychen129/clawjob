@@ -7,7 +7,7 @@
     >
       <template #actions>
         <div v-if="marketStatsLoading" class="market-stats-bar market-stats-bar--skeleton" aria-busy="true">
-          <div v-for="i in 3" :key="i" class="market-stat market-stat--skeleton">
+          <div v-for="i in 4" :key="i" class="market-stat market-stat--skeleton">
             <div class="tw-skeleton market-stat__skeleton-value"></div>
             <div class="tw-skeleton market-stat__skeleton-label"></div>
           </div>
@@ -24,6 +24,10 @@
           <div class="market-stat">
             <span class="market-stat__value mono">{{ formatMarketStat(marketStats.agents_count) }}</span>
             <span class="market-stat__label">{{ t('taskManage.statAgentsPublic') || '公开 Agent' }}</span>
+          </div>
+          <div class="market-stat">
+            <span class="market-stat__value mono">{{ formatMarketStat(marketStats.tasks_completed) }}</span>
+            <span class="market-stat__label">{{ t('taskManage.statCompleted') || '已完成' }}</span>
           </div>
         </div>
       </template>
@@ -63,6 +67,17 @@
                 <select v-model="categoryFilter" class="input select-input task-filter-select">
                   <option value="">{{ t('taskManage.categoryAll') || '全部' }}</option>
                   <option v-for="opt in categoryFilterOptions" :key="opt.value" :value="opt.value">{{ t(opt.labelKey) }}</option>
+                </select>
+                <select v-model="taskSort" class="input select-input task-filter-select" :aria-label="t('taskManage.sortLabel')">
+                  <option value="reward_desc">{{ t('task.sortReward') }}</option>
+                  <option value="created_at_desc">{{ t('task.sortNewest') }}</option>
+                  <option value="deadline_asc">{{ t('task.sortDeadline') }}</option>
+                  <option value="comments_desc">{{ t('task.sortComments') }}</option>
+                </select>
+                <select v-model="settlementFilter" class="input select-input task-filter-select" :aria-label="t('taskManage.settlementFilterLabel')">
+                  <option value="">{{ t('taskManage.settlementFilterAll') }}</option>
+                  <option value="agent_direct">{{ t('taskManage.settlementFilterDirect') }}</option>
+                  <option value="platform_credits">{{ t('taskManage.settlementFilterCredits') }}</option>
                 </select>
                 <div class="task-view-toggle" role="group" :aria-label="t('taskManage.viewTable')">
                   <Button
@@ -119,7 +134,10 @@
                     >
                       <TableCell>
                         <div class="task-table-title">{{ task.title }}</div>
-                        <div v-if="task.category" class="task-table-category">{{ taskCategoryLabel(task.category) }}</div>
+                        <div class="task-table-meta">
+                          <span v-if="task.category" class="task-table-category">{{ taskCategoryLabel(task.category) }}</span>
+                          <span v-if="task.settlement_mode === 'agent_direct' && task.reward_points" class="task-tag task-tag--exchange task-tag--agent_direct_settlement task-tag--sm">{{ t('task.settlementBadge') }}</span>
+                        </div>
                       </TableCell>
                       <TableCell class="text-right">
                         <span v-if="task.reward_points" class="task-table-reward mono">{{ task.reward_points }}</span>
@@ -2042,6 +2060,8 @@ const rejectReasonTemplates = [
 const confirmTaskId = ref<number | null>(null)
 const confirmForm = reactive({ verification_mode: 'manual_review', verification_note: '' })
 const categoryFilter = ref('')
+const taskSort = ref<'reward_desc' | 'created_at_desc' | 'deadline_asc' | 'comments_desc'>('reward_desc')
+const settlementFilter = ref<'' | 'agent_direct' | 'platform_credits'>('')
 const relatedSkillFilter = ref<{ id: number; token: string } | null>(null)
 const categoryFilterOptions = [
   { value: 'development', labelKey: 'task.categoryDevelopment' },
@@ -2052,8 +2072,14 @@ const categoryFilterOptions = [
   { value: 'other', labelKey: 'task.categoryOther' },
 ]
 const filteredTasks = computed(() => {
-  if (!categoryFilter.value) return tasks.value
-  return tasks.value.filter((t) => t.category === categoryFilter.value)
+  let list = tasks.value
+  if (categoryFilter.value) {
+    list = list.filter((row) => row.category === categoryFilter.value)
+  }
+  if (settlementFilter.value) {
+    list = list.filter((row) => (row.settlement_mode || 'platform_credits') === settlementFilter.value)
+  }
+  return list
 })
 
 const mineFilteredTasks = computed(() => {
@@ -2241,7 +2267,12 @@ function loadTasks() {
     return
   }
   tasksLoading.value = true
-  api.fetchTasks().then((res) => {
+  api.fetchTasks({
+    status_filter: 'open',
+    limit: 200,
+    sort: taskSort.value,
+    category_filter: categoryFilter.value || undefined,
+  }).then((res) => {
     tasks.value = (res.data as { tasks: TaskListItem[] }).tasks || []
   }).catch(() => { tasks.value = [] }).finally(() => { tasksLoading.value = false })
 }
@@ -2426,7 +2457,7 @@ function formatMarketStat(n: number | undefined | null): string {
   return String(v)
 }
 
-const marketStats = ref<{ tasks_open?: number; rewards_paid?: number; agents_count?: number }>({})
+const marketStats = ref<{ tasks_open?: number; rewards_paid?: number; agents_count?: number; tasks_completed?: number }>({})
 const marketStatsLoading = ref(true)
 function loadMarketStats() {
   marketStatsLoading.value = true
@@ -3724,6 +3755,14 @@ watch(
   { immediate: true }
 )
 
+watch(taskSort, () => {
+  if (tab.value === 'available' && !route.query.relatedSkillId) loadTasks()
+})
+
+watch(categoryFilter, () => {
+  if (tab.value === 'available' && !route.query.relatedSkillId) loadTasks()
+})
+
 watch(
   () => [normalizePulse(route.query.pulse), auth.isLoggedIn, String(route.query.relatedSkillId ?? '')] as const,
   () => {
@@ -4209,7 +4248,7 @@ watch(tab, (newTab) => {
 .task-market-header__desc { margin: 0; color: var(--text-secondary); font-size: var(--font-body); max-width: 42rem; }
 .market-stats-bar {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: var(--space-3);
   padding: var(--space-4);
   border-radius: var(--radius-lg);
@@ -4217,7 +4256,10 @@ watch(tab, (newTab) => {
   background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.06), rgba(var(--exchange-ask-rgb), 0.04));
   box-shadow: var(--shadow-layer-1);
 }
-@media (max-width: 640px) {
+@media (max-width: 900px) {
+  .market-stats-bar { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 520px) {
   .market-stats-bar { grid-template-columns: 1fr; }
 }
 .market-stat {
@@ -4528,7 +4570,9 @@ watch(tab, (newTab) => {
 .task-table-row { cursor: pointer; }
 .task-table-row--selected { background: rgba(var(--primary-rgb), 0.06) !important; }
 .task-table-title { font-weight: 650; color: var(--text-primary); line-height: 1.3; }
-.task-table-category { margin-top: 0.15rem; font-size: var(--font-caption); color: var(--text-secondary); }
+.task-table-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.5rem; margin-top: 0.15rem; }
+.task-table-category { font-size: var(--font-caption); color: var(--text-secondary); }
+.task-tag--sm { font-size: 0.65rem; padding: 0.1rem 0.35rem; }
 .task-table-reward { font-weight: 700; color: #22c55e; letter-spacing: -0.02em; }
 .task-table-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); }
 .task-detail-panel__stepper { margin-bottom: var(--space-5); }

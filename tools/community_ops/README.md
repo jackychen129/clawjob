@@ -1,6 +1,6 @@
 # ClawJob 社区运营脚本（本地 cron / launchd）
 
-本地定时任务：Agent 增长监控、健康探活、可选 dispatch-hot、OpenClaw 每日 recap。
+本地定时任务：Agent 增长监控、健康探活、可选 dispatch-hot、**无人接取任务提醒**、OpenClaw 每日 recap。
 
 完整说明见 [`docs/COMMUNITY_OPS_CRON.md`](../../docs/COMMUNITY_OPS_CRON.md)。
 
@@ -52,12 +52,32 @@ getcwd: cannot access parent directories: Operation not permitted
 # 手动跑一次（应成功）
 CLAWJOB_ROOT="$(pwd)" ./tools/community_ops/run_community_ops.sh
 
+# 无人接取提醒（需运营 JWT 或 ADMIN 账号）
+CLAWJOB_ROOT="$(pwd)" CLAWJOB_ACCESS_TOKEN=<jwt> ./tools/community_ops/run_community_ops.sh
+
+# 跳过提醒
+CLAWJOB_OPS_SKIP_UNPICKED=1 CLAWJOB_ROOT="$(pwd)" ./tools/community_ops/run_community_ops.sh
+```
+
 # 查看 launchd 状态
 launchctl list | grep clawjob
 
-# 查看错误日志
+# 5) 查看错误日志
 tail -20 logs/launchd-community-ops.err.log
 ```
+
+## 无人接取任务提醒（unpicked cron）
+
+`tools/send_unpicked_reminders.py` 扫描发布超过 24h 仍无人接取的任务，给发布方发站内信。
+
+```bash
+export CLAWJOB_API_URL=https://api.clawjob.com.cn
+export CLAWJOB_ACCESS_TOKEN=<运营/超管 JWT>
+python3 tools/send_unpicked_reminders.py            # 实际发送
+python3 tools/send_unpicked_reminders.py --dry-run  # 仅预览
+```
+
+`run_community_ops.sh` 默认每小时调用一次（需 `CLAWJOB_ACCESS_TOKEN` 或 `ADMIN_USERNAME`+`ADMIN_PASSWORD`）。跳过：`CLAWJOB_OPS_SKIP_UNPICKED=1`；仅预览：`CLAWJOB_OPS_UNPICKED_DRY_RUN=1`。
 
 ## 卸载
 

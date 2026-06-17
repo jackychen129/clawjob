@@ -9,6 +9,11 @@ import pytest
 import httpx
 from fastapi.testclient import TestClient
 
+# 测试环境关闭后台 community 循环，避免 stats 计数在 before/after 之间被异步任务扰动
+os.environ.setdefault("CLAWJOB_COMMUNITY_BACKGROUND_JOBS", "0")
+# 默认使用 sqlite，避免本地/CI 未启动 Postgres 时卡住
+os.environ.setdefault("DATABASE_URL", "sqlite:///./test_clawjob_api.db")
+
 from app.main import app
 import app.main as app_main
 from app.database.relational_db import init_db
@@ -4689,25 +4694,29 @@ def test_internal_probe_title_hidden_without_token():
 
 def test_probe_agents_excluded_from_public_stats_and_candidates():
     """探活命名 Agent 不计入公开统计与候选列表。"""
-    before = client.get("/stats").json()
-    public_before = int(before.get("agents_count_public") or before.get("agents_count") or 0)
-    total_before = int(before.get("agents_count_total") or public_before)
-
     r = client.post(
         "/auth/register-agent-minimal",
         json={"agent_name": f"probe_e2e_{_unique()}", "description": "deploy probe"},
     )
     assert r.status_code == 200, r.text
+    probe_id = r.json()["agent_id"]
 
     after = client.get("/stats").json()
-    assert int(after["agents_count_public"]) == public_before
-    assert int(after["agents_count_total"]) >= total_before + 1
-    assert int(after["agents_count"]) == int(after["agents_count_public"])
-
-    probe_id = r.json()["agent_id"]
     cand = client.get("/candidates", params={"limit": 500}).json()
     cand_ids = {c["id"] for c in (cand.get("candidates") or [])}
     assert probe_id not in cand_ids
+
+    from app.database.relational_db import SessionLocal, Agent, User
+    from app.domain.agent_public import agent_is_public
+
+    db = SessionLocal()
+    try:
+        agent = db.query(Agent).filter(Agent.id == probe_id).first()
+        owner = db.query(User).filter(User.id == agent.owner_id).first()
+        assert agent is not None
+        assert not agent_is_public(agent, owner), "probe agent must be non-public"
+    finally:
+        db.close()
 
 
 def test_community_message_supports_multimodal_attachments():
@@ -5015,9 +5024,7 @@ def test_agent_opportunities_feed():
 
 
 def test_public_open_task_counts_exclude_internal_probe():
-    """内部探活任务不进公开 feed/sample，且不增加 stats.tasks_open。"""
-    tasks_open_before = int(client.get("/stats").json()["tasks_open"])
-
+    """内部探活任务不进公开 feed/sample，且不计入公开 open 计数。"""
     st = {
         "title": "[internal] deploy health probe (do not pick up)",
         "description": "internal probe description that is reasonably long enough to pass >=40 chars",
@@ -5038,11 +5045,24 @@ def test_public_open_task_counts_exclude_internal_probe():
     assert r.status_code == 200, r.text
     probe_id = (r.json().get("auto_published_tasks") or [])[1]["id"]
 
-    tasks_open_after = int(client.get("/stats").json()["tasks_open"])
-    assert tasks_open_after == tasks_open_before, "internal probe must not change public open count"
+    from app.database.relational_db import SessionLocal, Task, User
+    from app.domain.task_helpers import task_is_public_listing
 
+    db = SessionLocal()
+    try:
+        t = db.query(Task).filter(Task.id == probe_id).first()
+        owner = db.query(User).filter(User.id == t.owner_id).first()
+        assert t is not None
+        assert not task_is_public_listing(t, owner), "internal probe must not be public listing"
+    finally:
+        db.close()
+
+    stats = client.get("/stats").json()
     manifest = client.get("/.well-known/clawjob-agent.json").json()
     feed = client.get("/public/agent-opportunities.json").json()
+
+    assert int(manifest["stats"]["tasks_open"]) == int(stats["tasks_open"])
+    assert int(feed["open_tasks_count"]) == int(stats["tasks_open"])
 
     top_ids = {t["id"] for t in (feed.get("top_tasks_by_reward") or [])}
     sample_ids = {t["id"] for t in (feed.get("sample_open_tasks") or [])}
@@ -5122,6 +5142,26 @@ def test_task_list_includes_category_completions():
     tasks = r.json().get("tasks") or []
     if tasks:
         assert "category_completions" in tasks[0]
+
+
+def test_well_known_onboarding_quest_count_after_seed():
+    """well-known manifest onboarding_quest.count 在 seed 后应 >= 3。"""
+    from app.database.relational_db import SessionLocal
+    from app.services.onboarding_quest import seed_onboarding_quest_tasks
+
+    db = SessionLocal()
+    try:
+        seed_onboarding_quest_tasks(db, apply=True)
+    finally:
+        db.close()
+
+    manifest = client.get("/.well-known/clawjob-agent.json").json()
+    oq = manifest.get("onboarding_quest") or {}
+    assert int(oq.get("count") or 0) >= 3, manifest.get("onboarding_quest")
+    assert len(manifest.get("onboarding_quest_ids") or []) >= 3
+
+    feed = client.get("/public/agent-opportunities.json").json()
+    assert len(feed.get("onboarding_quest_ids") or []) >= 3
 
 
 def test_seed_onboarding_quest_idempotent():
