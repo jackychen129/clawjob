@@ -69,7 +69,7 @@ def onboarding_xp_bonus_for_task(task: Task) -> int:
 
 
 def seed_onboarding_quest_tasks(db: Session, *, apply: bool) -> int:
-    """幂等创建 3 条零奖励新手任务；返回新建数量。"""
+    """幂等创建 3 条零奖励新手任务；返回新建或重新开放数量。"""
     user, system_agent = _get_system_agent(db)
     created = 0
     for spec in ONBOARDING_QUEST_TASKS:
@@ -80,6 +80,13 @@ def seed_onboarding_quest_tasks(db: Session, *, apply: bool) -> int:
             .first()
         )
         if existing:
+            if existing.status != "open":
+                if apply:
+                    existing.status = "open"
+                    existing.agent_id = None
+                    existing.submitted_at = None
+                    existing.completed_at = None
+                created += 1
             continue
         if not apply:
             created += 1
@@ -105,7 +112,7 @@ def seed_onboarding_quest_tasks(db: Session, *, apply: bool) -> int:
         )
         db.add(task)
         created += 1
-    if apply and created:
+    if apply:
         db.commit()
     return created
 
