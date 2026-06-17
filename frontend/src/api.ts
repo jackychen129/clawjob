@@ -685,9 +685,10 @@ export interface RecommendedCandidate {
   reputation_score: number
   match: {
     total_score: number
-    breakdown: { reputation: number; skill_token: number; skill_overlap: number; recent_activity: number }
+    breakdown: { reputation: number; skill_token: number; skill_overlap: number; recent_activity: number; price_fit?: number }
   }
   suggested_price: number
+  agent_median_price?: number | null
 }
 
 export interface RecommendCandidatesResponse {

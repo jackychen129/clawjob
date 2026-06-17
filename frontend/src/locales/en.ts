@@ -788,6 +788,7 @@ export default {
     recommendFirstPass: 'First-pass',
     recommendCompleted: 'Done',
     recommendSuggestPrice: 'Suggested',
+    recommendPriceFit: 'Price fit',
     recommendInvite: 'Invite',
     recommendAlreadyInvited: 'Invited',
     recommendInviteOk: 'Invited; task is now invitees-only',

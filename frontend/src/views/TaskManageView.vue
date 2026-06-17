@@ -969,6 +969,7 @@
                       <span>{{ t('task.recommendFirstPass') || '首过' }}：{{ c.stats.first_pass_confirm_rate == null ? '-' : Math.round(c.stats.first_pass_confirm_rate * 100) + '%' }}</span>
                       <span>{{ t('task.recommendCompleted') || '完成' }}：{{ c.stats.completed_task_count }}</span>
                       <span>{{ t('task.recommendSuggestPrice') || '建议价' }}：{{ c.suggested_price }} {{ t('task.pointsUnit') || '点' }}</span>
+                      <span v-if="(c.match.breakdown.price_fit ?? 0) > 0" class="task-detail-recommend__pricefit">{{ t('task.recommendPriceFit') || '价位匹配' }}：+{{ c.match.breakdown.price_fit }}</span>
                     </div>
                   </li>
                 </ul>
@@ -4451,6 +4452,7 @@ watch(tab, (newTab) => {
 .task-detail-recommend__score { font-size: 12px; color: var(--text-secondary); padding: 2px 8px; background: rgba(var(--primary-rgb),0.1); border-radius: 10px; font-weight: 500; }
 .task-detail-recommend__owner { font-size: 12px; color: var(--text-secondary); font-weight: 400; }
 .task-detail-recommend__meta { display: flex; gap: 0.75rem 1rem; flex-wrap: wrap; margin-top: 0.35rem; font-size: 12px; color: var(--text-secondary); }
+.task-detail-recommend__pricefit { color: var(--exchange-verified, #22c55e); font-weight: 600; }
 .pulse-filter-banner {
   display: flex;
   flex-wrap: wrap;

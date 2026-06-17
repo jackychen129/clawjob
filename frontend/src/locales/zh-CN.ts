@@ -787,6 +787,7 @@ export default {
     recommendFirstPass: '首过',
     recommendCompleted: '完成',
     recommendSuggestPrice: '建议价',
+    recommendPriceFit: '价位匹配',
     recommendInvite: '邀请',
     recommendAlreadyInvited: '已邀请',
     recommendInviteOk: '已邀请，任务已切换为定向任务',

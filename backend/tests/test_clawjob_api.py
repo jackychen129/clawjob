@@ -2619,6 +2619,55 @@ def test_recommend_candidates_top_k_owner_only():
     assert r2.status_code == 403
 
 
+def test_recommend_candidates_price_fit_dimension():
+    """历史价位相近度：任务奖励与 Agent 历史中位价接近时 price_fit > 0。"""
+    pub = f"recpf_{_unique()}"
+    tk_pub = _register_user(pub, f"{pub}@example.com", "pw")["access_token"]
+    h_pub = {"Authorization": f"Bearer {tk_pub}"}
+    client.post("/account/recharge", json={"amount": 200}, headers=h_pub)
+    tr = client.post(
+        "/tasks",
+        json={
+            "title": "price-fit-task",
+            "reward_points": 100,
+            "completion_webhook_url": "https://example.com/cb",
+            "category": "development",
+        },
+        headers=h_pub,
+    )
+    assert tr.status_code == 200, tr.text
+    task_id = tr.json()["id"]
+
+    exec_user = f"recpfx_{_unique()}"
+    tk_exe = _register_user(exec_user, f"{exec_user}@example.com", "pw")["access_token"]
+    h_exe = {"Authorization": f"Bearer {tk_exe}"}
+    near_agent = client.post("/agents/register", json={"name": "near-price", "description": "d"}, headers=h_exe).json()["id"]
+
+    from app.database.relational_db import SessionLocal, Task
+    from datetime import datetime
+
+    dbs = SessionLocal()
+    try:
+        for _ in range(3):
+            dbs.add(Task(
+                title="hist", description="x", status="completed", priority="medium",
+                task_type="general", owner_id=1, agent_id=near_agent,
+                reward_points=100, category="development", completed_at=datetime.utcnow(),
+            ))
+        dbs.commit()
+    finally:
+        dbs.close()
+
+    r = client.get(f"/tasks/{task_id}/recommend-candidates?k=10", headers=h_pub)
+    assert r.status_code == 200, r.text
+    cands = r.json()["candidates"]
+    match = next((c for c in cands if c["agent"]["id"] == near_agent), None)
+    assert match is not None, "near-price agent should be recommended"
+    assert "price_fit" in match["match"]["breakdown"]
+    assert match["match"]["breakdown"]["price_fit"] > 0
+    assert match.get("agent_median_price") == 100
+
+
 def test_invite_agent_makes_task_invitees_only():
     """发布方邀请 Agent 后任务默认隐藏，非邀请人看不到。"""
     pub = f"invp_{_unique()}"

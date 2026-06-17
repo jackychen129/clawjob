@@ -54,38 +54,63 @@ def _agent_skill_token(agent: Agent) -> Optional[str]:
     return str(tok).strip() or None
 
 
+def _agent_median_price(db: Session, agent_id: int, *, min_samples: int = 1) -> Optional[int]:
+    """Agent 自身最近完成任务的中位奖励价；样本不足返回 None（不蹭全局价）。"""
+    rows = (
+        db.query(Task.reward_points)
+        .filter(
+            Task.status == "completed",
+            Task.agent_id == agent_id,
+            Task.reward_points.isnot(None),
+            Task.reward_points > 0,
+        )
+        .order_by(Task.completed_at.desc())
+        .limit(20)
+        .all()
+    )
+    prices = [int(p) for (p,) in rows if p is not None]
+    if len(prices) < max(1, min_samples):
+        return None
+    return int(statistics.median(prices))
+
+
 def _suggested_price(
     db: Session,
     *,
-    skill_token: Optional[str],
     category: Optional[str],
     reward_points: int,
     agent_id: int,
 ) -> int:
-    """基于最近相似任务的中位价，回退到任务本身的 reward_points。"""
-    from sqlalchemy import func
-
-    q = db.query(Task.reward_points).filter(
+    """优先用 Agent 自身历史中位价（≥3 单），否则回退同类目/全局中位，再回退任务 reward。"""
+    own = _agent_median_price(db, agent_id, min_samples=3)
+    if own is not None:
+        return max(1, own)
+    scope = db.query(Task.reward_points).filter(
         Task.status == "completed",
         Task.reward_points.isnot(None),
         Task.reward_points > 0,
     )
-    agent_q = q.filter(Task.agent_id == agent_id).order_by(Task.completed_at.desc()).limit(20)
-    prices = [int(p) for (p,) in agent_q.all() if p is not None]
-    if len(prices) < 3:
-        scope = db.query(Task.reward_points).filter(
-            Task.status == "completed",
-            Task.reward_points.isnot(None),
-            Task.reward_points > 0,
-        )
-        if category:
-            scope = scope.filter(Task.category == category)
-        scope = scope.order_by(Task.completed_at.desc()).limit(50)
-        prices = [int(p) for (p,) in scope.all() if p is not None] or prices
+    if category:
+        scope = scope.filter(Task.category == category)
+    scope = scope.order_by(Task.completed_at.desc()).limit(50)
+    prices = [int(p) for (p,) in scope.all() if p is not None]
     if not prices:
         return int(reward_points or 0)
-    median = int(statistics.median(prices))
-    return max(1, median)
+    return max(1, int(statistics.median(prices)))
+
+
+def _price_fit_score(task_reward: int, agent_median_price: Optional[int]) -> int:
+    """历史价位相近度（0–20）：任务奖励与 Agent 历史中位价越接近分越高。
+
+    任务无奖励或 Agent 无历史价位时返回 0（中性，不加不减），避免无经验 Agent 蹭分。
+    """
+    if not task_reward or task_reward <= 0:
+        return 0
+    if not agent_median_price or agent_median_price <= 0:
+        return 0
+    lo, hi = sorted((float(task_reward), float(agent_median_price)))
+    ratio = lo / hi if hi > 0 else 0.0
+    return int(round(20 * ratio))
 
 
 def _score_candidate(
@@ -93,10 +118,18 @@ def _score_candidate(
     *,
     task_skill_token: Optional[str],
     task_skills: List[str],
+    task_reward: int = 0,
+    agent_median_price: Optional[int] = None,
 ) -> Dict[str, Any]:
-    """基础分：信誉分 0–100；加成部分 0–60；总分 0–160。"""
+    """基础分：信誉分 0–100；加成 skill_token 50 + skill_overlap 20 + recent 10 + price_fit 20；总分 0–200。"""
     base = int(card.get("reputation_score", 60))
-    breakdown = {"reputation": base, "skill_token": 0, "skill_overlap": 0, "recent_activity": 0}
+    breakdown = {
+        "reputation": base,
+        "skill_token": 0,
+        "skill_overlap": 0,
+        "recent_activity": 0,
+        "price_fit": 0,
+    }
     bonus = 0
 
     agent_token = card["agent"].get("skill_token")
@@ -117,6 +150,11 @@ def _score_candidate(
         v = min(10, recent * 2)
         breakdown["recent_activity"] = v
         bonus += v
+
+    price_fit = _price_fit_score(int(task_reward or 0), agent_median_price)
+    if price_fit > 0:
+        breakdown["price_fit"] = price_fit
+        bonus += price_fit
 
     return {
         "total_score": base + bonus,
@@ -173,10 +211,16 @@ def recommend_candidates_for_task(
             card = None
         if not card:
             continue
-        match = _score_candidate(card, task_skill_token=task_token, task_skills=task_skills)
+        agent_median = _agent_median_price(db, a.id, min_samples=1)
+        match = _score_candidate(
+            card,
+            task_skill_token=task_token,
+            task_skills=task_skills,
+            task_reward=reward_points,
+            agent_median_price=agent_median,
+        )
         price = _suggested_price(
             db,
-            skill_token=task_token,
             category=getattr(task, "category", None),
             reward_points=reward_points,
             agent_id=a.id,
@@ -187,6 +231,7 @@ def recommend_candidates_for_task(
             "reputation_score": card["reputation_score"],
             "match": match,
             "suggested_price": price,
+            "agent_median_price": agent_median,
         })
 
     # NOTE: 首过验收率 > 80% 的候选人自然排前；否则按总分降序
