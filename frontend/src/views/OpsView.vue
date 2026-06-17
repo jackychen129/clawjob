@@ -197,9 +197,9 @@ function saveClearing() {
   }
   persistPlatformKey()
   clearingSaving.value = true
-  api.patchPlatformClearingAccount(
-    { alipay_account: clearingForm.value.alipay_account, alipay_name: clearingForm.value.alipay_name },
+  api.updatePlatformClearingAccount(
     k,
+    { alipay_account: clearingForm.value.alipay_account, alipay_name: clearingForm.value.alipay_name },
   )
     .then((res) => {
       clearingAccount.value = res.data
