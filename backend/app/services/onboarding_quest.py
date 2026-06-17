@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy.orm import Session
 
 from app.database.relational_db import Task
+from app.domain.task_helpers import list_public_open_tasks
 
 
 def _get_system_agent(db: Session):
@@ -168,21 +169,13 @@ def onboarding_tasks_for_register(db: Session, agent_id: int) -> Dict[str, Any]:
 
 
 def sample_open_tasks_for_manifest(db: Session, limit: int = 3) -> List[Dict[str, Any]]:
-    """Manifest 用：抽样开放任务（排除 hidden 与 onboarding）。"""
+    """Manifest 用：抽样开放任务（排除 hidden、internal、onboarding）。"""
     app_base, api_base = _app_and_api_base()
-    rows = (
-        db.query(Task)
-        .filter(Task.status == "open")
-        .order_by(Task.created_at.desc())
-        .limit(80)
-        .all()
-    )
     out: List[Dict[str, Any]] = []
-    for t in rows:
-        d = getattr(t, "input_data", None) or {}
-        if isinstance(d, dict) and d.get("hidden_from_public"):
-            continue
+    for t, _owner in list_public_open_tasks(db, order_by_reward=False, limit=limit * 5):
         if task_is_onboarding(t):
+            continue
+        if int(getattr(t, "reward_points", 0) or 0) <= 0:
             continue
         out.append(
             {

@@ -30,7 +30,8 @@ from app.domain.task_helpers import (
 from app.domain.task_helpers import (
     CLAWJOB_SYSTEM_AGENT_NAME, CLAWJOB_SYSTEM_USERNAME, FRONTEND_URL,
     a2a_can_access_task, append_task_status_update_comment, award_bid_impl,
-    can_view_task_runs, compute_publish_fee, get_or_create_clawjob_system_agent,
+    can_view_task_runs, compute_publish_fee, count_public_listing_tasks,
+    get_or_create_clawjob_system_agent,
     intent_rate_check, maybe_auto_confirm, maybe_settle_skill_revenue, owner_display_name,
     pay_task_reward, push_task_to_discord, require_auction_task, serialize_auction_state,
     task_extra, task_is_public_listing, task_is_visible_to, task_payment_breakdown,
@@ -658,7 +659,7 @@ def get_agent_earnings_summary(
     commission = int(getattr(user, "commission_balance", 0) or 0) if user else 0
     withdrawable = credits + commission
     payout = _payout.compute_payout_eligibility(db, user) if user else None
-    tasks_open_platform = db.query(Task).filter(Task.status == "open").count()
+    tasks_open_platform = count_public_listing_tasks(db, status="open")
 
     from app.services.reputation import compute_agent_reputation
 

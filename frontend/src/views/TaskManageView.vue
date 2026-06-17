@@ -803,6 +803,56 @@
                     </template>
                   </dl>
                 </div>
+                <div class="task-step-replay">
+                  <div class="task-step-replay__head">
+                    <h4 class="task-observability-sub">{{ t('task.stepReplayTitle') || '执行回放' }}</h4>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      type="button"
+                      :disabled="taskRunsLoading"
+                      @click="loadTaskRuns"
+                    >{{ taskRunsLoading ? '…' : (taskRunsLoaded ? (t('common.refresh') || '刷新') : (t('task.stepReplayLoad') || '加载运行记录')) }}</Button>
+                  </div>
+                  <p class="hint">{{ t('task.stepReplayHint') || '查看每次执行的工具调用、A2A 消息与中间输出，可导出审计 JSON。' }}</p>
+                  <p v-if="taskRunsLoaded && !taskRunsLoading && !taskRuns.length" class="hint">{{ t('task.stepReplayEmpty') || '暂无执行运行记录。' }}</p>
+                  <ul v-if="taskRuns.length" class="task-run-list">
+                    <li v-for="run in taskRuns" :key="run.run_id" class="task-run-item">
+                      <button type="button" class="task-run-row" :class="{ active: selectedRunId === run.run_id }" @click="loadRunSteps(run.run_id)">
+                        <span class="task-run-status" :class="run.ok ? 'ok' : (run.quota_exceeded ? 'quota' : 'fail')">
+                          {{ run.ok ? '✓' : (run.quota_exceeded ? '⏱' : '✕') }}
+                        </span>
+                        <span class="task-run-id mono">{{ run.run_id.slice(0, 8) }}</span>
+                        <span class="task-run-meta mono">{{ run.duration_ms }}ms · {{ run.tokens_used }}tok · {{ run.cost_credits }}cr</span>
+                        <span class="task-run-time">{{ run.started_at ? formatCommentTime(run.started_at) : '—' }}</span>
+                      </button>
+                      <div v-if="selectedRunId === run.run_id" class="task-run-detail">
+                        <div class="task-run-detail__bar">
+                          <span v-if="run.error" class="task-run-error mono">{{ run.error }}</span>
+                          <Button size="sm" variant="ghost" type="button" :disabled="runExporting" @click="exportRun(run.run_id)">{{ t('task.stepReplayExport') || '导出审计 JSON' }}</Button>
+                        </div>
+                        <div v-if="runStepsLoading" class="loading"><div class="spinner"></div></div>
+                        <ol v-else-if="runSteps.length" class="task-step-list">
+                          <li v-for="step in runSteps" :key="step.idx" class="task-step-item" :class="{ 'task-step-item--fail': !step.ok }">
+                            <div class="task-step-head">
+                              <span class="task-step-idx mono">#{{ step.idx }}</span>
+                              <span class="task-step-kind">{{ step.kind }}</span>
+                              <span v-if="step.name" class="task-step-name">{{ step.name }}</span>
+                              <span class="task-step-dur mono">{{ step.duration_ms }}ms</span>
+                            </div>
+                            <p v-if="step.error" class="task-step-error mono">{{ step.error }}</p>
+                            <details v-if="step.input || step.output" class="task-step-io">
+                              <summary>{{ t('task.stepReplayIo') || '输入 / 输出' }}</summary>
+                              <pre v-if="step.input" class="mono task-step-io__pre">in: {{ JSON.stringify(step.input, null, 2) }}</pre>
+                              <pre v-if="step.output" class="mono task-step-io__pre">out: {{ JSON.stringify(step.output, null, 2) }}</pre>
+                            </details>
+                          </li>
+                        </ol>
+                        <p v-else class="hint">{{ t('task.stepReplayNoSteps') || '该运行无步骤记录。' }}</p>
+                      </div>
+                    </li>
+                  </ul>
+                </div>
                 <p class="hint task-execute-obs-hint">{{ t('task.executeRetryApiHint') }}</p>
               </details>
               <p v-if="selectedTaskDetail.status === 'pending_verification' && selectedTaskDetail.verification_deadline_at" class="hint task-verify-hint">
@@ -2608,6 +2658,14 @@ const a2aSyncLoading = ref(false)
 const verificationChainLoading = ref(false)
 const verificationChainJson = ref('')
 const verificationChainData = ref<any>(null)
+// C-11 Step replay：执行运行列表 + 步骤时间轴（懒加载）
+const taskRuns = ref<api.ExecutionRunItem[]>([])
+const taskRunsLoading = ref(false)
+const taskRunsLoaded = ref(false)
+const selectedRunId = ref<string | null>(null)
+const runSteps = ref<api.ExecutionStepItem[]>([])
+const runStepsLoading = ref(false)
+const runExporting = ref(false)
 /** 登录用户可见：Workflow 只读拓扑（含接取方） */
 type WorkflowDagPayload = { nodes: number[]; edges: Array<{ from: number; to: number }>; topo_order?: number[] }
 const workflowPreviewLoading = ref(false)
@@ -2679,6 +2737,10 @@ function openTaskDetail(task: TaskListItem) {
   a2aSync.value = null
   verificationChainJson.value = ''
   verificationChainData.value = null
+  taskRuns.value = []
+  taskRunsLoaded.value = false
+  selectedRunId.value = null
+  runSteps.value = []
   workflowJson.value = ''
   workflowNodes.value = [task.id]
   workflowEdges.value = []
@@ -2836,6 +2898,59 @@ function loadVerificationChain() {
     })
     .catch((e: unknown) => { verificationChainJson.value = JSON.stringify({ error: String(e) }, null, 2) })
     .finally(() => { verificationChainLoading.value = false })
+}
+
+function loadTaskRuns() {
+  const task = selectedTaskDetail.value
+  if (!task) return
+  taskRunsLoading.value = true
+  taskRunsLoaded.value = true
+  api.listTaskRuns(task.id, 20)
+    .then((res) => {
+      taskRuns.value = res.data.items || []
+      // 默认展开最近一次运行的步骤
+      if (taskRuns.value.length) loadRunSteps(taskRuns.value[0].run_id)
+    })
+    .catch(() => { taskRuns.value = [] })
+    .finally(() => { taskRunsLoading.value = false })
+}
+
+function loadRunSteps(runId: string) {
+  const task = selectedTaskDetail.value
+  if (!task) return
+  if (selectedRunId.value === runId && runSteps.value.length) {
+    // 再次点击同一运行则折叠
+    selectedRunId.value = null
+    runSteps.value = []
+    return
+  }
+  selectedRunId.value = runId
+  runStepsLoading.value = true
+  runSteps.value = []
+  api.fetchTaskRunSteps(task.id, runId)
+    .then((res) => { runSteps.value = res.data.steps || [] })
+    .catch(() => { runSteps.value = [] })
+    .finally(() => { runStepsLoading.value = false })
+}
+
+function exportRun(runId: string) {
+  const task = selectedTaskDetail.value
+  if (!task) return
+  runExporting.value = true
+  api.exportTaskRun(task.id, runId)
+    .then((res) => {
+      const blob = new Blob([JSON.stringify(res.data, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `task-${task.id}-run-${runId}.json`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    })
+    .catch(() => {})
+    .finally(() => { runExporting.value = false })
 }
 
 const workflowNodeOptions = computed(() => {
@@ -4250,6 +4365,35 @@ watch(tab, (newTab) => {
 }
 .task-last-execute { margin-top: var(--space-3); }
 .task-execute-obs-hint { margin: var(--space-3) 0 0; }
+.task-step-replay { margin-top: var(--space-4); padding-top: var(--space-3); border-top: var(--border-hairline); }
+.task-step-replay__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); flex-wrap: wrap; }
+.task-run-list { list-style: none; margin: var(--space-3) 0 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.task-run-row { display: flex; align-items: center; gap: var(--space-3); width: 100%; text-align: left; appearance: none; background: rgba(255,255,255,0.02); border: var(--border-hairline); border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3); cursor: pointer; font: inherit; color: var(--text-primary); transition: background 0.15s ease, border-color 0.15s ease; }
+.task-run-row:hover { background: rgba(255,255,255,0.05); }
+.task-run-row.active { border-color: rgba(var(--primary-rgb), 0.5); background: rgba(var(--primary-rgb), 0.08); }
+.task-run-row:focus-visible { outline: none; box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.35); }
+.task-run-status { display: inline-flex; align-items: center; justify-content: center; width: 1.4rem; height: 1.4rem; border-radius: var(--radius-full); font-size: 0.75rem; font-weight: 700; }
+.task-run-status.ok { background: rgba(34,197,94,0.18); color: #86efac; }
+.task-run-status.fail { background: rgba(239,68,68,0.18); color: #fca5a5; }
+.task-run-status.quota { background: rgba(251,146,60,0.18); color: #fdba74; }
+.task-run-id { font-size: var(--font-caption); color: var(--text-secondary); }
+.task-run-meta { font-size: var(--font-caption); color: var(--text-tertiary, var(--text-secondary)); margin-left: auto; }
+.task-run-time { font-size: var(--font-caption); color: var(--text-secondary); }
+.task-run-detail { margin: var(--space-2) 0 0; padding: var(--space-3); border: var(--border-hairline); border-radius: var(--radius-sm); background: rgba(0,0,0,0.14); }
+.task-run-detail__bar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-2); }
+.task-run-error { color: #fca5a5; font-size: var(--font-caption); }
+.task-step-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.task-step-item { padding: var(--space-2) var(--space-3); border-left: 2px solid rgba(var(--primary-rgb), 0.4); background: rgba(255,255,255,0.02); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+.task-step-item--fail { border-left-color: rgba(239,68,68,0.6); }
+.task-step-head { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; font-size: var(--font-caption); }
+.task-step-idx { color: var(--text-secondary); }
+.task-step-kind { font-weight: 600; color: var(--text-primary); }
+.task-step-name { color: var(--text-secondary); }
+.task-step-dur { margin-left: auto; color: var(--text-tertiary, var(--text-secondary)); }
+.task-step-error { margin: var(--space-1) 0 0; color: #fca5a5; font-size: var(--font-caption); }
+.task-step-io { margin-top: var(--space-1); }
+.task-step-io summary { cursor: pointer; font-size: var(--font-caption); color: var(--text-secondary); }
+.task-step-io__pre { max-height: 200px; overflow: auto; margin: var(--space-1) 0 0; padding: var(--space-2); background: rgba(0,0,0,0.25); border-radius: var(--radius-sm); font-size: 0.72rem; white-space: pre-wrap; word-break: break-word; }
 .task-detail-completion-submission { margin-top: var(--space-5); padding: var(--space-4); background: var(--surface); border-radius: var(--radius-sm); }
 .task-detail-completion-submission .completion-summary { margin: 0 0 0.5rem; white-space: pre-wrap; font-size: 0.9rem; color: var(--text-secondary); }
 .task-detail-completion-submission .completion-link { margin: 0; font-size: 0.9rem; }

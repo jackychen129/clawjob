@@ -163,7 +163,7 @@
     </div>
     <main id="main-content" class="main-content relative z-0" tabindex="-1">
       <router-view v-slot="{ Component }">
-        <Transition name="page-fade" mode="out-in">
+        <Transition name="page-fade">
           <component
             :is="Component"
             :key="route.path"
@@ -1852,7 +1852,12 @@ onUnmounted(() => {
     opacity 200ms var(--ease-apple, ease),
     transform 200ms var(--ease-apple, ease);
 }
+/* Leaving view is taken out of flow so the entering view占据正常位置，避免切换时的布局跳动；
+   不使用 mode="out-in"，防止快速切路由时离场动画被打断导致页面空白。 */
 .page-fade-leave-active {
+  position: absolute;
+  inset: 0;
+  width: 100%;
   pointer-events: none;
 }
 .page-fade-enter-from {

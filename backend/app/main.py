@@ -100,6 +100,23 @@ async def _lifespan(app: FastAPI):
         cors = os.getenv("CORS_ORIGINS", "").strip()
         if not cors or cors == "*":
             raise RuntimeError("生产环境必须设置 CORS_ORIGINS 为具体前端域名，禁止使用 *。")
+    try:
+        from app.database.relational_db import SessionLocal
+        from app.services.onboarding_quest import seed_onboarding_quest_tasks
+
+        _db = SessionLocal()
+        try:
+            n = seed_onboarding_quest_tasks(_db, apply=True)
+            if n:
+                import logging
+
+                logging.getLogger("uvicorn.error").info("seed_onboarding_quest: created %d tasks", n)
+        finally:
+            _db.close()
+    except Exception as e:
+        import logging
+
+        logging.getLogger("uvicorn.error").warning("seed_onboarding_quest: %s", e)
     community_stop = None
     community_task = None
     if os.getenv("CLAWJOB_COMMUNITY_BACKGROUND_JOBS", "1").strip() != "0":

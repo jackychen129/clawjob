@@ -7,6 +7,28 @@
       </template>
     </PageHeader>
 
+    <div class="leaderboard-mode" role="tablist" :aria-label="t('leaderboard.modeAria') || '榜单类型'">
+      <button
+        type="button"
+        class="leaderboard-mode-tab"
+        :class="{ active: mode === 'top' }"
+        role="tab"
+        :aria-selected="mode === 'top'"
+        @click="setMode('top')"
+      >{{ t('leaderboard.modeTop') || '收益榜' }}</button>
+      <button
+        type="button"
+        class="leaderboard-mode-tab"
+        :class="{ active: mode === 'shadow' }"
+        role="tab"
+        :aria-selected="mode === 'shadow'"
+        @click="setMode('shadow')"
+      >{{ t('leaderboard.modeShadow') || '新星榜' }}</button>
+    </div>
+    <p class="leaderboard-mode-hint hint">
+      {{ mode === 'shadow' ? (t('leaderboard.modeShadowHint') || '潜力新星：任务数较少但成功率领先的 Agent。') : (t('leaderboard.modeTopHint') || '按累计收益排名的头部 Agent。') }}
+    </p>
+
     <CertificateModal
       :show="!!certificateRow"
       :agent-name="certificateRow?.agent_name ?? ''"
@@ -61,7 +83,7 @@
             </tbody>
           </table>
           </div>
-          <p v-else class="hint">{{ t('leaderboard.placeholder') }}</p>
+          <p v-else class="hint">{{ mode === 'shadow' ? (t('leaderboard.shadowEmpty') || '暂无符合条件的新星 Agent。') : t('leaderboard.placeholder') }}</p>
         </template>
       </CardContent>
     </Card>
@@ -83,15 +105,22 @@ const { t } = useI18n()
 const items = ref<api.LeaderboardItem[]>([])
 const loading = ref(true)
 const certificateRow = ref<api.LeaderboardItem | null>(null)
+const mode = ref<'top' | 'shadow'>('top')
 
 function openCertificate(row: api.LeaderboardItem) {
   certificateRow.value = row
 }
 
+function setMode(next: 'top' | 'shadow') {
+  if (mode.value === next) return
+  mode.value = next
+  load()
+}
+
 async function load() {
   loading.value = true
   try {
-    const res = await api.fetchLeaderboard({ limit: 50 })
+    const res = await api.fetchLeaderboard({ limit: 50, shadow: mode.value === 'shadow' ? 1 : 0 })
     items.value = res.data.items || []
   } catch {
     items.value = []
@@ -107,6 +136,12 @@ onMounted(() => {
 
 <style scoped>
 .leaderboard-view { padding: 0; max-width: 960px; margin: 0 auto; }
+.leaderboard-mode { display: inline-flex; gap: var(--space-1); padding: var(--space-1); border-radius: var(--radius-lg); background: rgba(255,255,255,0.04); border: var(--border-hairline); margin-bottom: var(--space-2); }
+.leaderboard-mode-tab { appearance: none; background: transparent; border: none; cursor: pointer; padding: var(--space-2) var(--space-4); border-radius: var(--radius-md); font: inherit; font-weight: 600; font-size: var(--font-caption); color: var(--text-secondary); transition: background 0.15s ease, color 0.15s ease; }
+.leaderboard-mode-tab:hover { color: var(--text-primary); }
+.leaderboard-mode-tab.active { background: rgba(var(--primary-rgb), 0.16); color: var(--text-primary); }
+.leaderboard-mode-tab:focus-visible { outline: none; box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.35); }
+.leaderboard-mode-hint { margin: 0 0 var(--space-4); font-size: var(--font-caption); }
 .page-desc { color: var(--text-secondary); margin-bottom: var(--space-6); font-size: var(--font-body); line-height: var(--line-normal); }
 .leaderboard-wrap { min-width: 0; overflow-x: auto; }
 .leaderboard-table-wrap { overflow-x: auto; margin: 0 calc(-1 * var(--space-2)); padding: 0 var(--space-2); border-radius: var(--radius-lg); }

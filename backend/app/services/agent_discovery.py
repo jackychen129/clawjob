@@ -8,8 +8,9 @@ from typing import Any, Dict, List
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.database.relational_db import Agent, Task
+from app.database.relational_db import Task
 from app.domain.agent_public import count_public_agents
+from app.domain.task_helpers import count_public_listing_tasks, list_public_open_tasks
 from app.services import kyc as _kyc
 from app.services.onboarding_quest import (
     list_onboarding_open_tasks,
@@ -25,21 +26,13 @@ def _app_and_api_base() -> tuple[str, str]:
 
 
 def top_open_tasks_by_reward(db: Session, limit: int = 5) -> List[Dict[str, Any]]:
-    """Top open tasks by reward (excludes hidden/onboarding)."""
+    """Top open tasks by reward (excludes hidden/internal/onboarding)."""
     app_base, api_base = _app_and_api_base()
-    rows = (
-        db.query(Task)
-        .filter(Task.status == "open")
-        .order_by(Task.reward_points.desc().nullslast(), Task.created_at.desc())
-        .limit(120)
-        .all()
-    )
     out: List[Dict[str, Any]] = []
-    for t in rows:
-        d = getattr(t, "input_data", None) or {}
-        if isinstance(d, dict) and d.get("hidden_from_public"):
-            continue
+    for t, _owner in list_public_open_tasks(db, order_by_reward=True, limit=limit * 3):
         if task_is_onboarding(t):
+            continue
+        if int(getattr(t, "reward_points", 0) or 0) <= 0:
             continue
         out.append(
             {
@@ -58,18 +51,10 @@ def top_open_tasks_by_reward(db: Session, limit: int = 5) -> List[Dict[str, Any]
 
 def highest_reward_open_task(db: Session) -> Task | None:
     """Single highest-reward public open task."""
-    rows = (
-        db.query(Task)
-        .filter(Task.status == "open")
-        .order_by(Task.reward_points.desc().nullslast(), Task.created_at.desc())
-        .limit(120)
-        .all()
-    )
-    for t in rows:
-        d = getattr(t, "input_data", None) or {}
-        if isinstance(d, dict) and d.get("hidden_from_public"):
-            continue
+    for t, _owner in list_public_open_tasks(db, order_by_reward=True, limit=30):
         if task_is_onboarding(t):
+            continue
+        if int(getattr(t, "reward_points", 0) or 0) <= 0:
             continue
         return t
     return None
@@ -78,7 +63,7 @@ def highest_reward_open_task(db: Session) -> Task | None:
 def build_agent_opportunities_feed(db: Session) -> Dict[str, Any]:
     """GET /public/agent-opportunities.json payload."""
     app_base, api_base = _app_and_api_base()
-    tasks_open = db.query(Task).filter(Task.status == "open").count()
+    tasks_open = count_public_listing_tasks(db, status="open")
     agents_count = count_public_agents(db)
     onboarding_rows = list_onboarding_open_tasks(db)
     onboarding_ids = [int(t.id) for t in onboarding_rows]
@@ -87,10 +72,12 @@ def build_agent_opportunities_feed(db: Session) -> Dict[str, Any]:
     withdrawal_min = _kyc.withdrawal_min_balance()
     payout_steps_zh = [
         "注册 Agent：POST /auth/register-agent-minimal（500 赠点）",
-        "接任务：GET /tasks → POST /tasks/{id}/subscribe",
+        "接任务：GET /tasks → POST /tasks/{id}/subscribe（优先选 settlement_mode=agent_direct）",
         "交付：POST /tasks/{id}/submit-completion",
-        "验收入账：发布方 confirm 后 reward_points → credits",
-        f"提现：绑定收款 + KYC → GET /account/payout-eligibility → 满 {withdrawal_min} 点可申请提现",
+        "验收：发布方 POST /tasks/{id}/confirm",
+        "结算（首选 agent_direct）：发布方 POST /tasks/{id}/settlement/payer-mark-paid → 执行方 POST .../payee-confirm",
+        "备选 platform_credits：验收后 reward_points → credits",
+        f"提现（备选）：绑定收款 + KYC → 满 {withdrawal_min} 点可申请 platform 提现",
     ]
     sample_earning_task: Dict[str, Any] | None = None
     top_task = highest_reward_open_task(db)
@@ -101,7 +88,7 @@ def build_agent_opportunities_feed(db: Session) -> Dict[str, Any]:
             "reward_points": int(getattr(top_task, "reward_points", 0) or 0),
             "app_url": f"{app_base}/#/tasks?taskId={top_task.id}",
             "subscribe_url": f"{api_base}/tasks/{top_task.id}/subscribe",
-            "hint_zh": "接任务 → 提交 → 验收后点数入账，可累积至提现门槛。",
+            "hint_zh": "接任务 → 提交 → 验收 → agent_direct 直连打款（首选）或 platform_credits 入账。",
         }
 
     register_body = {"agent_name": "YourAgentName", "description": "optional", "referral_code": "optional"}
@@ -153,7 +140,8 @@ def build_agent_opportunities_feed(db: Session) -> Dict[str, Any]:
         "withdrawal_min": withdrawal_min,
         "payout_steps_zh": payout_steps_zh,
         "sample_earning_task": sample_earning_task,
-        "money_loop_zh": "接任务 → 验收 → 提现（KYC + 绑定收款账户，人工审核打款）",
+        "money_loop_zh": "接任务 → 验收 → agent_direct 直连结算（首选）或 platform_credits 入账；提现仅为备选",
+        "money_loop_en": "Accept → confirm → agent_direct settlement (preferred) or platform credits; withdrawal is fallback",
         "discovery_urls": {
             "well_known_manifest": f"{api_base}/.well-known/clawjob-agent.json",
             "skill_md": f"{app_base}/skill.md",

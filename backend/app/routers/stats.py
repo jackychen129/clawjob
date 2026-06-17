@@ -176,8 +176,8 @@ def get_activity(limit: int = 50, db: Session = Depends(get_db)):
 
 
 @router.get("/leaderboard")
-def get_leaderboard(skip: int = 0, limit: int = 50, db: Session = Depends(get_db)):
-    """Agent 声誉排行榜：Earned、完成任务数、成功率。shadow=1 时仅返回新星（注册不久、任务数少但成功率高的 Agent）。"""
+def get_leaderboard(skip: int = 0, limit: int = 50, shadow: int = 0, db: Session = Depends(get_db)):
+    """Agent 声誉排行榜：Earned、完成任务数、成功率。shadow=1 时仅返回新星（任务数少但成功率高的 Agent）。"""
     # NOTE: translated comment in English.
     from sqlalchemy import case
     completed_subq = (
@@ -209,21 +209,22 @@ def get_leaderboard(skip: int = 0, limit: int = 50, db: Session = Depends(get_db
         .outerjoin(total_subq, Agent.id == total_subq.c.agent_id)
     )
     q = apply_public_agent_filters(q)
-    fetch_n = max(limit * 3, limit + 20)
+    is_shadow = bool(int(shadow or 0))
+    # 影子榜（新星）需要更大候选集，便于在内存中按成功率筛选 / 排序
+    fetch_n = 500 if is_shadow else max(limit * 3, limit + 20)
     rows = (
         q.order_by(completed_subq.c.earned.desc().nullslast(), Agent.id.desc())
-        .offset(skip)
+        .offset(0 if is_shadow else skip)
         .limit(fetch_n)
         .all()
     )
-    rows = filter_public_agent_rows(rows)[:limit]
-    out = []
-    for i, (a, owner, completed_count, earned, total_count) in enumerate(rows):
+    rows = filter_public_agent_rows(rows)
+    entries = []
+    for (a, owner, completed_count, earned, total_count) in rows:
         total_count = total_count or 0
         completed_count = completed_count or 0
         success_rate = (completed_count / total_count * 100) if total_count else 0
-        out.append({
-            "rank": skip + i + 1,
+        entries.append({
             "agent_id": a.id,
             "agent_name": a.name,
             "owner_name": _owner_display_name(owner.username if owner else None),
@@ -233,6 +234,20 @@ def get_leaderboard(skip: int = 0, limit: int = 50, db: Session = Depends(get_db
             "success_rate": round(success_rate, 1),
             "certified": False,  # 预留：Playbook 验证后为 True
         })
+    if is_shadow:
+        # 新星：完成 ≥1 单、总任务数较少（≤5）、成功率 ≥50%，按成功率→收益排序
+        entries = [
+            e for e in entries
+            if e["tasks_completed"] >= 1 and e["tasks_total"] <= 5 and e["success_rate"] >= 50.0
+        ]
+        entries.sort(key=lambda e: (e["success_rate"], e["earned"]), reverse=True)
+        entries = entries[skip: skip + limit]
+    else:
+        entries = entries[:limit]
+    out = []
+    for i, e in enumerate(entries):
+        e["rank"] = skip + i + 1
+        out.append(e)
     return {"items": out, "total": len(out)}
 @router.get("/stats/roi-series")
 def get_roi_series(days: int = 14, db: Session = Depends(get_db)):

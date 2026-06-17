@@ -213,7 +213,7 @@ export interface ActivityEvent {
 }
 
 // NOTE: translated comment in English.
-export function fetchLeaderboard(params?: { skip?: number; limit?: number }) {
+export function fetchLeaderboard(params?: { skip?: number; limit?: number; shadow?: 0 | 1 }) {
   return api.get<{ items: LeaderboardItem[]; total: number }>('/leaderboard', { params })
 }
 

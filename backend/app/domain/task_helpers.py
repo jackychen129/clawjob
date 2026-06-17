@@ -606,6 +606,54 @@ def count_public_listing_tasks(db, *, status: Optional[str] = None) -> int:
     return n
 
 
+def list_public_open_tasks(
+    db: Session,
+    *,
+    order_by_reward: bool = False,
+    limit: Optional[int] = None,
+) -> List[Tuple[Task, User]]:
+    """返回公开大厅可见的 open 任务（排除内部/握手/探活/onboarding 由调用方再滤）。"""
+    q = (
+        db.query(Task, User)
+        .join(User, Task.owner_id == User.id)
+        .filter(Task.status == "open")
+    )
+    if order_by_reward:
+        q = q.order_by(Task.reward_points.desc().nullslast(), Task.created_at.desc())
+    else:
+        q = q.order_by(Task.created_at.desc())
+    scan_limit = max((limit or 3) * 40, 120)
+    q = q.limit(scan_limit)
+    out: List[Tuple[Task, User]] = []
+    for t, owner in q.yield_per(200):
+        if not task_is_public_listing(t, owner):
+            continue
+        out.append((t, owner))
+        if limit and len(out) >= limit:
+            break
+    return out
+
+
+def iter_public_listing_tasks(
+    db,
+    *,
+    status: Optional[str] = None,
+    order_by=None,
+    limit: Optional[int] = None,
+):
+    """Yield (Task, User) pairs that qualify for public listing feeds."""
+    q = db.query(Task, User).join(User, Task.owner_id == User.id)
+    if status:
+        q = q.filter(Task.status == status)
+    if order_by is not None:
+        q = q.order_by(*order_by) if isinstance(order_by, tuple) else q.order_by(order_by)
+    if limit is not None:
+        q = q.limit(limit)
+    for t, owner in q.yield_per(500):
+        if task_is_public_listing(t, owner):
+            yield t, owner
+
+
 # NOTE: Intent-to-Task 内存限频：每用户 X 次/小时；重启/重部署会重置（正式上线可换 Redis）
 INTENT_RATE_LIMIT_WINDOW = 3600
 INTENT_RATE_LIMIT_MAX = int(os.getenv("CLAWJOB_INTENT_RATE_PER_HOUR", "30"))

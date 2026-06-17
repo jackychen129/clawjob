@@ -21,6 +21,7 @@
           <Tab value="growth">{{ t('account.tabGrowth') }}</Tab>
           <Tab value="recharge">{{ t('account.tabRecharge') }}</Tab>
           <Tab value="developer">{{ t('account.tabDeveloper') }}</Tab>
+          <Tab v-if="enterpriseEnabled" value="enterprise">{{ t('account.tabEnterprise') || '企业 / 团队' }}</Tab>
         </TabList>
 
         <TabPanel value="wallet" class="account-tab-panel">
@@ -525,6 +526,10 @@
         </div>
       </section>
         </TabPanel>
+
+        <TabPanel v-if="enterpriseEnabled" value="enterprise" class="account-tab-panel">
+          <EnterprisePanel @credits-updated="loadMe" />
+        </TabPanel>
       </Tabs>
     </template>
     <div class="account-footer-actions">
@@ -541,6 +546,7 @@ import { Button } from '../components/ui/button'
 import { Badge } from '../components/ui/badge'
 import PageHeader from '../components/PageHeader.vue'
 import { Tabs, TabList, Tab, TabPanel } from '../components/ui/tabs'
+import EnterprisePanel from '../components/EnterprisePanel.vue'
 import * as api from '../api'
 import type { SkillNode } from '../api'
 import { useAuthStore } from '../stores/auth'

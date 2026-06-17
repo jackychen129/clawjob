@@ -74,26 +74,12 @@ body {
   }
 }
 
-.app-view-shell {
-  animation: view-enter 0.22s var(--ease-apple, cubic-bezier(0.25, 0.1, 0.25, 1)) both;
-}
-
-@keyframes view-enter {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .app-view-shell {
-    animation: none;
-  }
-}
+/*
+ * Page enter/leave animation is owned by the Vue <Transition name="page-fade">
+ * wrapper in App.vue. A separate CSS keyframe animation here competed with that
+ * transition on the same element and could leave the view stuck at opacity:0
+ * (blank page) after route switches, so it has been intentionally removed.
+ */
 .section-desc {
   color: var(--text-secondary);
   font-size: var(--font-body);

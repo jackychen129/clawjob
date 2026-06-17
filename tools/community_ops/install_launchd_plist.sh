@@ -5,6 +5,21 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 PLIST_DIR="$HOME/Library/LaunchAgents"
 LABEL_PREFIX="com.clawjob.ops"
+# launchd 后台进程无法访问 ~/Documents 等受 TCC 保护目录；WorkingDirectory 用 $HOME
+LAUNCHD_CWD="${HOME}"
+
+warn_protected_path() {
+  case "$ROOT_DIR" in
+    "$HOME/Documents"/*|"${HOME}/Desktop"/*|"${HOME}/Downloads"/*)
+      echo ""
+      echo "⚠️  仓库位于 macOS 受保护目录：$ROOT_DIR"
+      echo "   launchd 可能报 Operation not permitted。"
+      echo "   建议：mv 到 ~/Projects/ 或授予「完全磁盘访问权限」后重装。"
+      echo "   详见 tools/community_ops/README.md"
+      echo ""
+      ;;
+  esac
+}
 
 install_plist() {
   local name="$1"
@@ -25,7 +40,7 @@ install_plist() {
     <string>${script}</string>
   </array>
   <key>WorkingDirectory</key>
-  <string>${ROOT_DIR}</string>
+  <string>${LAUNCHD_CWD}</string>
   <key>StartInterval</key>
   <integer>${interval_sec}</integer>
   <key>StandardOutPath</key>
@@ -34,8 +49,12 @@ install_plist() {
   <string>${ROOT_DIR}/logs/launchd-${name}.err.log</string>
   <key>EnvironmentVariables</key>
   <dict>
+    <key>CLAWJOB_ROOT</key>
+    <string>${ROOT_DIR}</string>
     <key>CLAWJOB_API_URL</key>
     <string>${CLAWJOB_API_URL:-https://api.clawjob.com.cn}</string>
+    <key>HOME</key>
+    <string>${HOME}</string>
   </dict>
 </dict>
 </plist>
@@ -43,9 +62,10 @@ EOF
 
   launchctl unload "$plist" 2>/dev/null || true
   launchctl load "$plist"
-  echo "Installed: $plist (every ${interval_sec}s)"
+  echo "Installed: $plist (every ${interval_sec}s, CLAWJOB_ROOT=$ROOT_DIR)"
 }
 
+warn_protected_path
 mkdir -p "$ROOT_DIR/logs" "$PLIST_DIR"
 chmod +x "$ROOT_DIR/tools/community_ops/run_community_ops.sh"
 chmod +x "$ROOT_DIR/tools/community_ops/audit_agents_daily.sh" 2>/dev/null || true
@@ -54,24 +74,25 @@ chmod +x "$ROOT_DIR/tools/community_ops/audit_agents_daily.sh" 2>/dev/null || tr
 install_plist "community-ops" 900 "$ROOT_DIR/tools/community_ops/run_community_ops.sh"
 
 # 每 6 小时：Agent 增长日志（独立跑一次 monitor）
-cat > "$ROOT_DIR/tools/community_ops/agent_growth_6h.sh" <<'EOS'
+cat > "$ROOT_DIR/tools/community_ops/agent_growth_6h.sh" <<EOS
 #!/usr/bin/env bash
 set -euo pipefail
-ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-mkdir -p "$ROOT_DIR/logs"
-python3 "$ROOT_DIR/tools/monitor_agent_growth.py" --check-only >> "$ROOT_DIR/logs/agent_growth.log" 2>&1
+ROOT_DIR="\${CLAWJOB_ROOT:-$(cd "$(dirname "$0")/../.." && pwd)}"
+cd "\$ROOT_DIR" || exit 1
+mkdir -p "\$ROOT_DIR/logs"
+python3 "\$ROOT_DIR/tools/monitor_agent_growth.py" --check-only >> "\$ROOT_DIR/logs/agent_growth.log" 2>&1
 EOS
 chmod +x "$ROOT_DIR/tools/community_ops/agent_growth_6h.sh"
 install_plist "agent-growth" 21600 "$ROOT_DIR/tools/community_ops/agent_growth_6h.sh"
 
 # 每天：audit_agents dry-run
-cat > "$ROOT_DIR/tools/community_ops/audit_agents_daily.sh" <<'EOS'
+cat > "$ROOT_DIR/tools/community_ops/audit_agents_daily.sh" <<EOS
 #!/usr/bin/env bash
 set -euo pipefail
-ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-mkdir -p "$ROOT_DIR/logs"
-cd "$ROOT_DIR/backend"
-python3 scripts/audit_agents.py >> "$ROOT_DIR/logs/audit_agents.log" 2>&1
+ROOT_DIR="\${CLAWJOB_ROOT:-$(cd "$(dirname "$0")/../.." && pwd)}"
+cd "\$ROOT_DIR/backend" || exit 1
+mkdir -p "\$ROOT_DIR/logs"
+python3 scripts/audit_agents.py >> "\$ROOT_DIR/logs/audit_agents.log" 2>&1
 EOS
 chmod +x "$ROOT_DIR/tools/community_ops/audit_agents_daily.sh"
 install_plist "audit-agents" 86400 "$ROOT_DIR/tools/community_ops/audit_agents_daily.sh"
@@ -92,7 +113,7 @@ cat > "$OPENCLAW_PLIST" <<EOF
     <string>${ROOT_DIR}/tools/community_ops/openclaw_mission.sh</string>
   </array>
   <key>WorkingDirectory</key>
-  <string>${ROOT_DIR}</string>
+  <string>${LAUNCHD_CWD}</string>
   <key>StartCalendarInterval</key>
   <dict>
     <key>Hour</key>
@@ -106,16 +127,21 @@ cat > "$OPENCLAW_PLIST" <<EOF
   <string>${ROOT_DIR}/logs/launchd-openclaw-mission.err.log</string>
   <key>EnvironmentVariables</key>
   <dict>
+    <key>CLAWJOB_ROOT</key>
+    <string>${ROOT_DIR}</string>
     <key>CLAWJOB_API_URL</key>
     <string>${CLAWJOB_API_URL:-https://api.clawjob.com.cn}</string>
+    <key>HOME</key>
+    <string>${HOME}</string>
   </dict>
 </dict>
 </plist>
 EOF
 launchctl unload "$OPENCLAW_PLIST" 2>/dev/null || true
 launchctl load "$OPENCLAW_PLIST"
-echo "Installed: $OPENCLAW_PLIST (daily 09:00)"
+echo "Installed: $OPENCLAW_PLIST (daily 09:00, CLAWJOB_ROOT=$ROOT_DIR)"
 
 echo ""
 echo "Done. Logs: $ROOT_DIR/logs/"
+echo "Verify: CLAWJOB_ROOT=$ROOT_DIR $ROOT_DIR/tools/community_ops/run_community_ops.sh"
 echo "Uninstall: launchctl unload ~/Library/LaunchAgents/${LABEL_PREFIX}.*.plist"

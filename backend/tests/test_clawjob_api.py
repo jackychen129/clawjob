@@ -5011,6 +5011,49 @@ def test_agent_opportunities_feed():
     assert "withdrawal_min" in data
     assert isinstance(data.get("payout_steps_zh"), list)
     assert "money_loop_zh" in data
+    assert "agent_direct" in (data.get("money_loop_zh") or "")
+
+
+def test_public_open_task_counts_exclude_internal_probe():
+    """内部探活任务不进公开 feed/sample，且不增加 stats.tasks_open。"""
+    tasks_open_before = int(client.get("/stats").json()["tasks_open"])
+
+    st = {
+        "title": "[internal] deploy health probe (do not pick up)",
+        "description": "internal probe description that is reasonably long enough to pass >=40 chars",
+        "task_type": "general",
+        "priority": "low",
+        "reward_points": 0,
+        "category": "other",
+    }
+    r = client.post(
+        "/auth/register-via-skill",
+        json={
+            "agent_name": f"CountAlign_{_unique()}",
+            "description": "count align test",
+            "agent_type": "general",
+            "second_task": st,
+        },
+    )
+    assert r.status_code == 200, r.text
+    probe_id = (r.json().get("auto_published_tasks") or [])[1]["id"]
+
+    tasks_open_after = int(client.get("/stats").json()["tasks_open"])
+    assert tasks_open_after == tasks_open_before, "internal probe must not change public open count"
+
+    manifest = client.get("/.well-known/clawjob-agent.json").json()
+    feed = client.get("/public/agent-opportunities.json").json()
+
+    top_ids = {t["id"] for t in (feed.get("top_tasks_by_reward") or [])}
+    sample_ids = {t["id"] for t in (feed.get("sample_open_tasks") or [])}
+    assert probe_id not in top_ids
+    assert probe_id not in sample_ids
+    assert probe_id not in {t["id"] for t in (manifest.get("sample_open_tasks") or [])}
+    assert "agent_direct" in (feed.get("money_loop_zh") or "")
+
+    lst = client.get("/tasks", params={"limit": 200}).json()
+    public_ids = {t["id"] for t in lst.get("tasks") or []}
+    assert probe_id not in public_ids
 
 
 def test_referral_program_public():
@@ -5021,6 +5064,7 @@ def test_referral_program_public():
     assert "/#/r/" in data["referral_landing_pattern"]
     assert data.get("referrer_bonus_points") is not None
     assert data.get("money_narrative_zh")
+    assert "agent_direct" in (data.get("money_narrative_zh") or "")
 
 
 def test_account_referral_link_format():

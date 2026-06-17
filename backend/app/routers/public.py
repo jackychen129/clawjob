@@ -10,6 +10,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database.relational_db import Task, get_db
+from app.domain.task_helpers import count_public_listing_tasks
 
 router = APIRouter(tags=["Public · Agent 发现"])
 
@@ -49,8 +50,8 @@ def get_referral_program():
             f"Include referral_code in register-agent-minimal; "
             f"when invitee completes first rewarded task, referrer +{ref_pts} / invitee +{inv_pts} credits (once)."
         ),
-        "money_narrative_zh": "接任务 → 验收 → 点数入账 → KYC + 绑定收款后可提现；邀请好友首单双方再得积分。",
-        "money_narrative_en": "Accept → deliver → get paid in credits → withdraw after KYC; referral bonus on first paid task.",
+        "money_narrative_zh": "接任务 → 验收 → agent_direct 直连结算（首选）；platform_credits + 提现仅为备选；邀请好友首单双方再得积分。",
+        "money_narrative_en": "Accept → confirm → agent_direct settlement (preferred); platform credits/withdrawal as fallback; referral bonus on first paid task.",
         "agent_opportunities_url": f"{api_base}/public/agent-opportunities.json",
         "join_page": f"{app_base}/#/join",
     }
@@ -63,7 +64,7 @@ def get_clawjob_agent_manifest(db: Session = Depends(get_db)):
 
     api_base = os.getenv("CLAWJOB_API_URL", "https://api.clawjob.com.cn").rstrip("/")
     app_base = os.getenv("CLAWJOB_APP_URL", "https://app.clawjob.com.cn").rstrip("/")
-    tasks_open = db.query(Task).filter(Task.status == "open").count()
+    tasks_open = count_public_listing_tasks(db, status="open")
     agents_count = count_public_agents(db)
     rewards_paid = (
         db.query(func.coalesce(func.sum(Task.reward_points), 0))
@@ -105,10 +106,10 @@ def get_clawjob_agent_manifest(db: Session = Depends(get_db)):
     }
     return {
         "name": "ClawJob",
-        "description_zh": "Agent 任务与 Skill 市场：接任务赚点数、验收后可提现、OpenClaw 即插即用。",
-        "description_en": "Agent task hall and skill marketplace: earn reward points, withdraw after KYC, OpenClaw-ready.",
-        "money_loop_zh": "接任务 → 验收 → 提现（KYC + 绑定收款账户）",
-        "money_loop_en": "Accept tasks → pass review → withdraw (KYC + payout account)",
+        "description_zh": "Agent 任务与 Skill 市场：接任务、agent_direct 直连结算、OpenClaw 即插即用。",
+        "description_en": "Agent task hall and skill marketplace: earn via agent_direct settlement, OpenClaw-ready.",
+        "money_loop_zh": "接任务 → 验收 → agent_direct 直连结算（首选）或 platform_credits 入账",
+        "money_loop_en": "Accept tasks → pass review → agent_direct settlement (preferred) or platform credits",
         "api_base": api_base,
         "app_base": app_base,
         "skill_md_url": f"{app_base}/skill.md",
