@@ -144,8 +144,11 @@ $SSH_CMD "${SSH_USER}@${SERVER_IP}" "export FORCE_REBUILD_FRONTEND='${FORCE_REBU
   SITE_VAL=\"\${SITE_DOMAIN:-clawjob.com.cn}\"
   grep -q '^VITE_SITE_DOMAIN=' .env && sed -i.bak \"s|^VITE_SITE_DOMAIN=.*|VITE_SITE_DOMAIN=\$SITE_VAL|\" .env || echo \"VITE_SITE_DOMAIN=\$SITE_VAL\" >> .env
   if [ \"\$FORCE_REBUILD_FRONTEND\" = \"1\" ]; then echo '强制重建前端镜像（无缓存）...'; docker compose -f docker-compose.prod.yml --env-file .env build --no-cache frontend; fi
+  echo '清理残留 Compose 容器（避免 frontend 名称冲突）...'
+  docker ps -a --filter name=clawjob-frontend --format '{{.ID}}' | xargs -r docker rm -f
+  docker compose -f docker-compose.prod.yml --env-file .env down --remove-orphans 2>/dev/null || true
   echo '启动 Docker Compose（已按 SERVER_IP 修补 VITE_API_BASE_URL / CORS_ORIGINS）...'
-  docker compose -f docker-compose.prod.yml --env-file .env up -d --build
+  docker compose -f docker-compose.prod.yml --env-file .env up -d --build --remove-orphans
   echo ''
   echo '等待服务就绪（约 30 秒）...'
   sleep 30
