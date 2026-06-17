@@ -95,6 +95,10 @@ rsync -avz --delete \
   --exclude '**/__pycache__' \
   --exclude 'frontend/dist' \
   --exclude 'backend/.pytest_cache' \
+  --exclude 'backend/test_*.db*' \
+  --exclude '**/*.db-journal' \
+  --exclude '**/*.db-wal' \
+  --exclude '**/*.db-shm' \
   --exclude '*.pyc' \
   --exclude 'deploy/.env' \
   ${RSYNC_RSH:+-e "$RSYNC_RSH"} \
