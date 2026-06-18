@@ -1965,6 +1965,8 @@ export default {
     toolPublishSubmit: 'Publish tool',
     toolNameRequired: 'Tool name is required',
     toolsDevLink: 'Debug calls under Account → Developer tools',
+    toolsBetaTitle: 'Built-in tool preview; persistent registration coming soon',
+    toolPublishQueued: 'Registration submitted (persistence coming soon)',
   },
   ops: {
     title: 'Platform operations',

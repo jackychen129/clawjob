@@ -151,7 +151,7 @@
                         <div class="task-table-actions">
                           <Button size="sm" variant="ghost" type="button" @click="openTaskDetail(task)">{{ t('task.viewDetail') }}</Button>
                           <Button v-if="task.status === 'open' && auth.isLoggedIn && myAgents.length" size="sm" :disabled="subscribeLoading === task.id" @click="openSubscribeModal(task)">{{ t('task.subscribe') }}</Button>
-                          <Button v-else-if="task.status === 'open' && !auth.isLoggedIn" size="sm" variant="secondary" type="button" @click="showAuthModal = true">{{ t('task.loginToAccept') }}</Button>
+                          <Button v-else-if="task.status === 'open' && !auth.isLoggedIn" size="sm" variant="secondary" type="button" @click="openAuth()">{{ t('task.loginToAccept') }}</Button>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -189,7 +189,7 @@
                     <div class="task-row__actions" @click.stop>
                       <Button size="sm" variant="ghost" type="button" class="task-row__btn" @click="openTaskDetail(item.data!)">{{ t('task.viewDetail') }}</Button>
                       <Button v-if="item.data!.status === 'open' && auth.isLoggedIn && myAgents.length" size="sm" :disabled="subscribeLoading === item.data!.id" class="task-row__btn task-row__btn--primary" @click="openSubscribeModal(item.data!)">{{ t('task.subscribe') }}</Button>
-                      <Button v-else-if="item.data!.status === 'open' && !auth.isLoggedIn" size="sm" variant="secondary" type="button" class="task-row__btn" @click="showAuthModal = true">{{ t('task.loginToAccept') }}</Button>
+                      <Button v-else-if="item.data!.status === 'open' && !auth.isLoggedIn" size="sm" variant="secondary" type="button" class="task-row__btn" @click="openAuth()">{{ t('task.loginToAccept') }}</Button>
                     </div>
                   </article>
                 </div>
@@ -216,7 +216,7 @@
               size="lg"
             >
               <template #actions>
-                <Button type="button" @click="showAuthModal = true">{{ t('common.loginOrRegister') }}</Button>
+                <Button type="button" @click="openAuth()">{{ t('common.loginOrRegister') }}</Button>
               </template>
             </EmptyState>
             <template v-else>
@@ -381,7 +381,7 @@
               size="lg"
             >
               <template #actions>
-                <Button type="button" @click="showAuthModal = true">{{ t('common.loginOrRegister') }}</Button>
+                <Button type="button" @click="openAuth()">{{ t('common.loginOrRegister') }}</Button>
               </template>
             </EmptyState>
             <template v-else>
@@ -567,7 +567,7 @@
               size="lg"
             >
               <template #actions>
-                <Button type="button" @click="showAuthModal = true">{{ t('common.loginOrRegister') }}</Button>
+                <Button type="button" @click="openAuth()">{{ t('common.loginOrRegister') }}</Button>
               </template>
             </EmptyState>
             <template v-else>
@@ -1357,7 +1357,7 @@
         <h3 class="modal-title">{{ t('task.publish') }}</h3>
         <div v-if="!auth.isLoggedIn" class="card-content publish-gate">
           <p class="hint">{{ t('task.publishHint') }}</p>
-          <Button type="button" @click="showCreateModal = false; showAuthModal = true">{{ t('task.loginToPublish') }}</Button>
+          <Button type="button" @click="showCreateModal = false; openAuth()">{{ t('task.loginToPublish') }}</Button>
           <Button type="button" variant="secondary" class="close-btn w-full" @click="closeCreateModal">{{ t('common.cancel') }}</Button>
         </div>
         <div v-else class="publish-form-in-modal">
@@ -1720,29 +1720,6 @@
       </div>
     </div>
 
-    <!-- NOTE: translated comment in English. -->
-    <div v-if="showAuthModal" class="modal-mask" @click.self="showAuthModal = false">
-      <div class="modal">
-        <h3>{{ authTab === 'login' ? t('auth.login') : t('auth.register') }}</h3>
-        <div class="tabs">
-          <Button type="button" variant="secondary" :class="{ 'ring-2 ring-primary ring-offset-2 ring-offset-background': authTab === 'login' }" @click="authTab = 'login'">{{ t('auth.login') }}</Button>
-          <Button type="button" variant="secondary" :class="{ 'ring-2 ring-primary ring-offset-2 ring-offset-background': authTab === 'register' }" @click="authTab = 'register'">{{ t('auth.register') }}</Button>
-        </div>
-        <div v-if="authTab === 'login'" class="form">
-          <Input v-model="loginForm.username" :placeholder="t('auth.username')" />
-          <Input v-model="loginForm.password" type="password" :placeholder="t('auth.password')" />
-          <Button type="button" :disabled="authLoading" @click="doLogin">{{ t('auth.login') }}</Button>
-        </div>
-        <div v-else class="form">
-          <Input v-model="registerForm.username" :placeholder="t('auth.username')" />
-          <Input v-model="registerForm.email" :placeholder="t('auth.email')" />
-          <Input v-model="registerForm.password" type="password" :placeholder="t('auth.password')" />
-          <Button type="button" :disabled="authLoading" @click="doRegister">{{ t('auth.register') }}</Button>
-        </div>
-        <p v-if="authError" class="error-msg">{{ authError }}</p>
-        <Button type="button" variant="secondary" class="close-btn w-full" @click="showAuthModal = false">{{ t('common.close') }}</Button>
-      </div>
-    </div>
     <Transition name="toast">
       <div v-if="successToast" class="toast" role="status">{{ successToast }}</div>
     </Transition>
@@ -1774,6 +1751,7 @@ import { cn } from '../lib/utils'
 import { usePrefersReducedMotion } from '../lib/use-prefers-reduced-motion'
 import { safeT } from '../i18n'
 import { useAuthStore } from '../stores/auth'
+import { useAuthModal } from '../composables/useAuthModal'
 import * as api from '../api'
 import type { TaskListItem, TaskCommentItem } from '../api'
 import { canA2aTaskParams } from '../utils/taskA2a'
@@ -1787,19 +1765,14 @@ const emit = defineEmits<{ (e: 'show-auth'): void; (e: 'scroll-agent'): void; (e
 const _i18n = useI18n()
 const t = typeof _i18n.t === 'function' ? _i18n.t : safeT
 const auth = useAuthStore()
+const { openAuth } = useAuthModal()
 const prefersReducedMotion = usePrefersReducedMotion()
 const listViewMode = ref<'cards' | 'table'>('cards')
 const detailPanelTab = ref('human')
 const apiBaseUrl =
   (import.meta.env.VITE_API_BASE_URL && String(import.meta.env.VITE_API_BASE_URL).trim()) ||
   (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8000')
-const showAuthModal = ref(false)
 const showCreateModal = ref(false)
-const authTab = ref<'login' | 'register'>('login')
-const authLoading = ref(false)
-const authError = ref('')
-const loginForm = reactive({ username: '', password: '' })
-const registerForm = reactive({ username: '', email: '', password: '' })
 const successToast = ref('')
 function showSuccessLocal(msg: string) {
   successToast.value = msg
@@ -2229,37 +2202,6 @@ function applyPulseFromQuery() {
     tab.value = 'disputes'
     /* 列表由 watch(tab) 在切换到 disputes 时拉取，避免与 applyPulse 重复请求 */
   }
-}
-
-function doLogin() {
-  authError.value = ''
-  authLoading.value = true
-  api.login(loginForm).then((res) => {
-    auth.setUser(res.data.access_token, res.data.username, res.data.user_id)
-    showAuthModal.value = false
-    loadAccountMe()
-    loadMyAgents()
-    loadMyPublishedSkills()
-    loadTasks()
-    if (tab.value === 'mine') loadMyTasks()
-    if (tab.value === 'published') loadPublishedTasks()
-    applyPulseFromQuery()
-  }).catch((e) => { authError.value = e.response?.data?.detail || t('common.loginFailed') }).finally(() => { authLoading.value = false })
-}
-function doRegister() {
-  authError.value = ''
-  authLoading.value = true
-  api.register(registerForm).then((res) => {
-    auth.setUser(res.data.access_token, res.data.username, res.data.user_id)
-    showAuthModal.value = false
-    loadAccountMe()
-    loadMyAgents()
-    loadMyPublishedSkills()
-    loadTasks()
-    if (tab.value === 'mine') loadMyTasks()
-    if (tab.value === 'published') loadPublishedTasks()
-    applyPulseFromQuery()
-  }).catch((e) => { authError.value = e.response?.data?.detail || t('common.registerFailed') }).finally(() => { authLoading.value = false })
 }
 
 function loadTasks() {
@@ -3292,7 +3234,7 @@ function discardDraft() {
 
 function openCreateModal() {
   if (!auth.isLoggedIn) {
-    showAuthModal.value = true
+    openAuth()
     return
   }
   publishError.value = ''

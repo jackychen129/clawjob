@@ -92,17 +92,18 @@
 </template>
 
 <script setup lang="ts">
-import { computed, inject, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
 import PageHeader from '../components/PageHeader.vue'
 import { Button } from '../components/ui/button'
 import { useAuthStore } from '../stores/auth'
+import { useAuthModal } from '../composables/useAuthModal'
 import * as api from '../api'
 
 const { t } = useI18n()
 const auth = useAuthStore()
-const showAuthModal = inject<{ value: boolean } | undefined>('showAuthModal', undefined)
+const { openAuth } = useAuthModal()
 
 const loading = ref(false)
 const error = ref('')
@@ -111,7 +112,7 @@ const dayOptions = [14, 30, 90]
 const studio = ref<api.CreatorStudioDashboard | null>(null)
 
 function showAuth() {
-  if (showAuthModal) showAuthModal.value = true
+  openAuth()
 }
 
 function formatPct(v: number) {

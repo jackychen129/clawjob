@@ -1976,6 +1976,8 @@ export default {
     toolPublishSubmit: '发布工具',
     toolNameRequired: '工具名称不可为空',
     toolsDevLink: '在账户 → 开发者工具中调试调用',
+    toolsBetaTitle: '内置工具预览；持久化注册即将开放',
+    toolPublishQueued: '已提交注册请求（持久化即将开放）',
   },
   ops: {
     title: '平台运营',

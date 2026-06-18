@@ -13,7 +13,7 @@
       <div v-if="!auth.isLoggedIn" class="card gate-card gate-card--glass">
         <div class="card-content">
           <p class="hint">{{ t('agent.registerHint') }}</p>
-          <Button type="button" @click="showAuthModal = true">{{ t('agent.loginToRegister') }}</Button>
+          <Button type="button" @click="openAuth()">{{ t('agent.loginToRegister') }}</Button>
         </div>
       </div>
       <template v-else>
@@ -382,29 +382,6 @@
       </div>
     </div>
 
-    <!-- NOTE: translated comment in English. -->
-    <div v-if="showAuthModal" class="modal-mask" @click.self="showAuthModal = false">
-      <div class="modal">
-        <h3>{{ authTab === 'login' ? t('auth.login') : t('auth.register') }}</h3>
-        <div class="tabs">
-          <Button type="button" variant="secondary" :class="{ 'ring-2 ring-primary ring-offset-2 ring-offset-background': authTab === 'login' }" @click="authTab = 'login'">{{ t('auth.login') }}</Button>
-          <Button type="button" variant="secondary" :class="{ 'ring-2 ring-primary ring-offset-2 ring-offset-background': authTab === 'register' }" @click="authTab = 'register'">{{ t('auth.register') }}</Button>
-        </div>
-        <div v-if="authTab === 'login'" class="form">
-          <Input v-model="loginForm.username" :placeholder="t('auth.username')" />
-          <Input v-model="loginForm.password" type="password" :placeholder="t('auth.password')" />
-          <Button type="button" :disabled="authLoading" @click="doLogin">{{ t('auth.login') }}</Button>
-        </div>
-        <div v-else class="form">
-          <Input v-model="registerForm.username" :placeholder="t('auth.username')" />
-          <Input v-model="registerForm.email" :placeholder="t('auth.email')" />
-          <Input v-model="registerForm.password" type="password" :placeholder="t('auth.password')" />
-          <Button type="button" :disabled="authLoading" @click="doRegister">{{ t('auth.register') }}</Button>
-        </div>
-        <p v-if="authError" class="error-msg">{{ authError }}</p>
-        <Button type="button" variant="secondary" class="close-btn w-full" @click="showAuthModal = false">{{ t('common.close') }}</Button>
-      </div>
-    </div>
   </div>
 </template>
 
@@ -421,6 +398,7 @@ import TaskRadarPanel from '../components/TaskRadarPanel.vue'
 import { useI18n } from 'vue-i18n'
 import { safeT } from '../i18n'
 import { useAuthStore } from '../stores/auth'
+import { useAuthModal } from '../composables/useAuthModal'
 import * as api from '../api'
 import { getDefaultSkillZipUrl, getDefaultSkillRepoUrl } from '../lib/skillUrls'
 
@@ -442,12 +420,7 @@ type AgentItem = {
 const _i18n = useI18n()
 const t = typeof _i18n.t === 'function' ? _i18n.t : safeT
 const auth = useAuthStore()
-const showAuthModal = ref(false)
-const authTab = ref<'login' | 'register'>('login')
-const authLoading = ref(false)
-const authError = ref('')
-const loginForm = reactive({ username: '', password: '' })
-const registerForm = reactive({ username: '', email: '', password: '' })
+const { openAuth } = useAuthModal()
 const myAgents = ref<AgentItem[]>([])
 const agentsLoading = ref(false)
 const agentForm = reactive({ name: '', token: '', skill_bound_token: '', description: '' })
@@ -649,26 +622,6 @@ function doRegisterAgent() {
   }).catch((e) => {
     agentError.value = e.response?.data?.detail || t('common.registerFailed')
   }).finally(() => { agentLoading.value = false })
-}
-
-function doLogin() {
-  authError.value = ''
-  authLoading.value = true
-  api.login(loginForm).then((res) => {
-    auth.setUser(res.data.access_token, res.data.username, res.data.user_id)
-    showAuthModal.value = false
-    loadMyAgents()
-  }).catch((e) => { authError.value = e.response?.data?.detail || t('common.loginFailed') }).finally(() => { authLoading.value = false })
-}
-
-function doRegister() {
-  authError.value = ''
-  authLoading.value = true
-  api.register(registerForm).then((res) => {
-    auth.setUser(res.data.access_token, res.data.username, res.data.user_id)
-    showAuthModal.value = false
-    loadMyAgents()
-  }).catch((e) => { authError.value = e.response?.data?.detail || t('common.registerFailed') }).finally(() => { authLoading.value = false })
 }
 
 onMounted(() => {

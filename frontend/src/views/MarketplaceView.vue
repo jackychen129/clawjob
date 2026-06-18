@@ -296,18 +296,69 @@
       </div>
     </section>
 
-    <!-- MCP Tool market — deferred (Phase 5) -->
-    <section id="section-tools" class="marketplace-section marketplace-section--deferred" aria-labelledby="section-tools-title">
-      <h2 id="section-tools-title" class="section-title">{{ t('marketplace.toolsTitle') }}</h2>
-      <p class="section-desc">{{ t('marketplace.toolsDeferred') }}</p>
-      <div class="tools-deferred-card">
-        <p class="hint">{{ t('marketplace.toolsDeferredHint') }}</p>
-        <div class="tools-deferred-actions">
-          <Button :as="RouterLink" to="/skill" size="sm">{{ t('marketplace.toolsSkillCta') }}</Button>
-          <Button :as="RouterLink" to="/docs/openclaw-quickstart" size="sm" variant="secondary">{{ t('marketplace.toolsDocsCta') }}</Button>
-        </div>
+    <!-- MCP Tool market -->
+    <section id="section-tools" class="marketplace-section" aria-labelledby="section-tools-title">
+      <div class="tools-section-head">
+        <h2 id="section-tools-title" class="section-title">{{ t('marketplace.toolsTitle') }}</h2>
+        <span class="beta-badge" :title="t('marketplace.toolsBetaTitle') || '内置工具预览，持久化注册即将开放'">{{ t('marketplace.swarmBeta') || 'Beta' }}</span>
+      </div>
+      <p class="section-desc">{{ t('marketplace.toolsDesc') }}</p>
+      <div class="tools-section-actions">
+        <Button v-if="auth.isLoggedIn" size="sm" type="button" @click="showToolPublishModal = true">{{ t('marketplace.toolPublishBtn') }}</Button>
+        <Button v-else size="sm" variant="secondary" type="button" @click="openAuth('login')">{{ t('marketplace.toolAuthRequired') }}</Button>
+        <Button :as="RouterLink" to="/account#dev-tools" size="sm" variant="ghost">{{ t('marketplace.toolsDevLink') }}</Button>
+        <Button :as="RouterLink" to="/docs/openclaw-quickstart" size="sm" variant="ghost">{{ t('marketplace.toolsDocsCta') }}</Button>
+      </div>
+
+      <div v-if="toolsLoading" class="market-loading">
+        <div class="spinner" />
+        <p>{{ t('common.loading') }}</p>
+      </div>
+      <div v-else-if="tools.length === 0" class="market-empty tools-empty">
+        <p>{{ t('marketplace.toolsEmpty') }}</p>
+      </div>
+      <div v-else class="market-grid tools-grid">
+        <Card v-for="tool in tools" :key="tool.name" class="tool-card">
+          <CardHeader class="pb-2">
+            <div class="template-card-head">
+              <CardTitle class="text-base mono">{{ tool.name }}</CardTitle>
+              <Badge v-if="tool.requires_auth" variant="outline">{{ t('marketplace.toolAuthRequired') }}</Badge>
+            </div>
+            <p class="template-desc">{{ tool.description }}</p>
+          </CardHeader>
+          <CardContent class="pt-0">
+            <div class="template-meta">
+              <span v-if="tool.category" class="template-type">{{ tool.category }}</span>
+              <span v-if="tool.return_type" class="template-stat">{{ tool.return_type }}</span>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </section>
+
+    <div v-if="showToolPublishModal" class="modal-mask" @click.self="showToolPublishModal = false">
+      <div class="modal tool-publish-modal">
+        <h3 class="modal-title">{{ t('marketplace.toolPublishTitle') }}</h3>
+        <div class="form">
+          <label class="form-label">{{ t('marketplace.toolName') }}</label>
+          <input v-model="toolForm.name" class="input" type="text" :placeholder="t('marketplace.toolNamePlaceholder')" />
+          <label class="form-label">{{ t('marketplace.toolDesc') }}</label>
+          <textarea v-model="toolForm.description" class="input textarea" rows="3" :placeholder="t('marketplace.toolDescPlaceholder')" />
+          <label class="form-label">{{ t('marketplace.toolCategory') }}</label>
+          <input v-model="toolForm.category" class="input" type="text" placeholder="general" />
+          <label class="form-label">{{ t('marketplace.toolReturnType') }}</label>
+          <input v-model="toolForm.return_type" class="input" type="text" placeholder="object" />
+        </div>
+        <p v-if="toolPublishError" class="error-msg" role="alert">{{ toolPublishError }}</p>
+        <p v-if="toolPublishNotice" class="hint">{{ toolPublishNotice }}</p>
+        <div class="tool-publish-actions">
+          <Button type="button" variant="secondary" @click="showToolPublishModal = false">{{ t('common.cancel') }}</Button>
+          <Button type="button" :disabled="toolPublishLoading" @click="submitToolPublish">
+            {{ toolPublishLoading ? t('common.loading') : t('marketplace.toolPublishSubmit') }}
+          </Button>
+        </div>
+      </div>
+    </div>
 
     <!-- NOTE: translated comment in English. -->
     <div v-if="showSwarmModal" class="modal-mask" @click.self="showSwarmModal = false">
@@ -353,7 +404,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink, useRouter } from 'vue-router'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
@@ -361,14 +412,16 @@ import { Button } from '../components/ui/button'
 import { Badge } from '../components/ui/badge'
 import PageHeader from '../components/PageHeader.vue'
 import * as api from '../api'
-import type { AgentTemplateItem, SkillMarketItem } from '../api'
+import type { AgentTemplateItem, AgentToolItem, SkillMarketItem } from '../api'
 import { useAuthStore } from '../stores/auth'
 import { useToast } from '../composables/useToast'
+import { useAuthModal } from '../composables/useAuthModal'
 
 const { t } = useI18n()
 const auth = useAuthStore()
 const router = useRouter()
 const toast = useToast()
+const { openAuth } = useAuthModal()
 
 const ownedTokens = ref<Set<string>>(new Set())
 const purchasingToken = ref<string | null>(null)
@@ -506,6 +559,69 @@ const swarmLeaderId = ref(0)
 const swarmW1Id = ref(0)
 const swarmW2Id = ref(0)
 
+const toolsLoading = ref(true)
+const tools = ref<AgentToolItem[]>([])
+const showToolPublishModal = ref(false)
+const toolPublishLoading = ref(false)
+const toolPublishError = ref('')
+const toolPublishNotice = ref('')
+const toolForm = reactive({
+  name: '',
+  description: '',
+  category: 'general',
+  return_type: 'object',
+})
+
+function normalizeTools(data: unknown): AgentToolItem[] {
+  const items = Array.isArray(data)
+    ? data
+    : Array.isArray((data as { items?: unknown[] })?.items)
+      ? (data as { items: unknown[] }).items
+      : []
+  return items.filter((x): x is AgentToolItem => !!x && typeof (x as AgentToolItem).name === 'string')
+}
+
+async function loadTools() {
+  toolsLoading.value = true
+  try {
+    const res = await api.listAgentTools()
+    tools.value = normalizeTools(res.data)
+  } catch {
+    tools.value = []
+  } finally {
+    toolsLoading.value = false
+  }
+}
+
+async function submitToolPublish() {
+  const name = toolForm.name.trim()
+  if (!name) {
+    toolPublishError.value = String(t('marketplace.toolNameRequired'))
+    return
+  }
+  toolPublishError.value = ''
+  toolPublishNotice.value = ''
+  toolPublishLoading.value = true
+  try {
+    const res = await api.createAgentTool({
+      name,
+      description: toolForm.description.trim(),
+      category: toolForm.category.trim() || 'general',
+      return_type: toolForm.return_type.trim() || 'object',
+      parameters: {},
+    })
+    const msg = (res.data as { message?: string })?.message
+    toolPublishNotice.value = msg || String(t('marketplace.toolPublishQueued') || '已提交注册请求（持久化即将开放）')
+    toast.info(toolPublishNotice.value)
+    await loadTools()
+  } catch (e: unknown) {
+    const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+    toolPublishError.value = typeof detail === 'string' ? detail : String(t('common.loadError'))
+  } finally {
+    toolPublishLoading.value = false
+  }
+}
+
 async function loadMarketData() {
   marketLoading.value = true
   skillsLoading.value = true
@@ -597,6 +713,7 @@ function goSwarmTaskPublish() {
 
 onMounted(() => {
   loadMarketData()
+  loadTools()
 })
 </script>
 
@@ -784,13 +901,37 @@ onMounted(() => {
 .pricing-field .input { width: 100%; }
 .pricing-hint { margin: 2px 0 0; font-size: 0.72rem; color: var(--text-secondary); }
 .pricing-actions { display: flex; justify-content: flex-end; }
-.tools-deferred-card {
-  padding: var(--space-5);
-  border-radius: var(--radius-lg);
-  border: var(--border-hairline);
-  background: rgba(255, 255, 255, 0.02);
+.tools-section-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-2);
 }
-.tools-deferred-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-4); }
-.marketplace-section--deferred .section-desc { margin-bottom: var(--space-4); }
+.tools-section-head .section-title { margin: 0; }
+.tools-section-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-5);
+}
+.tools-empty { margin-top: var(--space-2); }
+.tool-card .mono { font-family: var(--font-mono, ui-monospace, monospace); }
+.tool-publish-modal { max-width: 440px; width: 92vw; }
+.tool-publish-modal .form-label {
+  display: block;
+  margin: var(--space-2) 0 var(--space-1);
+  font-size: var(--font-caption);
+  color: var(--text-secondary);
+}
+.tool-publish-modal .input { width: 100%; margin-bottom: var(--space-2); }
+.tool-publish-modal .textarea { min-height: 4.5rem; resize: vertical; }
+.tool-publish-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: flex-end;
+  margin-top: var(--space-4);
+}
 </style>
 

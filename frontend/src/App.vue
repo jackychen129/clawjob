@@ -101,7 +101,7 @@
             </Button>
           </template>
           <template v-else>
-            <Button size="sm" data-testid="login-btn" @click="showAuthModal = true">
+            <Button size="sm" data-testid="login-btn" @click="openAuth()">
               <LogIn class="btn-icon" aria-hidden="true" />
               {{ t('common.loginOrRegister') }}
             </Button>
@@ -117,7 +117,7 @@
     <div v-if="auth.isLoggedIn && auth.isGuestUser" class="guest-hint-banner" role="status">
       <span>{{ t('auth.guestHint') }}</span>
       <Button size="sm" type="button" @click="showGuestRegisterModal = true">{{ t('auth.guestRegisterAgent') }}</Button>
-      <Button size="sm" variant="ghost" type="button" @click="showAuthModal = true; authTab = 'register'">{{ t('auth.goRegister') }}</Button>
+      <Button size="sm" variant="ghost" type="button" @click="openAuth('register')">{{ t('auth.goRegister') }}</Button>
     </div>
     <div v-if="postPublishRegisterHint" class="guest-hint-banner post-publish-register-hint" role="status">
       <span>{{ t('task.publishThenRegisterAgentHint') }}</span>
@@ -170,7 +170,7 @@
             class="app-view-shell"
             @success="showSuccess"
             @register-hint="postPublishRegisterHint = true"
-            @show-auth="showAuthModal = true"
+            @show-auth="openAuth()"
             @credits-updated="loadAccountMe"
           />
         </Transition>
@@ -186,85 +186,26 @@
       @published="onTaskPublished"
       @credits-updated="loadAccountMe"
       @register-hint="postPublishRegisterHint = true"
-      @request-auth="showAuthModal = true"
+      @request-auth="openAuth()"
       @guest-publish="doGuestPublish"
       @draft-restored="showSuccess(t('task.draftRestored') || '已恢复草稿'); refreshDraftExists()"
       @draft-saved="showSuccess(t('task.draftSaved') || '草稿已保存'); refreshDraftExists()"
     />
 
-    <!-- NOTE: translated comment in English. -->
-    <div v-if="showAuthModal" class="modal-mask" data-testid="auth-modal-mask" @click.self="showAuthModal = false">
-      <div class="modal" data-testid="auth-modal">
-        <h3>{{ authTab === 'login' ? t('auth.login') : t('auth.register') }}</h3>
-        <div class="tabs">
-          <Button variant="secondary" :class="{ 'ring-2 ring-primary ring-offset-2 ring-offset-background': authTab === 'login' }" @click="authTab = 'login'">{{ t('auth.login') }}</Button>
-          <Button variant="secondary" :class="{ 'ring-2 ring-primary ring-offset-2 ring-offset-background': authTab === 'register' }" @click="authTab = 'register'">{{ t('auth.register') }}</Button>
-        </div>
-        <div v-if="authTab === 'login'" class="form">
-          <Input v-model="loginForm.username" :placeholder="t('auth.username')" />
-          <Input v-model="loginForm.password" type="password" :placeholder="t('auth.password')" />
-          <Button :disabled="authLoading" @click="doLogin">{{ t('auth.login') }}</Button>
-          <div class="oauth-divider">{{ t('auth.or') }}</div>
-          <Button
-            as="a"
-            :href="googleLoginUrl"
-            target="_self"
-            variant="secondary"
-            class="w-full justify-center"
-            :class="{ 'pointer-events-none opacity-60 cursor-not-allowed': !googleOAuthConfigured }"
-            :title="!googleOAuthConfigured ? (googleConfigError || t('oauthError.server_config')) : undefined"
-            :aria-disabled="(!googleOAuthConfigured).toString()"
-            @click="onGoogleLoginClick"
-          >
-            {{ t('auth.loginWithGoogle') }}
-          </Button>
-          <p v-if="!googleOAuthConfigured && googleConfigError" class="hint google-config-hint">{{ googleConfigError }}</p>
-        </div>
-        <div v-else class="form">
-          <Input v-model="registerForm.username" :placeholder="t('auth.username')" />
-          <Input v-model="registerForm.email" type="email" :placeholder="t('auth.email')" />
-          <div class="form-inline verification-code-row">
-            <Input v-model="registerForm.verification_code" maxlength="6" :placeholder="t('auth.verificationCode')" />
-            <Button type="button" variant="secondary" :disabled="sendCodeLoading || sendCodeCountdown > 0" @click="doSendVerificationCode">
-              {{ sendCodeCountdown > 0 ? t('auth.sendCodeCountdown', { n: sendCodeCountdown }) : t('auth.sendVerificationCode') }}
-            </Button>
-          </div>
-          <Input v-model="registerForm.password" type="password" :placeholder="t('auth.password')" />
-          <Input v-model="registerForm.referral_code" maxlength="12" :placeholder="t('auth.referralCodePlaceholder')" />
-          <Button :disabled="authLoading" @click="doRegister">{{ t('auth.register') }}</Button>
-          <div class="oauth-divider">{{ t('auth.or') }}</div>
-          <Button
-            as="a"
-            :href="googleLoginUrl"
-            target="_self"
-            variant="secondary"
-            class="w-full justify-center"
-            :class="{ 'pointer-events-none opacity-60 cursor-not-allowed': !googleOAuthConfigured }"
-            :title="!googleOAuthConfigured ? (googleConfigError || t('oauthError.server_config')) : undefined"
-            :aria-disabled="(!googleOAuthConfigured).toString()"
-            @click="onGoogleLoginClick"
-          >
-            {{ t('auth.loginWithGoogle') }}
-          </Button>
-          <p v-if="!googleOAuthConfigured && googleConfigError" class="hint google-config-hint">{{ googleConfigError }}</p>
-        </div>
-        <p v-if="authError" class="error-msg">{{ authError }}</p>
-        <Button variant="secondary" class="close-btn w-full" @click="showAuthModal = false">{{ t('common.close') }}</Button>
-      </div>
-    </div>
+    <AuthModal
+      v-model:open="authModalOpen"
+      v-model:tab="authModalTab"
+      :google-o-auth-configured="googleOAuthConfigured"
+      :google-config-error="googleConfigError"
+      @success="onAuthSuccess"
+    />
 
-    <div v-if="showGuestRegisterModal" class="modal-mask" @click.self="showGuestRegisterModal = false">
-      <div class="modal modal--guest-register">
-        <h3>{{ t('auth.guestRegisterModalTitle') }}</h3>
-        <p class="hint">{{ t('auth.guestRegisterModalDesc') }}</p>
-        <pre class="guest-register-curl"><code>{{ guestRegisterCurl }}</code></pre>
-        <div class="guest-register-actions">
-          <Button type="button" @click="copyGuestRegisterCurl">{{ guestRegisterCurlCopied ? t('skillPage.copied') : t('auth.copyRegisterCurl') }}</Button>
-          <Button as="router-link" to="/join" variant="secondary" @click="showGuestRegisterModal = false">{{ t('nav.joinAgent') }}</Button>
-          <Button variant="ghost" type="button" @click="showGuestRegisterModal = false">{{ t('common.close') }}</Button>
-        </div>
-      </div>
-    </div>
+    <GuestRegisterModal
+      v-model:open="showGuestRegisterModal"
+      :curl="guestRegisterCurl"
+      :copied="guestRegisterCurlCopied"
+      @copy="copyGuestRegisterCurl"
+    />
 
     <!-- NOTE: translated comment in English. -->
     <Transition name="toast">
@@ -351,7 +292,7 @@
 
 <script setup lang="ts">
 declare const __BUILD_ID__: string | undefined
-import { ref, reactive, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { i18n, setLocale, safeT, type LocaleKey } from './i18n'
@@ -359,12 +300,14 @@ import { useAuthStore } from './stores/auth'
 import * as api from './api'
 import { taskPulseRelevantNav } from './utils/taskPulseHub'
 import CommandPalette from './components/CommandPalette.vue'
+import AuthModal from './components/AuthModal.vue'
+import GuestRegisterModal from './components/GuestRegisterModal.vue'
 import PublishTaskModal from './components/PublishTaskModal.vue'
 import ToastHost from './components/ToastHost.vue'
 import { Button } from './components/ui/button'
-import { Input } from './components/ui/input'
 import { Sheet } from './components/ui/sheet'
 import { hasPublishDraft } from './composables/usePublishTaskForm'
+import { provideAuthModal } from './composables/useAuthModal'
 import { usePrefersReducedMotion } from './lib/use-prefers-reduced-motion'
 import { canonicalWwwUrl } from './lib/siteUrls'
 import { BookOpen, Bot, LayoutGrid, ListChecks, LogIn, LogOut, Mail, Menu, MessagesSquare, Shield, TrendingUp, Trophy, UserPlus, Users, Wallet } from 'lucide-vue-next'
@@ -392,7 +335,6 @@ const locale = ref<LocaleKey>('zh-CN')
 function onLocaleChange() {
   setLocale(locale.value)
 }
-const googleLoginUrl = computed(() => api.getGoogleLoginUrl())
 const googleOAuthConfigured = ref(true) // 在请求 /auth/google/status 前先显示按钮，避免闪烁
 const googleConfigError = ref('') // 未配置时后端返回的提示，用于在弹窗内展示
 const skillRepoUrl = (import.meta as any).env?.VITE_SKILL_REPO_URL || 'https://github.com/jackychen129/clawjob-skill'
@@ -403,19 +345,11 @@ const guestRegisterCurl = computed(() =>
   `  -d '{"agent_name":"OpenClaw","description":"guest upgrade"}'`
 )
 
-const showAuthModal = ref(false)
+const { open: authModalOpen, tab: authModalTab, openAuth } = provideAuthModal()
 const showGuestRegisterModal = ref(false)
 const guestRegisterCurlCopied = ref(false)
-const authTab = ref<'login' | 'register'>('login')
-const authLoading = ref(false)
 const guestTokenLoading = ref(false)
-const authError = ref('')
 const oauthError = ref('')
-const loginForm = reactive({ username: '', password: '' })
-const registerForm = reactive({ username: '', email: '', password: '', verification_code: '', referral_code: '' })
-const sendCodeLoading = ref(false)
-const sendCodeCountdown = ref(0)
-let sendCodeTimer: ReturnType<typeof setInterval> | null = null
 
 const isAdmin = ref(false)
 function refreshAdminFlag() {
@@ -467,14 +401,10 @@ function dismissSkillBanner() {
   showSkillBanner.value = false
 }
 
-/* NOTE: translated comment in English. */
-function onGoogleLoginClick(e: Event) {
-  e.preventDefault()
-  if (!googleOAuthConfigured.value) {
-    authError.value = googleConfigError.value || t('oauthError.server_config')
-    return
-  }
-  window.location.href = api.getGoogleLoginUrl()
+function onAuthSuccess() {
+  refreshAdminFlag()
+  loadAccountMe()
+  loadMyAgents()
 }
 
 function onEscapeKey(e: KeyboardEvent) {
@@ -482,7 +412,7 @@ function onEscapeKey(e: KeyboardEvent) {
   if (commandPaletteOpen.value) { commandPaletteOpen.value = false; return }
   if (navOverflowOpen.value) { navOverflowOpen.value = false; return }
   if (showCreateTaskModal.value) { closeCreateTaskModal(); return }
-  if (showAuthModal.value) { showAuthModal.value = false; return }
+  if (authModalOpen.value) { authModalOpen.value = false; return }
 }
 const accountCredits = ref(0)
 
@@ -561,74 +491,6 @@ function loadMyAgents() {
   })
 }
 
-function doLogin() {
-  authError.value = ''
-  authLoading.value = true
-  api.login(loginForm).then((res) => {
-    auth.setUser(res.data.access_token, res.data.username, res.data.user_id)
-    refreshAdminFlag()
-    showAuthModal.value = false
-    loadAccountMe()
-    loadMyAgents()
-  }).catch((e) => {
-    authError.value = e.response?.data?.detail || t('common.loginFailed')
-  }).finally(() => {
-    authLoading.value = false
-  })
-}
-
-function doSendVerificationCode() {
-  const email = (registerForm.email || '').trim()
-  if (!email || !email.includes('@')) {
-    authError.value = t('auth.emailRequired')
-    return
-  }
-  authError.value = ''
-  sendCodeLoading.value = true
-  api.sendVerificationCode({ email }).then(() => {
-    sendCodeCountdown.value = 60
-    if (sendCodeTimer) clearInterval(sendCodeTimer)
-    sendCodeTimer = setInterval(() => {
-      sendCodeCountdown.value -= 1
-      if (sendCodeCountdown.value <= 0 && sendCodeTimer) {
-        clearInterval(sendCodeTimer)
-        sendCodeTimer = null
-      }
-    }, 1000)
-  }).catch((e) => {
-    authError.value = e.response?.data?.detail || t('auth.sendCodeFailed')
-  }).finally(() => {
-    sendCodeLoading.value = false
-  })
-}
-
-function doRegister() {
-  authError.value = ''
-  if (!(registerForm.verification_code || '').trim()) {
-    authError.value = t('auth.verificationCodeRequired')
-    return
-  }
-  authLoading.value = true
-  const refCode = (registerForm.referral_code || '').trim()
-  api.register({
-    username: registerForm.username,
-    email: registerForm.email,
-    password: registerForm.password,
-    verification_code: registerForm.verification_code,
-    ...(refCode ? { referral_code: refCode } : {}),
-  }).then((res) => {
-    auth.setUser(res.data.access_token, res.data.username, res.data.user_id)
-    refreshAdminFlag()
-    showAuthModal.value = false
-    loadAccountMe()
-    loadMyAgents()
-  }).catch((e) => {
-    authError.value = e.response?.data?.detail || t('common.registerFailed')
-  }).finally(() => {
-    authLoading.value = false
-  })
-}
-
 function loadAccountMe() {
   if (!auth.isLoggedIn) return
   api.getAccountMe().then((res) => {
@@ -676,20 +538,6 @@ onMounted(() => {
   document.addEventListener('keydown', onEscapeKey)
   locale.value = i18n.global.locale.value as LocaleKey
   try { showSkillBanner.value = false } catch (_) {}
-  try {
-    const search0 = window.location.search
-    if (search0) {
-      const refFromUrl = new URLSearchParams(search0.slice(1)).get('ref')
-      if (refFromUrl && !registerForm.referral_code) {
-        registerForm.referral_code = refFromUrl.trim()
-        try { localStorage.setItem('clawjob_ref_code', refFromUrl.trim()) } catch {}
-      }
-    }
-    if (!registerForm.referral_code) {
-      const stored = localStorage.getItem('clawjob_ref_code')
-      if (stored) registerForm.referral_code = stored
-    }
-  } catch {}
   // NOTE: translated comment in English.
   const hash = window.location.hash
   const search = window.location.search

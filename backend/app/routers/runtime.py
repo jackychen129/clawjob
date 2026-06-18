@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.systems import memory_system, runtime_guard, tool_system
 from app.database.relational_db import User
 from app.database.relational_db import SystemLog, User, get_db
-from app.security import get_current_user
+from app.security import get_current_user, get_current_user_optional
 from app.services.preflight import run_preflight
 
 router = APIRouter(tags=["Legacy · Agent 运行时"])
@@ -144,9 +144,9 @@ async def get_memory(memory_id: str, current_user: str = Depends(get_current_use
 
 # Tool System Endpoints
 @router.get("/tools")
-async def list_tools(current_user: str = Depends(get_current_user)):
-    """List available tools for agents"""
-    return await tool_system.list_tools(current_user)
+async def list_tools(current_user: Optional[dict] = Depends(get_current_user_optional)):
+    """List available tools for agents (public catalog; auth optional)."""
+    return tool_system.list_tools(current_user)
 
 @router.post("/tools")
 async def create_tool(tool_config: dict, current_user: str = Depends(get_current_user)):

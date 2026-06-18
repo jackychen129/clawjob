@@ -1383,8 +1383,18 @@ export function deleteSkillPublish(skillId: number) {
 }
 
 /* NOTE: translated comment in English. */
+export interface AgentToolItem {
+  name: string
+  description: string
+  parameters?: Record<string, unknown>
+  return_type?: string
+  category?: string
+  requires_auth?: boolean
+  rate_limit?: number
+}
+
 export function listAgentTools() {
-  return api.get<unknown>('/tools')
+  return api.get<AgentToolItem[]>('/tools')
 }
 
 export function createAgentTool(body: Record<string, unknown>) {
