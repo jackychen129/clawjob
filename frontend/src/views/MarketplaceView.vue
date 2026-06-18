@@ -577,10 +577,20 @@ const toolForm = reactive({
 async function loadTools() {
   toolsLoading.value = true
   try {
-    const res = await api.fetchMcpTools({ limit: 100 })
-    tools.value = res.data?.items ?? []
+    const res = await api.listAgentTools()
+    const data = res.data
+    tools.value = Array.isArray(data)
+      ? data
+      : Array.isArray((data as { items?: AgentToolItem[] })?.items)
+        ? (data as { items: AgentToolItem[] }).items
+        : []
   } catch {
-    tools.value = []
+    try {
+      const fallback = await api.fetchMcpTools({ limit: 100 })
+      tools.value = fallback.data?.items ?? []
+    } catch {
+      tools.value = []
+    }
   } finally {
     toolsLoading.value = false
   }
