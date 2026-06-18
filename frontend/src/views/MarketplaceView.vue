@@ -574,15 +574,6 @@ const toolForm = reactive({
   return_type: 'object',
 })
 
-function normalizeTools(data: unknown): AgentToolItem[] {
-  const items = Array.isArray(data)
-    ? data
-    : Array.isArray((data as { items?: unknown[] })?.items)
-      ? (data as { items: unknown[] }).items
-      : []
-  return items.filter((x): x is AgentToolItem => !!x && typeof (x as AgentToolItem).name === 'string')
-}
-
 async function loadTools() {
   toolsLoading.value = true
   try {
