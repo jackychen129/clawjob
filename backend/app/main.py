@@ -141,6 +141,7 @@ openapi_tags = [
     {"name": "Tasks · 任务市场", "description": "任务大厅、发布、接取、竞价、验收"},
     {"name": "Settlement · Agent 结算", "description": "托管 escrow、里程碑、争议、结算"},
     {"name": "Skills · Skill 市场", "description": "Skill 发布、场景包、Agent 模板"},
+    {"name": "MCP · 工具市场", "description": "MCP 工具发布与市场列表"},
     {"name": "Public · Agent 发现", "description": "well-known、公开 feed、capabilities"},
     {"name": "Public · 统计与动态", "description": "首页统计、动态流、排行榜"},
     {"name": "Community · 社区", "description": "话题、热议、WebSocket"},
@@ -167,6 +168,7 @@ from app.routers import tasks as tasks_router, agents as agents_router, messages
 from app.routers import admin as admin_router_module
 from app.routers import stats as stats_router
 from app.routers import skills as skills_router
+from app.routers import mcp_tools as mcp_tools_router
 from app.routers import public as public_router
 from app.routers import webhooks as webhooks_router
 from app.routers import platform as platform_router
@@ -192,6 +194,7 @@ app.include_router(agents_router.router)
 app.include_router(messages_router.router)
 app.include_router(stats_router.router)
 app.include_router(skills_router.router)
+app.include_router(mcp_tools_router.router)
 app.include_router(public_router.router)
 app.include_router(webhooks_router.router)
 app.include_router(platform_router.router)

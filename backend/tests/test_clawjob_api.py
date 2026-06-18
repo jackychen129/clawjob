@@ -5548,3 +5548,52 @@ def test_send_unpicked_reminders_actual():
     d2 = r2.json()
     assert task_id not in d2["reminded_task_ids"]
     assert d2["skipped_already_reminded"] > 0
+
+
+def test_mcp_tools_publish_list_and_marketplace():
+    """MCP 工具：POST /tools 持久化后 GET /tools 与 /mcp-tools 可见。"""
+    suffix = _unique()
+    user = _register_user(f"mcpu{suffix}", f"mcp{suffix}@example.com", "pass12345")
+    headers = {"Authorization": f"Bearer {user['access_token']}"}
+    tool_name = f"custom_tool_{suffix}"
+
+    r0 = client.get("/tools")
+    assert r0.status_code == 200
+    before = r0.json()
+    before_items = before if isinstance(before, list) else before.get("items", [])
+
+    r = client.post(
+        "/tools",
+        json={
+            "name": tool_name,
+            "description": "Test MCP tool",
+            "category": "general",
+            "return_type": "object",
+            "parameters": {"query": {"type": "string"}},
+        },
+        headers=headers,
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body.get("status") == "published"
+    assert body.get("name") == tool_name
+    tool_id = body.get("id")
+    assert tool_id is not None
+
+    r2 = client.get("/tools")
+    assert r2.status_code == 200
+    after = r2.json()
+    after_items = after if isinstance(after, list) else after.get("items", [])
+    assert len(after_items) >= len(before_items) + 1
+    names = {x.get("name") for x in after_items if isinstance(x, dict)}
+    assert tool_name in names
+
+    r3 = client.get("/mcp-tools")
+    assert r3.status_code == 200
+    market = r3.json()
+    assert market.get("total", 0) >= 1
+    assert any(it.get("name") == tool_name for it in market.get("items", []))
+
+    r4 = client.delete(f"/mcp-tools/{tool_id}", headers=headers)
+    assert r4.status_code == 200, r4.text
+    assert r4.json().get("ok") is True

@@ -93,17 +93,56 @@ class ToolSystem:
         """Get a tool by name"""
         return self.tools.get(name)
         
-    def list_tools(self, current_user: dict = None, category: Optional[str] = None) -> List[ToolMetadata]:
-        """List all tools or tools in a specific category"""
+    def list_tools(self, current_user: dict = None, category: Optional[str] = None) -> List[Any]:
+        """List built-in tools plus persisted marketplace tools."""
         if category:
             tool_names = self.tool_categories.get(category, [])
-            return [self.tools[name].metadata for name in tool_names]
+            builtin = [self.tools[name].metadata.model_dump() for name in tool_names if name in self.tools]
         else:
-            return [tool.metadata for tool in self.tools.values()]
+            builtin = [t.metadata.model_dump() for t in self.tools.values()]
+        for item in builtin:
+            item["source"] = "builtin"
+
+        market: List[dict] = []
+        try:
+            from app.database.relational_db import SessionLocal
+            from app.services.mcp_tools_store import list_market_tools
+
+            db = SessionLocal()
+            try:
+                market = list_market_tools(db, limit=500, category=category)
+            finally:
+                db.close()
+        except Exception as exc:
+            logger.warning("Failed to load marketplace tools: %s", exc)
+
+        builtin_names = {item["name"] for item in builtin}
+        merged = list(builtin)
+        for item in market:
+            if item.get("name") not in builtin_names:
+                merged.append(item)
+        return merged
 
     async def create_tool(self, tool_config: dict, current_user: dict = None) -> dict:
-        """Create/register a new tool from config."""
-        return {"status": "ok", "message": "Tool registration not implemented"}
+        """Create/register a new tool in the marketplace."""
+        if not current_user or not current_user.get("user_id"):
+            return {"status": "error", "message": "Authentication required"}
+        try:
+            from app.database.relational_db import SessionLocal
+            from app.services.mcp_tools_store import publish_tool, row_to_item
+
+            db = SessionLocal()
+            try:
+                row = publish_tool(db, int(current_user["user_id"]), tool_config or {})
+                item = row_to_item(row)
+                return {"status": "published", "message": "Tool published", **item}
+            finally:
+                db.close()
+        except ValueError as exc:
+            return {"status": "error", "message": str(exc)}
+        except Exception as exc:
+            logger.exception("create_tool failed")
+            return {"status": "error", "message": str(exc)}
 
     async def use_tool(self, agent_id: str, tool_request: dict, current_user: dict = None) -> dict:
         """Execute a tool for an agent."""

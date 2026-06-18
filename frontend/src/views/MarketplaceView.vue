@@ -318,10 +318,12 @@
         <p>{{ t('marketplace.toolsEmpty') }}</p>
       </div>
       <div v-else class="market-grid tools-grid">
-        <Card v-for="tool in tools" :key="tool.name" class="tool-card">
+        <Card v-for="tool in tools" :key="tool.id ?? tool.tool_slug ?? tool.name" class="tool-card">
           <CardHeader class="pb-2">
             <div class="template-card-head">
               <CardTitle class="text-base mono">{{ tool.name }}</CardTitle>
+              <Badge v-if="tool.source === 'platform' || tool.source === 'builtin'" variant="outline">{{ t('marketplace.toolPlatformBadge') || '平台' }}</Badge>
+              <Badge v-else-if="tool.source === 'market'" variant="secondary">{{ t('marketplace.toolMarketBadge') || '社区' }}</Badge>
               <Badge v-if="tool.requires_auth" variant="outline">{{ t('marketplace.toolAuthRequired') }}</Badge>
             </div>
             <p class="template-desc">{{ tool.description }}</p>
@@ -584,8 +586,8 @@ function normalizeTools(data: unknown): AgentToolItem[] {
 async function loadTools() {
   toolsLoading.value = true
   try {
-    const res = await api.listAgentTools()
-    tools.value = normalizeTools(res.data)
+    const res = await api.fetchMcpTools({ limit: 100 })
+    tools.value = res.data?.items ?? []
   } catch {
     tools.value = []
   } finally {
@@ -603,17 +605,22 @@ async function submitToolPublish() {
   toolPublishNotice.value = ''
   toolPublishLoading.value = true
   try {
-    const res = await api.createAgentTool({
+    const res = await api.publishMcpTool({
       name,
       description: toolForm.description.trim(),
       category: toolForm.category.trim() || 'general',
       return_type: toolForm.return_type.trim() || 'object',
       parameters: {},
     })
-    const msg = (res.data as { message?: string })?.message
-    toolPublishNotice.value = msg || String(t('marketplace.toolPublishQueued') || '已提交注册请求（持久化即将开放）')
-    toast.info(toolPublishNotice.value)
+    toolPublishNotice.value = String(t('marketplace.toolPublishSuccess') || '工具已发布到市场')
+    toast.success(toolPublishNotice.value)
+    showToolPublishModal.value = false
+    toolForm.name = ''
+    toolForm.description = ''
     await loadTools()
+    if (res.data?.item?.id) {
+      /* published */
+    }
   } catch (e: unknown) {
     const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
     toolPublishError.value = typeof detail === 'string' ? detail : String(t('common.loadError'))

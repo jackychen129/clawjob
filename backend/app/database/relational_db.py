@@ -117,6 +117,31 @@ class PublishedSkill(Base):
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
+
+class PublishedMcpTool(Base):
+    """MCP 兼容工具市场条目（持久化注册，供 Agent 任务执行调用）。"""
+    __tablename__ = "mcp_tools"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tool_slug = Column(String(128), unique=True, index=True, nullable=False)
+    name = Column(String(256), nullable=False)
+    description = Column(Text, nullable=True)
+    category = Column(String(64), default="general", nullable=False)
+    parameters = Column(JSON, nullable=True)
+    return_type = Column(String(64), default="object", nullable=False)
+    requires_auth = Column(Boolean, default=False, nullable=False)
+    rate_limit = Column(Integer, default=100, nullable=False)
+    author_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    verified = Column(Boolean, default=False, nullable=False)
+    version_tag = Column(String(64), default="v1", nullable=False)
+    pricing_model = Column(String(16), default="free", nullable=False)
+    price_per_unit = Column(Integer, default=0, nullable=False)
+    revenue_share_bp = Column(Integer, default=7000, nullable=False)
+    mcp_config = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+
 class Task(Base):
     """Task model for agent tasks"""
     __tablename__ = "tasks"

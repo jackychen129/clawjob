@@ -1967,6 +1967,9 @@ export default {
     toolsDevLink: 'Debug calls under Account → Developer tools',
     toolsBetaTitle: 'Built-in tool preview; persistent registration coming soon',
     toolPublishQueued: 'Registration submitted (persistence coming soon)',
+    toolPublishSuccess: 'Tool published to MCP marketplace',
+    toolPlatformBadge: 'Platform',
+    toolMarketBadge: 'Community',
   },
   ops: {
     title: 'Platform operations',

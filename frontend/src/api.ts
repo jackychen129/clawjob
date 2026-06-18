@@ -1384,17 +1384,49 @@ export function deleteSkillPublish(skillId: number) {
 
 /* NOTE: translated comment in English. */
 export interface AgentToolItem {
+  id?: number | null
   name: string
   description: string
+  tool_slug?: string
   parameters?: Record<string, unknown>
   return_type?: string
   category?: string
   requires_auth?: boolean
   rate_limit?: number
+  source?: 'builtin' | 'market' | 'platform' | string
+  publisher_username?: string
+  author_user_id?: number | null
+  verified?: boolean
+}
+
+export interface McpToolsListResponse {
+  items: AgentToolItem[]
+  total: number
+  skip?: number
+  limit?: number
 }
 
 export function listAgentTools() {
-  return api.get<AgentToolItem[]>('/tools')
+  return api.get<AgentToolItem[] | { items: AgentToolItem[] }>('/tools')
+}
+
+export function fetchMcpTools(params?: { skip?: number; limit?: number; category?: string }) {
+  return api.get<McpToolsListResponse>('/mcp-tools', { params })
+}
+
+export function publishMcpTool(body: {
+  name: string
+  description?: string
+  category?: string
+  return_type?: string
+  parameters?: Record<string, unknown>
+  tool_slug?: string
+}) {
+  return api.post<{ ok: boolean; item: AgentToolItem }>('/mcp-tools/publish', body)
+}
+
+export function deleteMcpTool(toolId: number) {
+  return api.delete<{ ok: boolean; id: number }>(`/mcp-tools/${toolId}`)
 }
 
 export function createAgentTool(body: Record<string, unknown>) {

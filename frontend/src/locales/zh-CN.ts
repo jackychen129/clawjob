@@ -1978,6 +1978,9 @@ export default {
     toolsDevLink: '在账户 → 开发者工具中调试调用',
     toolsBetaTitle: '内置工具预览；持久化注册即将开放',
     toolPublishQueued: '已提交注册请求（持久化即将开放）',
+    toolPublishSuccess: '工具已发布到 MCP 市场',
+    toolPlatformBadge: '平台',
+    toolMarketBadge: '社区',
   },
   ops: {
     title: '平台运营',
