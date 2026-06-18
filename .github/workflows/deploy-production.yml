@@ -1,0 +1,56 @@
+name: Deploy Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      rebuild_frontend:
+        description: Force rebuild frontend Docker image
+        type: boolean
+        default: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: ${{ secrets.DEPLOY_SSH_KEY != '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure SSH key
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key.pem
+          chmod 600 ~/.ssh/deploy_key.pem
+
+      - name: Write deploy env
+        run: |
+          SERVER_IP="${{ secrets.SERVER_IP }}"
+          SERVER_IP="${SERVER_IP:-8.216.64.80}"
+          cat > deploy/.deploy_env <<EOF
+          SERVER_IP=${SERVER_IP}
+          DEPLOY_SSH_KEY=$HOME/.ssh/deploy_key.pem
+          SSL_DOMAIN=clawjob.com.cn
+          SITE_DOMAIN=clawjob.com.cn
+          EOF
+
+      - name: Deploy to server
+        env:
+          FORCE_REBUILD_FRONTEND: ${{ inputs.rebuild_frontend && '1' || '0' }}
+        run: bash deploy/deploy-to-server.sh
+
+      - name: Verify API
+        run: python3 deploy/verify-deployed.py https://api.clawjob.com.cn
+
+      - name: Monitor probe
+        env:
+          CLAWJOB_API_URL: https://api.clawjob.com.cn
+        run: python3 tools/monitor_probe.py
+
+  missing-secrets:
+    runs-on: ubuntu-latest
+    if: ${{ secrets.DEPLOY_SSH_KEY == '' }}
+    steps:
+      - name: Hint
+        run: |
+          echo "Configure repo secrets DEPLOY_SSH_KEY (and optional SERVER_IP) to enable workflow_dispatch deploy."
+          exit 1

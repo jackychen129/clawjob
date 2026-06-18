@@ -303,6 +303,10 @@
         <span class="beta-badge" :title="t('marketplace.toolsBetaTitle') || '内置工具预览，持久化注册即将开放'">{{ t('marketplace.swarmBeta') || 'Beta' }}</span>
       </div>
       <p class="section-desc">{{ t('marketplace.toolsDesc') }}</p>
+      <div v-if="toolsStats" class="market-stats">
+        <span class="market-stat">{{ toolsStats.tool_count ?? 0 }} {{ t('marketplace.toolsCount') }}</span>
+        <span class="market-stat">{{ tools.length }} {{ t('marketplace.toolsListed') || '当前展示' }}</span>
+      </div>
       <div class="tools-section-actions">
         <Button v-if="auth.isLoggedIn" size="sm" type="button" @click="showToolPublishModal = true">{{ t('marketplace.toolPublishBtn') }}</Button>
         <Button v-else size="sm" variant="secondary" type="button" @click="openAuth('login')">{{ t('marketplace.toolAuthRequired') }}</Button>
@@ -327,11 +331,26 @@
               <Badge v-if="tool.requires_auth" variant="outline">{{ t('marketplace.toolAuthRequired') }}</Badge>
             </div>
             <p class="template-desc">{{ tool.description }}</p>
+            <p v-if="tool.publisher_username" class="template-publisher">
+              {{ t('marketplace.publisher') }}：{{ tool.publisher_username }}
+            </p>
           </CardHeader>
           <CardContent class="pt-0">
             <div class="template-meta">
               <span v-if="tool.category" class="template-type">{{ tool.category }}</span>
               <span v-if="tool.return_type" class="template-stat">{{ tool.return_type }}</span>
+              <span v-if="tool.version_tag" class="template-stat mono">{{ tool.version_tag }}</span>
+            </div>
+            <div v-if="canUnpublishTool(tool)" class="template-actions">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                :disabled="toolUnpublishId === Number(tool.id)"
+                @click="confirmUnpublishTool(tool)"
+              >
+                {{ t('marketplace.toolUnpublish') }}
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -563,6 +582,8 @@ const swarmW2Id = ref(0)
 
 const toolsLoading = ref(true)
 const tools = ref<AgentToolItem[]>([])
+const toolsStats = ref<{ tool_count?: number; verified_count?: number } | null>(null)
+const toolUnpublishId = ref<number | null>(null)
 const showToolPublishModal = ref(false)
 const toolPublishLoading = ref(false)
 const toolPublishError = ref('')
@@ -577,23 +598,52 @@ const toolForm = reactive({
 async function loadTools() {
   toolsLoading.value = true
   try {
-    const res = await api.listAgentTools()
-    const data = res.data
+    const [listRes, statsRes] = await Promise.all([
+      api.fetchMcpTools({ limit: 100 }).catch(() => api.listAgentTools()),
+      api.fetchMcpToolsStats().catch(() => ({ data: null })),
+    ])
+    const data = listRes.data
     tools.value = Array.isArray(data)
       ? data
       : Array.isArray((data as { items?: AgentToolItem[] })?.items)
         ? (data as { items: AgentToolItem[] }).items
         : []
+    toolsStats.value = statsRes.data ?? null
   } catch {
-    try {
-      const fallback = await api.fetchMcpTools({ limit: 100 })
-      tools.value = fallback.data?.items ?? []
-    } catch {
-      tools.value = []
-    }
+    tools.value = []
+    toolsStats.value = null
   } finally {
     toolsLoading.value = false
   }
+}
+
+function canUnpublishTool(tool: AgentToolItem) {
+  return (
+    tool.source === 'market' &&
+    tool.id != null &&
+    auth.isLoggedIn &&
+    auth.userId != null &&
+    tool.author_user_id === auth.userId
+  )
+}
+
+function confirmUnpublishTool(tool: AgentToolItem) {
+  const id = Number(tool.id)
+  if (!id) return
+  const msg =
+    (t('marketplace.toolUnpublishConfirm', { name: tool.name }) as string) ||
+    `确定撤下工具「${tool.name}」？`
+  if (!window.confirm(msg)) return
+  toolUnpublishId.value = id
+  api
+    .deleteMcpTool(id)
+    .then(() => loadTools())
+    .catch(() => {
+      window.alert((t('common.operationFailed') as string) || '操作失败')
+    })
+    .finally(() => {
+      toolUnpublishId.value = null
+    })
 }
 
 async function submitToolPublish() {

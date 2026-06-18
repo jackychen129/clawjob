@@ -1414,6 +1414,10 @@ export function fetchMcpTools(params?: { skip?: number; limit?: number; category
   return api.get<McpToolsListResponse>('/mcp-tools', { params })
 }
 
+export function fetchMcpToolsStats() {
+  return api.get<{ tool_count: number; verified_count: number }>('/mcp-tools/stats')
+}
+
 export function publishMcpTool(body: {
   name: string
   description?: string

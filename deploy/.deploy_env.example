@@ -15,3 +15,7 @@ SSL_DOMAIN=clawjob.com.cn
 
 # 强制重建前端 Docker 镜像
 # FORCE_REBUILD_FRONTEND=1
+
+# 阿里云 ECS（可选，用于 ./deploy/aliyun-reboot-ecs.sh / recover-production.sh --reboot）
+# ALIBABA_CLOUD_REGION=ap-southeast-1
+# ALIBABA_CLOUD_ECS_INSTANCE_ID=i-xxxxxxxxxx

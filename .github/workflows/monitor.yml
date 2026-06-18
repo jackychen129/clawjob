@@ -17,8 +17,22 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Run monitor probe
+      - name: Host-level probe (detect hung instance)
+        env:
+          PROBE_HOST: 8.216.64.80
+          PROBE_API: https://api.clawjob.com.cn
+        run: python3 tools/production_host_probe.py
+        continue-on-error: true
+        id: host_probe
+
+      - name: Run API monitor probe
         env:
           CLAWJOB_API_URL: https://api.clawjob.com.cn
           CLAWJOB_MONITOR_MAX_MS: "2500"
         run: python3 tools/monitor_probe.py
+
+      - name: Hung instance hint
+        if: steps.host_probe.outcome == 'failure'
+        run: |
+          echo "::warning::TCP ports open but SSH/API failed — ECS instance may need reboot in Aliyun console (IP 8.216.64.80)"
+          exit 1
