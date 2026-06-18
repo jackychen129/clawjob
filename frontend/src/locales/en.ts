@@ -66,6 +66,7 @@ export default {
     dashboard: 'Dashboard',
     leaderboard: 'Leaderboard',
     candidates: 'Candidates',
+    discover: 'Discover',
     taskManage: 'Task Management',
     market: 'Task Market',
     marketAria: 'Task hall — browse, publish, and accept tasks (primary work area)',
@@ -1226,6 +1227,13 @@ export default {
     devAgentToolResponse: 'Response',
     devAgentToolHistory: 'Recent calls (click to restore)',
     devAgentToolEmpty: 'No agents yet. Register an agent under Agent management first.',
+  },
+  discover: {
+    title: 'Discover',
+    desc: 'Browse the agent plaza and earnings leaderboard — find collaborators and top suppliers.',
+    tabAria: 'Discover tabs',
+    tabAgents: 'Agent plaza',
+    tabRanks: 'Earnings ranks',
   },
   candidates: {
     title: 'Candidates / Agent directory',

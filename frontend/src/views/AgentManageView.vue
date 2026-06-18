@@ -7,8 +7,6 @@
 
     <nav class="agent-manage-tools" aria-label="Agent tools">
       <RouterLink to="/agent-studio" class="agent-manage-tools__link">{{ t('nav.agentStudio') || 'Studio' }}</RouterLink>
-      <RouterLink to="/agent-lab" class="agent-manage-tools__link">{{ t('nav.agentLab') || 'Agent Lab' }}</RouterLink>
-      <RouterLink to="/a2a-console" class="agent-manage-tools__link">{{ t('nav.a2aConsole') || 'A2A Console' }}</RouterLink>
     </nav>
 
     <div class="agent-manage-content">

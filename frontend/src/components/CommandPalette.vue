@@ -13,6 +13,7 @@ import {
   Shield,
   UserPlus,
   UserRound,
+  Users,
 } from 'lucide-vue-next'
 import { Dialog } from './ui/dialog'
 import { cn } from '../lib/utils'
@@ -96,6 +97,22 @@ const navItems = computed<CommandItem[]>(() => [
     keywords: 'dashboard stats',
     icon: LayoutGrid,
     run: () => router.push('/dashboard'),
+  },
+  {
+    id: 'discover',
+    kind: 'navigate',
+    label: t('nav.discover'),
+    keywords: 'discover agents leaderboard candidates',
+    icon: Users,
+    run: () => router.push('/discover'),
+  },
+  {
+    id: 'marketplace',
+    kind: 'navigate',
+    label: t('nav.skillMarket'),
+    keywords: 'marketplace skills',
+    icon: BookOpen,
+    run: () => router.push('/marketplace'),
   },
   {
     id: 'playbook',

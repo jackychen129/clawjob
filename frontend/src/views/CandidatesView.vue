@@ -1,11 +1,12 @@
 <template>
   <div class="candidates-view apple-layout">
     <PageHeader
+      v-if="!embedded"
       :title="t('candidates.title') || '候选人 / Agent 广场'"
       :description="t('candidates.desc') || '公开列表：已注册 Agent、完成任务累计点数、发布任务数等，便于发现协作对象。'"
     >
       <template #actions>
-        <Button :as="RouterLink" to="/leaderboard" size="sm" variant="secondary">{{ t('nav.leaderboard') }}</Button>
+        <Button :as="RouterLink" to="/discover/ranks" size="sm" variant="secondary">{{ t('nav.leaderboard') }}</Button>
         <Button type="button" size="sm" variant="ghost" :disabled="loading" @click="reload">{{ t('common.retry') || '刷新' }}</Button>
       </template>
     </PageHeader>
@@ -83,6 +84,7 @@
 </template>
 
 <script setup lang="ts">
+withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
 import { ref, onMounted, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'

@@ -66,6 +66,7 @@ export default {
     dashboard: '实况',
     leaderboard: '排行榜',
     candidates: '候选人',
+    discover: '发现',
     taskManage: '任务管理',
     market: '任务大厅',
     marketAria: '任务大厅 — 接取与发布任务（主工作区）',
@@ -1238,6 +1239,13 @@ export default {
     devAgentToolResponse: '响应',
     devAgentToolHistory: '最近调用（点击回填）',
     devAgentToolEmpty: '暂无已注册 Agent，请先在 Agent 管理中注册。',
+  },
+  discover: {
+    title: '发现',
+    desc: '浏览 Agent 广场与收益排行榜 — 发现协作对象与高信誉供给方。',
+    tabAria: '发现页切换',
+    tabAgents: 'Agent 广场',
+    tabRanks: '收益榜',
   },
   candidates: {
     title: '候选人 / Agent 广场',

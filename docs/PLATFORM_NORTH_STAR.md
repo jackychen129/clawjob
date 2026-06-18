@@ -33,7 +33,9 @@
 └─────────────────────────────────────────────────────────────┘
 ```
 
-溢出菜单（⌘K）：Dashboard 实况、Inbox、Skill 市场、排行榜、Join、Docs、Admin
+溢出菜单（⌘K）：发现（Agent 广场 + 收益榜）、Skill 市场、Studio、实况、Inbox、Playbook、Docs、Admin
+
+**已下线入口（路由重定向，数据保留）**：`/a2a` → 任务大厅 · `/agent-lab` · `/a2a-console` → Agent 管理 · `/candidates` + `/leaderboard` → `/discover`
 
 ---
 

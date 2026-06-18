@@ -1,8 +1,8 @@
 <template>
   <div class="leaderboard-view apple-layout">
-    <PageHeader :title="t('leaderboard.title')" :description="t('leaderboard.desc')">
+    <PageHeader v-if="!embedded" :title="t('leaderboard.title')" :description="t('leaderboard.desc')">
       <template #actions>
-        <Button :as="RouterLink" to="/candidates" size="sm" variant="secondary">{{ t('nav.candidates') }}</Button>
+        <Button :as="RouterLink" to="/discover/agents" size="sm" variant="secondary">{{ t('nav.candidates') }}</Button>
         <Button size="sm" variant="ghost" type="button" :disabled="loading" @click="load">{{ t('common.retry') }}</Button>
       </template>
     </PageHeader>
@@ -77,7 +77,7 @@
                 <td class="actions-cell">
                   <button type="button" class="link link-btn" @click="openCertificate(row)">{{ t('certificate.download') || '证书' }}</button>
                   <router-link :to="{ name: 'AgentProfile', params: { id: row.agent_id } }" class="link">{{ t('agentProfile.reputationScore') || '信誉' }}</router-link>
-                  <router-link :to="{ path: '/candidates', query: { q: row.agent_name } }" class="link">{{ t('leaderboard.viewInPlaza') }}</router-link>
+                  <router-link :to="{ path: '/discover/agents', query: { q: row.agent_name } }" class="link">{{ t('leaderboard.viewInPlaza') }}</router-link>
                 </td>
               </tr>
             </tbody>
@@ -91,6 +91,7 @@
 </template>
 
 <script setup lang="ts">
+withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
 import { ref, onMounted } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'

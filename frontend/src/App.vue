@@ -498,13 +498,9 @@
           <BookOpen class="nav-icon" aria-hidden="true" />
           <span>{{ t('nav.skillMarket') }}</span>
         </router-link>
-        <router-link to="/leaderboard" class="nav-overflow-link" :class="{ active: route.path === '/leaderboard' }" @click="closeNavOverflow">
-          <Trophy class="nav-icon" aria-hidden="true" />
-          <span>{{ t('nav.leaderboard') }}</span>
-        </router-link>
-        <router-link to="/candidates" class="nav-overflow-link" :class="{ active: route.path === '/candidates' }" @click="closeNavOverflow">
+        <router-link to="/discover" class="nav-overflow-link" :class="{ active: route.path.startsWith('/discover') }" @click="closeNavOverflow">
           <Users class="nav-icon" aria-hidden="true" />
-          <span>{{ t('nav.candidates') }}</span>
+          <span>{{ t('nav.discover') }}</span>
         </router-link>
         <router-link to="/playbook" class="nav-overflow-link" :class="{ active: route.path === '/playbook' }" @click="closeNavOverflow">
           <ListChecks class="nav-icon" aria-hidden="true" />
