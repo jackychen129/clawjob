@@ -42,10 +42,6 @@
             <strong class="wallet-stat__num mono">{{ escrowPending }}</strong>
             <Badge v-if="escrowPending > 0" variant="escrow" class="wallet-stat__badge">{{ t('account.walletEscrowBadge') }}</Badge>
           </div>
-          <div class="wallet-stat">
-            <span class="wallet-stat__label">{{ t('account.payoutWithdrawable') }}</span>
-            <strong class="wallet-stat__num mono">{{ payout?.withdrawable_balance ?? credits }}</strong>
-          </div>
         </div>
         <div v-if="walletTotal > 0" class="escrow-visual" :aria-label="t('account.walletEscrowVisual')">
           <div class="escrow-bar">
@@ -70,17 +66,13 @@
 
       <section class="card card-content payout-hub" aria-label="Earnings summary">
         <h3>{{ t('account.payoutHubTitle') }}</h3>
-        <p class="hint">{{ t('account.payoutHubHint') }}</p>
+        <p class="hint">{{ t('account.payoutHubHintAgentDirect') || t('account.payoutHubHint') }}</p>
         <div v-if="payoutLoading" class="account-skel">{{ t('common.loading') }}</div>
         <template v-else-if="payout">
-          <div class="payout-stats">
+          <div class="payout-stats payout-stats--compact">
             <div class="payout-stat">
               <span class="payout-stat__label">{{ t('account.payoutTaskEarnings') }}</span>
-              <strong class="payout-stat__num">{{ payout.task_reward_earned }}</strong>
-            </div>
-            <div class="payout-stat">
-              <span class="payout-stat__label">{{ t('account.payoutMin') }}</span>
-              <strong class="payout-stat__num">{{ payout.min_withdraw_amount }}+</strong>
+              <strong class="payout-stat__num mono">{{ payout.task_reward_earned }}</strong>
             </div>
           </div>
 
@@ -90,6 +82,16 @@
               {{ t('account.legacyFiatTitle') }}
             </summary>
             <p class="hint">{{ t('account.legacyFiatHint') }}</p>
+            <div class="payout-stats payout-stats--inline">
+              <div class="payout-stat">
+                <span class="payout-stat__label">{{ t('account.payoutWithdrawable') }}</span>
+                <strong class="payout-stat__num mono">{{ payout.withdrawable_balance ?? credits }}</strong>
+              </div>
+              <div class="payout-stat">
+                <span class="payout-stat__label">{{ t('account.payoutMin') }}</span>
+                <strong class="payout-stat__num mono">{{ payout.min_withdraw_amount }}+</strong>
+              </div>
+            </div>
             <p v-if="payout.manual_review" class="hint payout-manual-hint">{{ t('account.payoutManualHint', { hint: payout.processing_time_hint_zh }) }}</p>
             <ul v-if="payoutBlockers.length" class="payout-blockers">
               <li v-for="b in payoutBlockers" :key="b">{{ t('account.payoutBlocker.' + b) }}</li>
@@ -1294,7 +1296,8 @@ onMounted(async () => {
 .escrow-legend__dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
 .escrow-legend__dot--credits { background: var(--primary-color); }
 .escrow-legend__dot--pending { background: var(--exchange-escrow, #eab308); }
-.legacy-fiat-accordion { margin-top: var(--space-2); padding: var(--space-3); border: var(--border-hairline); border-radius: var(--radius-md); background: rgba(255,255,255,0.02); }
+.payout-stats--compact { margin-bottom: var(--space-4); }
+.payout-stats--inline { display: flex; flex-wrap: wrap; gap: var(--space-4); margin: var(--space-3) 0; }
 .legacy-fiat-accordion > summary { cursor: pointer; font-weight: 600; list-style: none; }
 .legacy-fiat-accordion > summary::-webkit-details-marker { display: none; }
 .legacy-fiat-accordion[open] > summary { margin-bottom: var(--space-2); }

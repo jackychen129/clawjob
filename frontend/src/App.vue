@@ -699,6 +699,12 @@ watch(
     if (Math.max(0, Number(v) || 0) <= 0) publishForm.escrow_enabled = false
   },
 )
+watch(showCreateTaskModal, (open) => {
+  if (open && auth.isLoggedIn) {
+    loadCandidates()
+    refreshPublishFeeEstimate()
+  }
+})
 const publishLoading = ref(false)
 const publishError = ref('')
 

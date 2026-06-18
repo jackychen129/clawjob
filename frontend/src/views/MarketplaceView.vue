@@ -296,59 +296,15 @@
       </div>
     </section>
 
-    <!-- Tool Marketplace -->
-    <section id="section-tools" class="marketplace-section" aria-labelledby="section-tools-title">
+    <!-- MCP Tool market — deferred (Phase 5) -->
+    <section id="section-tools" class="marketplace-section marketplace-section--deferred" aria-labelledby="section-tools-title">
       <h2 id="section-tools-title" class="section-title">{{ t('marketplace.toolsTitle') }}</h2>
-      <p class="section-desc">{{ t('marketplace.toolsDesc') }}</p>
-
-      <div v-if="toolsLoading" class="tool-cards">
-        <div v-for="i in 4" :key="i" class="tool-card tool-card--skeleton">
-          <span class="tw-skeleton" style="height:1.2rem;width:60%;border-radius:var(--radius-sm)"></span>
-          <span class="tw-skeleton" style="height:0.875rem;width:80%;border-radius:var(--radius-sm);margin-top:6px"></span>
-        </div>
-      </div>
-      <div v-else class="tool-cards">
-        <div v-for="tool in toolsList" :key="tool.name" class="tool-card">
-          <div class="tool-card-header">
-            <span class="tool-card-name">{{ tool.name }}</span>
-            <span class="tool-card-mcp">MCP</span>
-            <span class="tool-card-cat mono">{{ tool.category }}</span>
-          </div>
-          <p class="tool-card-desc">{{ tool.description }}</p>
-          <div class="tool-card-meta">
-            <span class="tool-card-meta-item">{{ tool.return_type }}</span>
-            <span class="tool-card-meta-item" v-if="tool.requires_auth">{{ t('marketplace.toolAuthRequired') }}</span>
-            <span class="tool-card-meta-rate mono">{{ tool.rate_limit }}rpm</span>
-          </div>
-        </div>
-        <div v-if="!toolsList.length" class="tool-empty">
-          <p class="hint">{{ t('marketplace.toolsEmpty') }}</p>
-          <p class="hint"><router-link to="/account">{{ t('marketplace.toolsDevLink') }}</router-link></p>
-        </div>
-      </div>
-
-      <div v-if="auth.isLoggedIn" class="tool-publish-panel">
-        <button type="button" class="tool-publish-toggle" @click="showToolPublish = !showToolPublish">
-          {{ showToolPublish ? t('common.cancel') : t('marketplace.toolPublishBtn') }}
-        </button>
-        <div v-if="showToolPublish" class="tool-publish-form">
-          <h4 class="tool-form-title">{{ t('marketplace.toolPublishTitle') }}</h4>
-          <div class="tool-form-grid">
-            <label class="form-label">{{ t('marketplace.toolName') }}</label>
-            <input v-model="newTool.name" class="input" :placeholder="t('marketplace.toolNamePlaceholder')" />
-            <label class="form-label">{{ t('marketplace.toolDesc') }}</label>
-            <input v-model="newTool.description" class="input" :placeholder="t('marketplace.toolDescPlaceholder')" />
-            <label class="form-label">{{ t('marketplace.toolCategory') }}</label>
-            <input v-model="newTool.category" class="input" :placeholder="'search / translate / data / general'" />
-            <label class="form-label">{{ t('marketplace.toolReturnType') }}</label>
-            <input v-model="newTool.return_type" class="input" :placeholder="'json / text / list'" />
-          </div>
-          <div v-if="toolPublishError" class="batch-error">{{ toolPublishError }}</div>
-          <div class="tool-form-actions">
-            <Button type="button" size="sm" :disabled="toolPublishLoading" @click="submitTool">
-              {{ toolPublishLoading ? t('common.loading') : t('marketplace.toolPublishSubmit') }}
-            </Button>
-          </div>
+      <p class="section-desc">{{ t('marketplace.toolsDeferred') }}</p>
+      <div class="tools-deferred-card">
+        <p class="hint">{{ t('marketplace.toolsDeferredHint') }}</p>
+        <div class="tools-deferred-actions">
+          <Button :as="RouterLink" to="/skill" size="sm">{{ t('marketplace.toolsSkillCta') }}</Button>
+          <Button :as="RouterLink" to="/docs/openclaw-quickstart" size="sm" variant="secondary">{{ t('marketplace.toolsDocsCta') }}</Button>
         </div>
       </div>
     </section>
@@ -542,48 +498,6 @@ const skillsLoading = ref(true)
 const skillUnpublishId = ref<number | null>(null)
 const templateUnpublishId = ref<number | null>(null)
 
-// Tool Marketplace
-interface ToolMeta { name: string; description: string; category: string; return_type: string; requires_auth: boolean; rate_limit: number }
-const EXAMPLE_TOOLS: ToolMeta[] = [
-  { name: 'search', description: '通用搜索工具，输入查询词返回相关结果列表。', category: 'search', return_type: 'json', requires_auth: false, rate_limit: 60 },
-  { name: 'translate', description: '文本翻译工具，支持多语言互译（中英法日等）。', category: 'translate', return_type: 'text', requires_auth: false, rate_limit: 30 },
-]
-const toolsList = ref<ToolMeta[]>([])
-const toolsLoading = ref(false)
-const showToolPublish = ref(false)
-const toolPublishLoading = ref(false)
-const toolPublishError = ref('')
-const newTool = ref({ name: '', description: '', category: '', return_type: 'json' })
-
-async function loadTools() {
-  toolsLoading.value = true
-  try {
-    const res = await api.listAgentTools()
-    const items = (res.data as any)?.tools || (Array.isArray(res.data) ? res.data : [])
-    toolsList.value = items.length ? items : EXAMPLE_TOOLS
-  } catch {
-    toolsList.value = EXAMPLE_TOOLS
-  } finally {
-    toolsLoading.value = false
-  }
-}
-
-async function submitTool() {
-  toolPublishError.value = ''
-  if (!newTool.value.name.trim()) { toolPublishError.value = t('marketplace.toolNameRequired') || '工具名称不可为空'; return }
-  toolPublishLoading.value = true
-  try {
-    await api.createAgentTool({ ...newTool.value, parameters: {} })
-    showToolPublish.value = false
-    newTool.value = { name: '', description: '', category: '', return_type: 'json' }
-    await loadTools()
-  } catch (e: any) {
-    toolPublishError.value = e?.response?.data?.detail || t('common.errorGeneric') || '发布失败'
-  } finally {
-    toolPublishLoading.value = false
-  }
-}
-
 const showSwarmModal = ref(false)
 const swarmAgentsLoading = ref(false)
 const swarmGoLoading = ref(false)
@@ -683,7 +597,6 @@ function goSwarmTaskPublish() {
 
 onMounted(() => {
   loadMarketData()
-  loadTools()
 })
 </script>
 
@@ -871,50 +784,13 @@ onMounted(() => {
 .pricing-field .input { width: 100%; }
 .pricing-hint { margin: 2px 0 0; font-size: 0.72rem; color: var(--text-secondary); }
 .pricing-actions { display: flex; justify-content: flex-end; }
-.tool-cards { display: grid; grid-template-columns: 1fr; gap: var(--space-4); margin-bottom: var(--space-6); }
-@media (min-width: 640px) { .tool-cards { grid-template-columns: repeat(2, 1fr); } }
-@media (min-width: 900px) { .tool-cards { grid-template-columns: repeat(4, 1fr); } }
-.tool-card {
-  padding: var(--space-4);
+.tools-deferred-card {
+  padding: var(--space-5);
   border-radius: var(--radius-lg);
   border: var(--border-hairline);
-  background: var(--card-background);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  transition: border-color var(--duration-m) var(--ease-apple), transform var(--duration-m) var(--ease-apple), box-shadow var(--duration-m) var(--ease-apple);
+  background: rgba(255, 255, 255, 0.02);
 }
-.tool-card:hover {
-  border-color: rgba(var(--primary-rgb), 0.22);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-card-hover);
-}
-.tool-card--skeleton { min-height: 5rem; pointer-events: none; }
-.tool-card-header { display: flex; justify-content: flex-start; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
-.tool-card-name { font-weight: 650; font-size: var(--font-body); color: var(--text-primary); margin-right: auto; }
-.tool-card-mcp {
-  font-size: 0.65rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--primary-color);
-  background: rgba(var(--primary-rgb), 0.12);
-  border: 1px solid rgba(var(--primary-rgb), 0.25);
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
-}
-.tool-card-cat { font-size: var(--font-caption); color: var(--text-secondary); background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: var(--radius-sm); }
-.tool-card-desc { font-size: var(--font-caption); color: var(--text-secondary); line-height: 1.5; flex: 1; }
-.tool-card-meta { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: auto; }
-.tool-card-meta-item { font-size: 0.75rem; color: var(--text-secondary); background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: var(--radius-sm); }
-.tool-card-meta-rate { font-size: 0.75rem; color: var(--text-secondary); margin-left: auto; }
-.tool-empty { padding: var(--space-4); color: var(--text-secondary); font-size: var(--font-caption); }
-.tool-publish-panel { margin-top: var(--space-4); }
-.tool-publish-toggle { background: none; border: var(--border-hairline); border-radius: var(--radius-md); padding: var(--space-2) var(--space-4); color: var(--text-secondary); cursor: pointer; font-size: var(--font-body); }
-.tool-publish-toggle:hover { color: var(--text-primary); border-color: var(--primary-color); }
-.tool-publish-form { margin-top: var(--space-4); padding: var(--space-5); border-radius: var(--radius-lg); border: var(--border-hairline); background: rgba(255,255,255,0.02); }
-.tool-form-title { font-weight: 600; margin-bottom: var(--space-4); font-size: var(--font-body); }
-.tool-form-grid { display: grid; grid-template-columns: 7rem 1fr; gap: var(--space-2) var(--space-4); align-items: center; margin-bottom: var(--space-4); }
-.tool-form-actions { display: flex; justify-content: flex-end; }
+.tools-deferred-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-4); }
+.marketplace-section--deferred .section-desc { margin-bottom: var(--space-4); }
 </style>
 
