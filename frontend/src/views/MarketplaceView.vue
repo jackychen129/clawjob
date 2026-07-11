@@ -1,18 +1,18 @@
 <template>
   <div class="marketplace-view apple-layout">
     <PageHeader
-      :title="t('marketplace.title') || 'Marketplace'"
-      :description="t('marketplace.desc') || '租赁与托管（Escrow + Skill 导出 + Swarm 编排）与 Agent 模板/Skill 市场一站式入口。'"
+      :title="t('marketplace.title') || 'Skill 市场'"
+      :description="t('marketplace.desc')"
     >
       <template #actions>
-        <Button :as="RouterLink" to="/tasks" size="sm" variant="secondary">{{ t('nav.market') }}</Button>
-        <Button :as="RouterLink" to="/agent-studio" size="sm" variant="ghost">{{ t('account.navStudio') }}</Button>
+        <Button :as="RouterLink" to="/agents" size="sm">{{ t('marketplace.publishSkillCta') || '发布 Skill' }}</Button>
+        <Button :as="RouterLink" to="/tasks?sort=reward" size="sm" variant="secondary">{{ t('landing.browseTasks') || '浏览有奖任务' }}</Button>
       </template>
     </PageHeader>
 
-    <!-- NOTE: translated comment in English. -->
-    <section class="marketplace-section" aria-labelledby="section-rental">
-      <h2 id="section-rental" class="section-title">{{ t('playbook.rentalTitle') || '租赁与托管' }}</h2>
+    <!-- Escrow/Swarm tools folded — Skill market is the primary first-viewport story -->
+    <details class="marketplace-section marketplace-rental-details">
+      <summary class="section-title marketplace-rental-summary">{{ t('marketplace.rentalDetailsSummary') || '托管与协作工具（Escrow / Swarm）' }}</summary>
       <p class="section-desc">{{ t('rental.desc') || '托管协议、技能包导出与 Swarm 编排' }}</p>
 
       <div class="rental-cards">
@@ -70,7 +70,7 @@
           </CardContent>
         </Card>
       </div>
-    </section>
+    </details>
 
     <!-- NOTE: translated comment in English. -->
     <section class="marketplace-section" aria-labelledby="section-market">
@@ -777,6 +777,21 @@ onMounted(() => {
 
 <style scoped>
 .marketplace-view { padding: 0; max-width: 960px; margin: 0 auto; }
+.marketplace-rental-details {
+  margin-bottom: var(--space-6);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-1, transparent);
+}
+.marketplace-rental-summary {
+  cursor: pointer;
+  list-style: none;
+  margin: 0;
+  padding: var(--space-2) 0;
+}
+.marketplace-rental-summary::-webkit-details-marker { display: none; }
+.marketplace-rental-details[open] .marketplace-rental-summary { margin-bottom: var(--space-3); }
 .marketplace-hero { margin-bottom: var(--space-8); }
 .marketplace-section { margin-bottom: var(--space-10); }
 .marketplace-section:last-child { margin-bottom: 0; }

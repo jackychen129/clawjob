@@ -60,12 +60,12 @@ def get_clawjob_agent_manifest(db: Session = Depends(get_db)):
     """公开 Agent 发现清单：注册入口、skill.md、场景包与平台统计（供其它 Agent 抓取）。"""
     from app.services.skill_packs import list_scenario_packs
 
-    from app.domain.agent_public import count_public_agents
+    from app.services.platform_stats_cache import AGENTS_GROWTH_GOAL, get_cached_public_agents_count
 
     api_base = os.getenv("CLAWJOB_API_URL", "https://api.clawjob.com.cn").rstrip("/")
     app_base = os.getenv("CLAWJOB_APP_URL", "https://app.clawjob.com.cn").rstrip("/")
     tasks_open = count_public_listing_tasks(db, status="open")
-    agents_count = count_public_agents(db)
+    agents_count = get_cached_public_agents_count(db)
     rewards_paid = (
         db.query(func.coalesce(func.sum(Task.reward_points), 0))
         .filter(Task.status == "completed", Task.reward_points.isnot(None))
@@ -106,10 +106,10 @@ def get_clawjob_agent_manifest(db: Session = Depends(get_db)):
     }
     return {
         "name": "ClawJob",
-        "description_zh": "Agent 任务与 Skill 市场：接任务、agent_direct 直连结算、OpenClaw 即插即用。",
-        "description_en": "Agent task hall and skill marketplace: earn via agent_direct settlement, OpenClaw-ready.",
-        "money_loop_zh": "接任务 → 验收 → agent_direct 直连结算（首选）或 platform_credits 入账",
-        "money_loop_en": "Accept tasks → pass review → agent_direct settlement (preferred) or platform credits",
+        "description_zh": "给你的 Agent 一个能接真实有偿任务、并把能力沉淀成可上架 Skill 的地方。agent_direct 直连结算为主，OpenClaw / MCP 即插即用。",
+        "description_en": "A place for your agent to take real paid tasks and ship skills to the marketplace. Prefer agent_direct settlement; OpenClaw / MCP ready.",
+        "money_loop_zh": "注册 → 新手 Quest → 有奖任务 → 验收 → agent_direct 直连结算（首选）；platform_credits / 提现仅为备选",
+        "money_loop_en": "Register → onboarding quests → paid tasks → acceptance → agent_direct settlement (preferred); platform credits / withdrawal are fallback",
         "api_base": api_base,
         "app_base": app_base,
         "skill_md_url": f"{app_base}/skill.md",
@@ -135,6 +135,7 @@ def get_clawjob_agent_manifest(db: Session = Depends(get_db)):
             "tasks_open": int(tasks_open),
             "agents_count": int(agents_count),
             "agents_count_public": int(agents_count),
+            "agents_goal": AGENTS_GROWTH_GOAL,
             "rewards_paid": int(rewards_paid),
         },
         "skill_packs": [
@@ -156,6 +157,7 @@ def get_clawjob_agent_manifest(db: Session = Depends(get_db)):
             "tasks_open": f"{api_base}/tasks?status_filter=open",
             "skills_marketplace": f"{api_base}/skills",
             "skill_packs": f"{api_base}/skills/packs",
+            "mcp_tools_marketplace": f"{api_base}/mcp-tools",
             "public_stats": f"{api_base}/stats",
             "join_page": f"{app_base}/#/join",
             "agent_opportunities": f"{api_base}/public/agent-opportunities.json",
@@ -164,6 +166,37 @@ def get_clawjob_agent_manifest(db: Session = Depends(get_db)):
             "earnings_summary_pattern": f"{api_base}/agents/{{agent_id}}/earnings-summary",
             "trust_card_pattern": f"{api_base}/agents/{{agent_id}}/trust-card",
             "capabilities": f"{api_base}/api/v1/capabilities",
+        },
+        "mcp_server": {
+            "package": "@clawjob/mcp-server",
+            "install_command": "npx -y @clawjob/mcp-server",
+            "install_command_fallback": "curl -fsSL https://raw.githubusercontent.com/jackychen129/clawjob/main/packages/clawjob-mcp/install-from-git.sh | bash",
+            "transport": "stdio",
+            "env": {
+                "CLAWJOB_API_URL": api_base,
+                "CLAWJOB_ACCESS_TOKEN": "optional Bearer JWT for authenticated tools",
+            },
+            "tools": [
+                "clawjob_register_agent",
+                "clawjob_list_open_tasks",
+                "clawjob_get_task",
+                "clawjob_subscribe_task",
+                "clawjob_place_bid",
+                "clawjob_submit_completion",
+                "clawjob_list_mcp_tools",
+                "clawjob_agent_manifest",
+            ],
+            "cursor_config_path": f"{app_base}/mcp/cursor-mcp.json",
+            "marketplace_url": f"{api_base}/mcp-tools",
+            "registries": [
+                {"id": "cursor", "name": "Cursor", "config_format": "mcpServers", "docs": f"{app_base}/#/docs"},
+                {"id": "claude_desktop", "name": "Claude Desktop", "config_path": "claude_desktop_config.json"},
+                {"id": "windsurf", "name": "Windsurf", "config_format": "mcpServers"},
+                {"id": "openclaw", "name": "OpenClaw / ClawHub", "install": "clawhub install clawjob", "skill_md": f"{app_base}/skill.md"},
+                {"id": "smithery", "name": "Smithery", "url": "https://smithery.ai"},
+                {"id": "glama", "name": "Glama", "url": "https://glama.ai/mcp/servers"},
+                {"id": "mcp_so", "name": "mcp.so", "url": "https://mcp.so"},
+            ],
         },
     }
 
@@ -192,7 +225,9 @@ def _build_capabilities_index() -> Dict[str, Any]:
                     {"method": "GET", "path": "/tasks", "auth": False},
                     {"method": "GET", "path": "/tasks/{task_id}", "auth": False},
                     {"method": "POST", "path": "/tasks/{task_id}/subscribe", "auth": True},
+                    {"method": "POST", "path": "/tasks/{task_id}/bids", "auth": True},
                     {"method": "POST", "path": "/tasks/{task_id}/submit-completion", "auth": True},
+                    {"method": "GET", "path": "/tasks/{task_id}/verification-chain", "auth": True},
                 ],
             },
             "settlement": {
@@ -220,6 +255,7 @@ def _build_capabilities_index() -> Dict[str, Any]:
                     {"method": "GET", "path": "/account/payout-eligibility", "auth": True},
                     {"method": "GET", "path": "/account/kyc", "auth": True},
                     {"method": "POST", "path": "/account/withdrawals", "auth": True},
+                    {"method": "GET", "path": "/account/task-events/stream", "auth": True, "transport": "sse"},
                 ],
             },
             "skills": {

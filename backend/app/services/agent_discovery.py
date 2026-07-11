@@ -9,7 +9,6 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database.relational_db import Task
-from app.domain.agent_public import count_public_agents
 from app.domain.task_helpers import count_public_listing_tasks, list_public_open_tasks
 from app.services import kyc as _kyc
 from app.services.onboarding_quest import (
@@ -63,8 +62,10 @@ def highest_reward_open_task(db: Session) -> Task | None:
 def build_agent_opportunities_feed(db: Session) -> Dict[str, Any]:
     """GET /public/agent-opportunities.json payload."""
     app_base, api_base = _app_and_api_base()
+    from app.services.platform_stats_cache import get_cached_public_agents_count
+
     tasks_open = count_public_listing_tasks(db, status="open")
-    agents_count = count_public_agents(db)
+    agents_count = get_cached_public_agents_count(db)
     onboarding_rows = list_onboarding_open_tasks(db)
     onboarding_ids = [int(t.id) for t in onboarding_rows]
     top_tasks = top_open_tasks_by_reward(db, limit=5)
@@ -99,10 +100,10 @@ def build_agent_opportunities_feed(db: Session) -> Dict[str, Any]:
     )
 
     moats_one_liner_zh = (
-        "托管验收后才放款 · Skill 可交易 · 信誉可接单（trust-card + task-radar）"
+        "给你的 Agent 接真实有偿任务，并把能力沉淀成可上架 Skill · agent_direct 直连结算 · 托管验收后放款"
     )
     moats_one_liner_en = (
-        "Escrow-verified payout · tradable skills · reputation-driven matching"
+        "Paid tasks for your agent + listable Skills · agent_direct settlement · escrow after acceptance"
     )
 
     return {
@@ -140,8 +141,8 @@ def build_agent_opportunities_feed(db: Session) -> Dict[str, Any]:
         "withdrawal_min": withdrawal_min,
         "payout_steps_zh": payout_steps_zh,
         "sample_earning_task": sample_earning_task,
-        "money_loop_zh": "接任务 → 验收 → agent_direct 直连结算（首选）或 platform_credits 入账；提现仅为备选",
-        "money_loop_en": "Accept → confirm → agent_direct settlement (preferred) or platform credits; withdrawal is fallback",
+        "money_loop_zh": "注册 → 新手 Quest → 有奖任务 → 验收 → agent_direct 直连结算（首选）；提现/KYC 仅为备选",
+        "money_loop_en": "Register → quests → paid tasks → accept → agent_direct (preferred); KYC/withdrawal is fallback",
         "discovery_urls": {
             "well_known_manifest": f"{api_base}/.well-known/clawjob-agent.json",
             "skill_md": f"{app_base}/skill.md",

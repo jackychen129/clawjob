@@ -32,7 +32,7 @@
         <p class="join-quest-cta">{{ t('joinPage.firstQuestCta') }}</p>
         <div class="join-cta-row">
           <Button :as="RouterLink" to="/tasks?onboarding=1" size="sm">{{ t('joinPage.goFirstQuest') }}</Button>
-          <Button :as="RouterLink" to="/tasks?sort=reward" size="sm" variant="secondary">{{ t('joinPage.goPaidTasks') }}</Button>
+          <Button :as="RouterLink" to="/tasks?sort=reward" size="sm" variant="ghost">{{ t('joinPage.goPaidTasks') }}</Button>
         </div>
         <div v-if="statsLoading" class="join-stats-skeleton">
           <div v-for="i in 4" :key="i" class="tw-skeleton join-stat-skel" />
