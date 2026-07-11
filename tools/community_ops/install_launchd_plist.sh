@@ -14,6 +14,8 @@ PLIST_DIR="$HOME/Library/LaunchAgents"
 LABEL_PREFIX="com.clawjob.ops"
 # launchd 后台进程无法访问 ~/Documents 等受 TCC 保护目录；WorkingDirectory 用 $HOME
 LAUNCHD_CWD="${HOME}"
+# Logs outside Documents/Desktop/Downloads so launchd can write even if repo is TCC-blocked.
+LOG_DIR="${CLAWJOB_OPS_LOG_DIR:-$HOME/Library/Logs/clawjob}"
 
 warn_protected_path() {
   case "$ROOT_DIR" in
@@ -22,9 +24,12 @@ warn_protected_path() {
       echo "⚠️  仓库位于 macOS 受保护目录：$ROOT_DIR"
       echo "   launchd 后台会被 TCC 拦截（exit 126 / Operation not permitted）。"
       echo "   推荐复制粘贴："
-      echo "     mkdir -p ~/Projects && mv \"$ROOT_DIR\" ~/Projects/clawjob"
+      echo "     mkdir -p ~/Projects && cp -R \"$ROOT_DIR\" ~/Projects/clawjob"
+      echo "     # 或直接 mv（确认无其他进程占用后）"
+      echo "     # mv \"$ROOT_DIR\" ~/Projects/clawjob"
       echo "     cd ~/Projects/clawjob && CLAWJOB_ROOT=\"\$(pwd)\" ./tools/community_ops/install_launchd_plist.sh"
       echo "   或：系统设置 → 隐私与安全性 → 完全磁盘访问权限 → 添加 /bin/bash + Terminal"
+      echo "   日志已写到 $LOG_DIR（不受 Documents TCC 影响）；但脚本本身仍须能读仓库。"
       echo "   详见 tools/community_ops/README.md"
       echo ""
       ;;
@@ -54,13 +59,15 @@ install_plist() {
   <key>StartInterval</key>
   <integer>${interval_sec}</integer>
   <key>StandardOutPath</key>
-  <string>${ROOT_DIR}/logs/launchd-${name}.log</string>
+  <string>${LOG_DIR}/launchd-${name}.log</string>
   <key>StandardErrorPath</key>
-  <string>${ROOT_DIR}/logs/launchd-${name}.err.log</string>
+  <string>${LOG_DIR}/launchd-${name}.err.log</string>
   <key>EnvironmentVariables</key>
   <dict>
     <key>CLAWJOB_ROOT</key>
     <string>${ROOT_DIR}</string>
+    <key>CLAWJOB_OPS_LOG_DIR</key>
+    <string>${LOG_DIR}</string>
     <key>CLAWJOB_API_URL</key>
     <string>${CLAWJOB_API_URL:-https://api.clawjob.com.cn}</string>
     <key>HOME</key>
@@ -72,11 +79,15 @@ EOF
 
   launchctl unload "$plist" 2>/dev/null || true
   launchctl load "$plist"
-  echo "Installed: $plist (every ${interval_sec}s, CLAWJOB_ROOT=$ROOT_DIR)"
+  echo "Installed: $plist (every ${interval_sec}s, CLAWJOB_ROOT=$ROOT_DIR, logs=$LOG_DIR)"
 }
 
 warn_protected_path
-mkdir -p "$ROOT_DIR/logs" "$PLIST_DIR"
+mkdir -p "$LOG_DIR" "$ROOT_DIR/logs" "$PLIST_DIR"
+# Keep a convenience symlink when repo logs/ is writable; ignore failures under TCC.
+ln -sfn "$LOG_DIR" "$ROOT_DIR/logs/launchd-external" 2>/dev/null || true
+chmod +x "$ROOT_DIR"/tools/community_ops/*.sh 2>/dev/null || true
+chmod +x "$ROOT_DIR"/tools/growth/*.sh 2>/dev/null || true
 chmod +x "$ROOT_DIR/tools/community_ops/run_community_ops.sh"
 chmod +x "$ROOT_DIR/tools/community_ops/audit_agents_daily.sh" 2>/dev/null || true
 
@@ -132,13 +143,15 @@ cat > "$OPENCLAW_PLIST" <<EOF
     <integer>0</integer>
   </dict>
   <key>StandardOutPath</key>
-  <string>${ROOT_DIR}/logs/launchd-openclaw-mission.log</string>
+  <string>${LOG_DIR}/launchd-openclaw-mission.log</string>
   <key>StandardErrorPath</key>
-  <string>${ROOT_DIR}/logs/launchd-openclaw-mission.err.log</string>
+  <string>${LOG_DIR}/launchd-openclaw-mission.err.log</string>
   <key>EnvironmentVariables</key>
   <dict>
     <key>CLAWJOB_ROOT</key>
     <string>${ROOT_DIR}</string>
+    <key>CLAWJOB_OPS_LOG_DIR</key>
+    <string>${LOG_DIR}</string>
     <key>CLAWJOB_API_URL</key>
     <string>${CLAWJOB_API_URL:-https://api.clawjob.com.cn}</string>
     <key>HOME</key>
@@ -152,6 +165,6 @@ launchctl load "$OPENCLAW_PLIST"
 echo "Installed: $OPENCLAW_PLIST (daily 09:00, CLAWJOB_ROOT=$ROOT_DIR)"
 
 echo ""
-echo "Done. Logs: $ROOT_DIR/logs/"
+echo "Done. Logs: $LOG_DIR"
 echo "Verify: CLAWJOB_ROOT=$ROOT_DIR $ROOT_DIR/tools/community_ops/run_community_ops.sh"
 echo "Uninstall: launchctl unload ~/Library/LaunchAgents/${LABEL_PREFIX}.*.plist"

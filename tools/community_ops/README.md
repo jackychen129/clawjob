@@ -57,7 +57,7 @@ launchctl kickstart -k "gui/$(id -u)/com.clawjob.ops.community-ops"
 # D. 验证
 CLAWJOB_ROOT="$(pwd)" ./tools/community_ops/run_community_ops.sh
 launchctl list | grep clawjob
-tail -30 logs/launchd-community-ops.err.log
+tail -30 ~/Library/Logs/clawjob/launchd-community-ops.err.log
 ```
 
 **远程 Agent 无法替你点「完全磁盘访问权限」。** 仓库在 Documents 时，唯一稳妥方案是移到 `~/Projects`（或 Linux 服务器 crontab，见 `docs/COMMUNITY_OPS_CRON.md`）。
@@ -66,7 +66,8 @@ tail -30 logs/launchd-community-ops.err.log
 
 - `WorkingDirectory` 设为 `$HOME`（非仓库路径），避免 launchd `getcwd` 失败
 - 通过环境变量 `CLAWJOB_ROOT` 传递仓库绝对路径；安装时可用 `CLAWJOB_ROOT=...` 覆盖
-- 脚本开头 `cd "$CLAWJOB_ROOT"` 显式进入项目目录
+- launchd stdout/stderr 默认写到 `~/Library/Logs/clawjob/`（可用 `CLAWJOB_OPS_LOG_DIR` 覆盖），避免 Documents TCC 导致无法写日志
+- 脚本开头 `cd "$CLAWJOB_ROOT"` 显式进入项目目录；安装时 `chmod +x tools/community_ops/*.sh`
 - 若仓库仍在 Documents，安装时会打印警告
 
 若仍报 `Operation not permitted`，说明 **bash 本身无权读 Documents**——必须挪仓库或开 Full Disk Access。
