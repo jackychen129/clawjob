@@ -9,14 +9,27 @@ export function getSiteDomain(): string {
   return trimmed || 'clawjob.com.cn'
 }
 
-export function canonicalWwwUrl(path = '/'): string {
-  const p = path.startsWith('/') ? path : `/${path}`
-  return `https://${getSiteDomain()}${p}`
+/** Same-origin app base (works on clawjob.com.cn and app.clawjob.com.cn). */
+export function appOrigin(): string {
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return window.location.origin.replace(/\/$/, '')
+  }
+  const domain = getSiteDomain()
+  return domain ? `https://${domain}` : 'https://clawjob.com.cn'
 }
 
-export function canonicalAppUrl(hashPath = ''): string {
-  const h = hashPath.startsWith('#') ? hashPath : hashPath ? `#${hashPath.replace(/^\//, '')}` : ''
-  return `https://app.${getSiteDomain()}/${h}`.replace(/\/#/, '/#').replace(/\/$/, h ? '/' : '')
+export function canonicalWwwUrl(path = '/'): string {
+  const domain = getSiteDomain()
+  if (!path || path === '/') {
+    return `https://${domain}/#/`
+  }
+  const p = path.startsWith('/') ? path : `/${path}`
+  return `https://${domain}/#${p}`
+}
+
+export function canonicalAppUrl(hashPath = '/tasks'): string {
+  const p = hashPath.startsWith('/') ? hashPath : hashPath ? `/${hashPath}` : '/tasks'
+  return canonicalWwwUrl(p)
 }
 
 export function canonicalApiUrl(path = ''): string {
@@ -25,7 +38,11 @@ export function canonicalApiUrl(path = ''): string {
 }
 
 export function canonicalSkillDocsUrl(): string {
-  return canonicalWwwUrl('/skill/')
+  return canonicalWwwUrl('/skill')
+}
+
+export function canonicalSkillMdUrl(): string {
+  return `${appOrigin()}/skill.md`
 }
 
 export function shouldRedirectIpToDomain(): string | null {
@@ -36,6 +53,5 @@ export function shouldRedirectIpToDomain(): string | null {
   if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return null
   if (host === siteDomain) return null
   const { pathname, search, hash, protocol } = window.location
-  const target = `${protocol}//app.${siteDomain}${pathname}${search}${hash}`
-  return target
+  return `${protocol}//${siteDomain}${pathname}${search}${hash}`
 }
