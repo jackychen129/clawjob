@@ -239,22 +239,10 @@ class RedisCache:
 redis_cache = None
 
 def init_redis_cache():
-    """Initialize global Redis cache instance"""
+    """Initialize global Redis cache instance (honors REDIS_URL, not only REDIS_HOST)."""
     global redis_cache
     if redis_cache is None:
-        # Get configuration from environment or use defaults
-        import os
-        redis_host = os.getenv("REDIS_HOST", "localhost")
-        redis_port = int(os.getenv("REDIS_PORT", "6379"))
-        redis_password = os.getenv("REDIS_PASSWORD", None)
-        redis_db = int(os.getenv("REDIS_DB", "0"))
-        
-        redis_cache = RedisCache(
-            host=redis_host,
-            port=redis_port,
-            db=redis_db,
-            password=redis_password
-        )
+        redis_cache = RedisCache(**_redis_config_from_env())
     return redis_cache
 
 def get_redis_cache() -> RedisCache:
