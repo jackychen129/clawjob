@@ -36,6 +36,7 @@
       <section class="task-center">
         <div class="task-center-inner" :class="{ 'task-center-inner--with-detail': !!selectedTaskDetail }">
           <div class="task-list-wrap">
+          <div class="task-tabs-scroll">
           <div class="task-tabs">
             <button type="button" class="task-tab" :class="{ active: tab === 'available' }" @click="tab = 'available'">{{ t('taskManage.available') || '可接取任务' }}</button>
             <button type="button" class="task-tab" :class="{ active: tab === 'mine' }" @click="tab = 'mine'">{{ t('taskManage.myAccepted') || '我接取的任务' }}</button>
@@ -49,6 +50,7 @@
               @click="goDisputesTab"
             >{{ t('taskManage.tabDisputes') }}<span v-if="disputesTabBadgeCount" class="task-tab__count mono">({{ disputesTabBadgeCount }})</span></button>
           </div>
+          </div>
           <div v-if="pulseFilterBannerText" class="pulse-filter-banner">
             <span>{{ pulseFilterBannerText }}</span>
             <Button size="sm" type="button" variant="secondary" @click="clearPulseQuery">{{ t('taskManage.pulseFilterClear') || '清除筛选' }}</Button>
@@ -59,6 +61,12 @@
             </p>
             <Button size="sm" type="button" variant="secondary" @click="clearRelatedSkillFilter">
               {{ t('taskManage.clearRelatedSkillFilter') || '显示全部任务' }}
+            </Button>
+          </div>
+          <div v-if="tab === 'available' && onboardingFilterActive" class="related-skill-banner">
+            <p class="related-skill-banner__text">{{ t('taskManage.onboardingFilterHint') }}</p>
+            <Button size="sm" type="button" variant="secondary" @click="clearOnboardingFilter">
+              {{ t('taskManage.clearOnboardingFilter') }}
             </Button>
           </div>
           <!-- NOTE: translated comment in English. -->
@@ -150,7 +158,8 @@
                       <TableCell class="text-right" @click.stop>
                         <div class="task-table-actions">
                           <Button size="sm" variant="ghost" type="button" @click="openTaskDetail(task)">{{ t('task.viewDetail') }}</Button>
-                          <Button v-if="task.status === 'open' && auth.isLoggedIn && myAgents.length" size="sm" :disabled="subscribeLoading === task.id" @click="openSubscribeModal(task)">{{ t('task.subscribe') }}</Button>
+                          <Button v-if="task.status === 'open' && auth.isLoggedIn && myAgents.length && taskHasOpenAuction(task)" size="sm" variant="secondary" type="button" @click="openTaskDetail(task)">{{ t('auction.submitBid') }}</Button>
+                          <Button v-else-if="task.status === 'open' && auth.isLoggedIn && myAgents.length" size="sm" :disabled="subscribeLoading === task.id" @click="openSubscribeModal(task)">{{ t('task.subscribe') }}</Button>
                           <Button v-else-if="task.status === 'open' && !auth.isLoggedIn" size="sm" variant="secondary" type="button" @click="openAuth()">{{ t('task.loginToAccept') }}</Button>
                         </div>
                       </TableCell>
@@ -174,6 +183,7 @@
                     <div class="task-row__head">
                       <span v-if="item.data!.category" class="task-row__category">{{ taskCategoryLabel(item.data!.category) }}</span>
                       <span v-if="item.data!.collaborative" class="task-tag task-tag--collab">{{ t('task.collaborativeBadge') }}</span>
+                      <span v-if="taskHasOpenAuction(item.data!)" class="task-tag task-tag--auction">{{ t('auction.statusOpen') }}</span>
                       <span v-if="item.data!.settlement_mode === 'agent_direct' && item.data!.reward_points" class="task-tag task-tag--exchange task-tag--agent_direct_settlement">{{ t('task.settlementBadge') }}</span>
                       <span v-for="b in (item.data!.badges || [])" :key="b" class="task-tag" :class="'task-tag--' + b">{{ taskBadgeLabel(b) }}</span>
                       <span :class="taskStatusPillClass(item.data!.status)">{{ t('status.' + item.data!.status) || item.data!.status }}</span>
@@ -188,7 +198,8 @@
                     </p>
                     <div class="task-row__actions" @click.stop>
                       <Button size="sm" variant="ghost" type="button" class="task-row__btn" @click="openTaskDetail(item.data!)">{{ t('task.viewDetail') }}</Button>
-                      <Button v-if="item.data!.status === 'open' && auth.isLoggedIn && myAgents.length" size="sm" :disabled="subscribeLoading === item.data!.id" class="task-row__btn task-row__btn--primary" @click="openSubscribeModal(item.data!)">{{ t('task.subscribe') }}</Button>
+                      <Button v-if="item.data!.status === 'open' && auth.isLoggedIn && myAgents.length && taskHasOpenAuction(item.data!)" size="sm" variant="secondary" type="button" class="task-row__btn task-row__btn--primary" @click="openTaskDetail(item.data!)">{{ t('auction.submitBid') }}</Button>
+                      <Button v-else-if="item.data!.status === 'open' && auth.isLoggedIn && myAgents.length" size="sm" :disabled="subscribeLoading === item.data!.id" class="task-row__btn task-row__btn--primary" @click="openSubscribeModal(item.data!)">{{ t('task.subscribe') }}</Button>
                       <Button v-else-if="item.data!.status === 'open' && !auth.isLoggedIn" size="sm" variant="secondary" type="button" class="task-row__btn" @click="openAuth()">{{ t('task.loginToAccept') }}</Button>
                     </div>
                   </article>
@@ -642,7 +653,12 @@
                 <Tab value="agent">{{ t('taskManage.agentJsonTab') }}</Tab>
               </TabList>
               <TabPanel value="human">
-            <div v-if="detailLoading" class="loading"><div class="spinner"></div></div>
+            <div v-if="detailLoading" class="detail-skeleton" aria-busy="true">
+              <div class="detail-skeleton__line detail-skeleton__line--wide tw-skeleton" />
+              <div class="detail-skeleton__line tw-skeleton" />
+              <div class="detail-skeleton__line tw-skeleton" />
+              <div class="detail-skeleton__block tw-skeleton" />
+            </div>
             <template v-else>
               <div class="detail-section">
                 <p class="detail-desc">{{ selectedTaskDetail.description || t('common.noDescription') }}</p>
@@ -1143,6 +1159,21 @@
                       <li v-for="(req, ri) in verificationChainData.declaration.verification_requirements.slice(0, 12)" :key="'req-' + ri">{{ typeof req === 'string' ? req : JSON.stringify(req) }}</li>
                     </ul>
                     <p v-else class="hint">{{ t('task.verificationChainNoRequirements') }}</p>
+                    <template v-if="(verificationChainData.declaration?.escrow_milestones || []).length">
+                      <p class="hint verification-chain-escrow-title">{{ t('task.verificationChainEscrowMilestones') }}</p>
+                      <ul class="verification-chain-ul verification-chain-ul--milestones">
+                        <li
+                          v-for="m in verificationChainData.declaration.escrow_milestones"
+                          :key="'ms-' + m.index"
+                          :class="{ 'verification-chain-li--current': m.index === verificationChainData.declaration?.escrow_current_index }"
+                        >
+                          <strong>{{ m.title }}</strong>
+                          <span v-if="m.amount != null" class="mono"> · {{ m.amount }} pts</span>
+                          <p v-if="m.acceptance_criteria" class="hint">{{ m.acceptance_criteria }}</p>
+                          <p v-else class="hint">{{ t('task.verificationChainNoCriteria') }}</p>
+                        </li>
+                      </ul>
+                    </template>
                   </div>
                   <div class="verification-chain-card">
                     <p class="verification-chain-card__title">{{ t('task.verificationChainSandbox') }}</p>
@@ -1329,7 +1360,7 @@
         <div class="task-right-card task-right-agents">
           <h3 class="task-right-title">{{ t('taskManage.myAgents') || '我的 Agent' }}</h3>
           <div v-if="!auth.isLoggedIn" class="task-right-hint">
-            <router-link to="/login">{{ t('common.loginOrRegister') }}</router-link>
+            <Button type="button" size="sm" variant="ghost" @click="openAuth()">{{ t('common.loginOrRegister') }}</Button>
           </div>
           <div v-else-if="!myAgents.length" class="task-right-hint task-right-hint--no-agent">
             <p class="task-right-hint-text">{{ t('taskManage.noAgentHint') }}</p>
@@ -2045,6 +2076,8 @@ const categoryFilterOptions = [
   { value: 'data', labelKey: 'task.categoryData' },
   { value: 'other', labelKey: 'task.categoryOther' },
 ]
+const onboardingFilterActive = computed(() => String(route.query.onboarding ?? '') === '1')
+
 const filteredTasks = computed(() => {
   let list = tasks.value
   if (categoryFilter.value) {
@@ -2052,6 +2085,9 @@ const filteredTasks = computed(() => {
   }
   if (settlementFilter.value) {
     list = list.filter((row) => (row.settlement_mode || 'platform_credits') === settlementFilter.value)
+  }
+  if (onboardingFilterActive.value) {
+    list = list.filter((row) => String(row.title || '').includes('【新手 Quest'))
   }
   return list
 })
@@ -3378,6 +3414,10 @@ function openSubscribeModal(task: { id: number; title: string }) {
   subscribeTaskItem.value = task
 }
 
+function taskHasOpenAuction(task: { auction?: { is_open?: boolean } } | null | undefined): boolean {
+  return Boolean(task?.auction?.is_open)
+}
+
 function doSubscribe(taskId: number, agentId: number) {
   subscribeLoading.value = taskId
   api.subscribeTask(taskId, agentId).then(() => {
@@ -3676,6 +3716,9 @@ function applySwarmFromQuery() {
 }
 
 onMounted(() => {
+  if (typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches) {
+    listViewMode.value = 'cards'
+  }
   loadMarketStats()
   loadCandidates()
   if (auth.isLoggedIn) {
@@ -3706,6 +3749,30 @@ watch(categoryFilter, () => {
   if (tab.value === 'available' && !route.query.relatedSkillId) loadTasks()
 })
 
+function clearOnboardingFilter() {
+  const q = { ...route.query } as Record<string, string | string[] | undefined>
+  delete q.onboarding
+  router.replace({ path: '/tasks', query: q })
+}
+
+watch(
+  () => String(route.query.sort ?? ''),
+  (v) => {
+    if (v === 'reward' || v === 'reward_desc') {
+      taskSort.value = 'reward_desc'
+    }
+  },
+  { immediate: true }
+)
+
+watch(
+  () => String(route.query.onboarding ?? ''),
+  (v) => {
+    if (v === '1') tab.value = 'available'
+  },
+  { immediate: true }
+)
+
 watch(
   () => [normalizePulse(route.query.pulse), auth.isLoggedIn, String(route.query.relatedSkillId ?? '')] as const,
   () => {
@@ -3715,7 +3782,7 @@ watch(
 )
 
 watch(
-  () => String(route.query.taskId ?? ''),
+  () => String(route.query.taskId ?? route.query.task ?? ''),
   (v) => {
     if (!v) return
     const id = Number(v)
@@ -3894,7 +3961,9 @@ watch(tab, (newTab) => {
 .verification-chain-ul--compact li { margin-bottom: 0.25rem; }
 .verification-chain-li { list-style: disc; }
 .verification-chain-li--blocker { color: rgba(248, 113, 113, 0.95); }
-.verification-chain-li--warn { color: rgba(251, 191, 36, 0.95); }
+.verification-chain-li--current { list-style: none; margin-left: 0; padding: 0.35rem 0.5rem; border-radius: var(--radius-sm); background: rgba(var(--primary-rgb), 0.08); border: 1px solid rgba(var(--primary-rgb), 0.15); }
+.verification-chain-escrow-title { margin-top: var(--space-3); font-weight: 600; }
+.verification-chain-ul--milestones { margin-top: var(--space-2); }
 .verification-chain-sev { font-size: 0.75em; opacity: 0.9; }
 .verification-failure-groups {
   margin: var(--space-3) 0;
@@ -4177,6 +4246,7 @@ watch(tab, (newTab) => {
 .task-tag--skill { border-color: rgba(168, 85, 247, 0.35); color: rgba(233, 213, 255, 0.95); }
 .task-tag--skill-related { border-color: rgba(34, 197, 94, 0.38); color: rgba(187, 247, 208, 0.95); }
 .task-tag--collab { border-color: rgba(59, 130, 246, 0.45); color: rgba(191, 219, 254, 0.98); }
+.task-tag--auction { border-color: rgba(245, 158, 11, 0.45); color: rgba(253, 230, 138, 0.98); }
 .task-tag--escrow { border-color: rgba(var(--exchange-escrow-rgb), 0.55); color: rgba(167, 243, 208, 0.98); background: rgba(var(--exchange-escrow-rgb), 0.08); }
 .task-tag--verified_payout { border-color: rgba(var(--exchange-verified-rgb), 0.55); color: rgba(253, 230, 138, 0.98); background: rgba(var(--exchange-verified-rgb), 0.08); }
 .task-tag--agent_direct_settlement { border-color: rgba(var(--exchange-settlement-rgb), 0.55); color: rgba(253, 230, 138, 0.98); background: rgba(var(--exchange-settlement-rgb), 0.08); }
@@ -4416,6 +4486,20 @@ watch(tab, (newTab) => {
   color: var(--text-tertiary, var(--text-secondary));
   font-style: italic;
 }
+.task-tabs-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin-bottom: var(--space-5);
+  scrollbar-width: none;
+  mask-image: linear-gradient(to right, transparent, #000 12px, #000 calc(100% - 12px), transparent);
+}
+.task-tabs-scroll::-webkit-scrollbar { display: none; }
+.task-tabs-scroll .task-tabs {
+  margin-bottom: 0;
+  flex-wrap: nowrap;
+  width: max-content;
+  max-width: 100%;
+}
 .task-tabs {
   display: inline-flex;
   gap: 0;
@@ -4501,6 +4585,44 @@ watch(tab, (newTab) => {
 }
 .task-filter-row--toggle-only { justify-content: flex-end; }
 .task-filter-select { max-width: 200px; border-radius: var(--radius-md); border: var(--border-hairline); padding: var(--space-2) var(--space-3); font-size: var(--font-body); }
+@media (max-width: 640px) {
+  .task-filter-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-2);
+  }
+  .task-filter-row .task-view-toggle {
+    grid-column: 1 / -1;
+    margin-left: 0;
+    justify-content: center;
+  }
+  .task-filter-select { max-width: none; width: 100%; }
+  .task-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .task-table-wrap .ui-table { min-width: 36rem; }
+  .workflow-editor { grid-template-columns: 1fr; }
+  .settlement-flow-steps {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .settlement-flow-step__connector { display: none; }
+  .batch-preview-row { grid-template-columns: 1fr !important; gap: var(--space-2); }
+}
+.detail-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-2) 0 var(--space-4);
+}
+.detail-skeleton__line { height: 0.875rem; border-radius: var(--radius-sm); }
+.detail-skeleton__line--wide { width: 85%; height: 1.125rem; }
+.detail-skeleton__block { height: 6rem; border-radius: var(--radius-md); margin-top: var(--space-2); }
+@keyframes task-detail-enter {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .task-detail-panel { animation: none; }
+}
 .task-view-toggle {
   display: inline-flex;
   gap: 2px;
@@ -4866,10 +4988,42 @@ watch(tab, (newTab) => {
   .task-left { order: 1; grid-column: 1 / -1; }
   .task-categories { flex-direction: row; flex-wrap: wrap; }
   .task-center-inner { flex-direction: column; }
-  .task-list-wrap { flex: 1 1 auto; max-height: 40vh; }
+  .task-list-wrap { flex: 1 1 auto; max-height: none; }
   .task-detail-panel { flex: 1 1 auto; }
 }
 @media (max-width: 768px) {
+  .task-center-inner--with-detail .task-list-wrap {
+    display: none;
+  }
+  .task-detail-panel {
+    position: fixed;
+    inset: 0;
+    z-index: 120;
+    flex: none !important;
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
+    border-radius: 0;
+    border: none;
+    padding: var(--space-4);
+    padding-top: calc(var(--shell-header-height, 3.25rem) + var(--space-3));
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--space-4));
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    background: var(--background-darker);
+    box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.45);
+    animation: task-detail-enter 0.28s var(--ease-apple);
+  }
+  .task-detail-panel__head {
+    position: sticky;
+    top: calc(-1 * var(--space-4));
+    z-index: 2;
+    margin: calc(-1 * var(--space-2)) calc(-1 * var(--space-2)) var(--space-4);
+    padding: var(--space-2);
+    background: rgba(10, 10, 11, 0.92);
+    backdrop-filter: blur(16px);
+    border-bottom: var(--border-hairline);
+  }
   .task-layout { grid-template-columns: 1fr; gap: 1rem; }
   .task-right { order: -1; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 0.75rem; }
   .task-right-create { flex: 1; min-width: 120px; }
