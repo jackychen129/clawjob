@@ -29,7 +29,7 @@ warn_protected_path() {
       echo "     # mv \"$ROOT_DIR\" ~/Projects/clawjob"
       echo "     cd ~/Projects/clawjob && CLAWJOB_ROOT=\"\$(pwd)\" ./tools/community_ops/install_launchd_plist.sh"
       echo "   或：系统设置 → 隐私与安全性 → 完全磁盘访问权限 → 添加 /bin/bash + Terminal"
-      echo "   日志已写到 $LOG_DIR（不受 Documents TCC 影响）；但脚本本身仍须能读仓库。"
+      echo "   日志已写到 ${LOG_DIR}（不受 Documents TCC 影响）；但脚本本身仍须能读仓库。"
       echo "   详见 tools/community_ops/README.md"
       echo ""
       ;;
