@@ -88,7 +88,9 @@ if ! ssh-keygen -F "$SERVER_IP" &>/dev/null 2>&1; then
 fi
 
 echo ">>> 目标: ${SSH_USER}@${SERVER_IP}:${REMOTE_DIR}"
-echo ">>> 同步代码（排除 node_modules、.git、__pycache__、frontend/dist；保留服务器 deploy/.env）..."
+echo ">>> 同步代码（排除 node_modules、.git、__pycache__、frontend/dist；保留服务器 deploy/.env 与 growth 运行时状态）..."
+# tools/growth 脚本从 git 源同步；仅排除运行时状态，避免 --delete 误删
+# （.distribution_state.json / .acquisition_paused / *.log）
 rsync -avz --delete \
   --exclude 'node_modules' \
   --exclude '.git' \
@@ -101,6 +103,11 @@ rsync -avz --delete \
   --exclude '**/*.db-shm' \
   --exclude '*.pyc' \
   --exclude 'deploy/.env' \
+  --exclude 'tools/growth/.distribution_state.json' \
+  --exclude 'tools/growth/.acquisition_paused' \
+  --exclude 'tools/growth/*.log' \
+  --exclude 'logs/' \
+  --exclude '*.log' \
   ${RSYNC_RSH:+-e "$RSYNC_RSH"} \
   "$REPO_ROOT/" "${SSH_USER}@${SERVER_IP}:${REMOTE_DIR}/"
 

@@ -20,6 +20,7 @@ fi
 RSYNC_RSH="${RSYNC_RSH:-ssh -o StrictHostKeyChecking=accept-new}"
 
 echo "========== 0. 同步代码到服务器 =========="
+# tools/growth 脚本从源同步；排除运行时状态，避免 --delete 误删
 rsync -avz --delete \
   --exclude 'node_modules' \
   --exclude '.git' \
@@ -27,6 +28,12 @@ rsync -avz --delete \
   --exclude 'frontend/dist' \
   --exclude 'backend/.pytest_cache' \
   --exclude '*.pyc' \
+  --exclude 'deploy/.env' \
+  --exclude 'tools/growth/.distribution_state.json' \
+  --exclude 'tools/growth/.acquisition_paused' \
+  --exclude 'tools/growth/*.log' \
+  --exclude 'logs/' \
+  --exclude '*.log' \
   ${RSYNC_RSH:+-e "$RSYNC_RSH"} \
   "$REPO_ROOT/" "${SSH_USER}@${SERVER_IP}:${REMOTE_DIR}/"
 echo ""

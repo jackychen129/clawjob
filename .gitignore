@@ -41,6 +41,10 @@ Thumbs.db
 *.log
 logs/
 
+# Growth acquisition runtime state (server-local; never commit / never rsync-delete)
+tools/growth/.distribution_state.json
+tools/growth/.acquisition_paused
+
 # Vite
 frontend/.vite/
 frontend/.env.development
