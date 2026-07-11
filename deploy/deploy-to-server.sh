@@ -126,7 +126,7 @@ $SSH_CMD "${SSH_USER}@${SERVER_IP}" "export FORCE_REBUILD_FRONTEND='${FORCE_REBU
     if [ -n \"\$SITE_DOMAIN\" ] && [ \"\$SITE_DOMAIN\" != \"\$DOMAIN\" ]; then
       CORS_VAL=\"\$CORS_VAL,https://\$SITE_DOMAIN,https://www.\$SITE_DOMAIN,https://app.\$SITE_DOMAIN\"
     fi
-    FRONT_VAL=\"https://app.\$DOMAIN\"
+    FRONT_VAL=\"https://\$DOMAIN\"
     SKILL_VAL=\"https://\$DOMAIN/skill\"
   else
     API_URL=\"http://\$SIP:8000\"
@@ -144,8 +144,9 @@ $SSH_CMD "${SSH_USER}@${SERVER_IP}" "export FORCE_REBUILD_FRONTEND='${FORCE_REBU
   SITE_VAL=\"\${SITE_DOMAIN:-clawjob.com.cn}\"
   grep -q '^VITE_SITE_DOMAIN=' .env && sed -i.bak \"s|^VITE_SITE_DOMAIN=.*|VITE_SITE_DOMAIN=\$SITE_VAL|\" .env || echo \"VITE_SITE_DOMAIN=\$SITE_VAL\" >> .env
   if [ \"\$FORCE_REBUILD_FRONTEND\" = \"1\" ]; then echo '强制重建前端镜像（无缓存）...'; docker compose -f docker-compose.prod.yml --env-file .env build --no-cache frontend; fi
-  echo '清理残留 Compose 容器（避免 frontend 名称冲突）...'
+  echo '清理残留 Compose 容器（避免 frontend/backend 名称与 8000 端口冲突）...'
   docker ps -a --filter name=clawjob-frontend --format '{{.ID}}' | xargs -r docker rm -f
+  docker ps -a --filter name=clawjob-backend --format '{{.ID}}' | xargs -r docker rm -f
   docker compose -f docker-compose.prod.yml --env-file .env down --remove-orphans 2>/dev/null || true
   echo '启动 Docker Compose（已按 SERVER_IP 修补 VITE_API_BASE_URL / CORS_ORIGINS）...'
   docker compose -f docker-compose.prod.yml --env-file .env up -d --build --remove-orphans
@@ -167,4 +168,7 @@ $SSH_CMD "${SSH_USER}@${SERVER_IP}" "export FORCE_REBUILD_FRONTEND='${FORCE_REBU
 
 echo ""
 echo "部署完成。若需 Nginx 反代 80/443，请参考 deploy/DEPLOY_ALIYUN.md 配置。"
+echo "应用统一 Nginx（根域 + app 同一 SPA）..."
+chmod +x "$DEPLOY_DIR/apply-nginx-unified.sh" 2>/dev/null || true
+"$DEPLOY_DIR/apply-nginx-unified.sh" 2>/dev/null || echo "（Nginx 统一配置跳过，可手动运行 deploy/apply-nginx-unified.sh）"
 echo "校验前端样式是否生效: CLAWJOB_FRONTEND_URL=http://${SERVER_IP}:3000 python3 deploy/verify-frontend-styles.py"
