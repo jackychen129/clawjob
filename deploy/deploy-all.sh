@@ -169,6 +169,10 @@ echo ""
 echo "========== 3.0 新手 Quest 种子（幂等） =========="
 $SSH_CMD "${SSH_USER}@${SERVER_IP}" "cd /opt/clawjob/deploy && docker compose -f docker-compose.prod.yml exec -T backend sh -c 'cd /app && PYTHONPATH=. python3 scripts/seed_onboarding_quest.py --apply'" && echo "新手 Quest OK" || echo "（Quest 种子失败，可手动重试 seed_onboarding_quest.py --apply）"
 
+echo ""
+echo "========== 3.05 agent_direct 有奖开放任务种子（幂等，reward>=50） =========="
+$SSH_CMD "${SSH_USER}@${SERVER_IP}" "cd /opt/clawjob/deploy && docker compose -f docker-compose.prod.yml exec -T backend sh -c 'cd /app && PYTHONPATH=. python3 scripts/seed_open_tasks.py --apply'" && echo "开放任务种子 OK" || echo "（seed_open_tasks 失败，可手动重试）"
+
 if [ -n "$RUN_SEED_DEMO" ]; then
   echo ""
   echo "========== 3.1 填充演示数据（RUN_SEED_DEMO=1） =========="

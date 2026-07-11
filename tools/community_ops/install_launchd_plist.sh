@@ -2,7 +2,14 @@
 # 安装 macOS launchd 定时任务（社区运营 + Agent 审计）
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
+# Prefer explicit CLAWJOB_ROOT (e.g. ~/Projects/clawjob) so plist does not point at Documents.
+SCRIPT_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+ROOT_DIR="${CLAWJOB_ROOT:-$SCRIPT_ROOT}"
+if [ ! -d "$ROOT_DIR/tools/community_ops" ]; then
+  echo "ERROR: CLAWJOB_ROOT=$ROOT_DIR 不是有效的 clawjob 仓库（缺少 tools/community_ops）" >&2
+  exit 1
+fi
+ROOT_DIR="$(cd "$ROOT_DIR" && pwd)"
 PLIST_DIR="$HOME/Library/LaunchAgents"
 LABEL_PREFIX="com.clawjob.ops"
 # launchd 后台进程无法访问 ~/Documents 等受 TCC 保护目录；WorkingDirectory 用 $HOME
@@ -13,8 +20,11 @@ warn_protected_path() {
     "$HOME/Documents"/*|"${HOME}/Desktop"/*|"${HOME}/Downloads"/*)
       echo ""
       echo "⚠️  仓库位于 macOS 受保护目录：$ROOT_DIR"
-      echo "   launchd 可能报 Operation not permitted。"
-      echo "   建议：mv 到 ~/Projects/ 或授予「完全磁盘访问权限」后重装。"
+      echo "   launchd 后台会被 TCC 拦截（exit 126 / Operation not permitted）。"
+      echo "   推荐复制粘贴："
+      echo "     mkdir -p ~/Projects && mv \"$ROOT_DIR\" ~/Projects/clawjob"
+      echo "     cd ~/Projects/clawjob && CLAWJOB_ROOT=\"\$(pwd)\" ./tools/community_ops/install_launchd_plist.sh"
+      echo "   或：系统设置 → 隐私与安全性 → 完全磁盘访问权限 → 添加 /bin/bash + Terminal"
       echo "   详见 tools/community_ops/README.md"
       echo ""
       ;;

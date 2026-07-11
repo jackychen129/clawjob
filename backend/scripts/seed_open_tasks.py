@@ -66,14 +66,14 @@ SHOWCASE_TASKS = [
     },
 ]
 
-# agent_direct 展示任务（幂等，系统账号发布）
+# agent_direct 展示任务（幂等，系统账号发布；reward >= 50 便于新 Agent 看到「有奖」大厅）
 AGENT_DIRECT_SHOWCASE_TASKS = [
     {
         "title": "【Agent 直连展示】Agent 对 Agent 结算体验反馈",
         "description": "接取并完成本任务，验收后在任务详情体验 agent_direct 直连结算流程（payer-mark-paid → payee-confirm）。输出 2 条改进建议。",
         "category": "research",
         "task_type": "analysis",
-        "reward_points": 25,
+        "reward_points": 50,
         "settlement_mode": "agent_direct",
     },
     {
@@ -81,16 +81,25 @@ AGENT_DIRECT_SHOWCASE_TASKS = [
         "description": "阅读 skill.md，输出 5 步安装 checklist（Markdown），重点说明 Agent 收款方式配置。",
         "category": "writing",
         "task_type": "documentation",
-        "reward_points": 35,
+        "reward_points": 60,
+        "settlement_mode": "agent_direct",
+    },
+    {
+        "title": "【Agent 直连展示】任务大厅冷启动：3 条获客文案",
+        "description": "面向 OpenClaw / 独立 Agent，撰写 3 条可直接粘贴的短帖（各 ≤120 字），说明如何用 Skill 注册并接取首个有奖任务。",
+        "category": "writing",
+        "task_type": "writing",
+        "reward_points": 80,
         "settlement_mode": "agent_direct",
     },
 ]
 
 
 def seed_open_tasks(db, *, apply: bool) -> int:
-    """幂等写入开放任务；返回新建数量。"""
+    """幂等写入开放任务；返回新建数量（含 reward 上调视为 1 次变更计入）。"""
     user, system_agent = _get_or_create_clawjob_system_agent(db)
     created = 0
+    mutated = False
     for spec in OPEN_TASKS:
         title = spec["title"]
         existing = (
@@ -120,6 +129,7 @@ def seed_open_tasks(db, *, apply: bool) -> int:
         )
         db.add(task)
         created += 1
+        mutated = True
         print(f"  created: {title}")
     for spec in SHOWCASE_TASKS:
         title = spec["title"]
@@ -155,22 +165,42 @@ def seed_open_tasks(db, *, apply: bool) -> int:
             save_escrow_to_task(task, build_escrow_plan(milestones, reward))
         db.add(task)
         created += 1
+        mutated = True
         print(f"  created showcase: {title}")
     for spec in AGENT_DIRECT_SHOWCASE_TASKS:
         title = spec["title"]
+        reward = int(spec.get("reward_points", 0) or 0)
         existing = (
             db.query(Task)
             .filter(Task.title == title, Task.owner_id == user.id, Task.status == "open")
             .first()
         )
         if existing:
-            print(f"  skip (exists): {title}")
+            # Keep open showcase tasks at target reward (ops may bump specs over time).
+            if apply and int(existing.reward_points or 0) < reward:
+                existing.reward_points = reward
+                extra = dict(existing.input_data or {})
+                extra.update(
+                    {
+                        "source": "seed_open_tasks",
+                        "skills": extra.get("skills") or ["clawjob"],
+                        "showcase": True,
+                        "settlement_mode": spec.get("settlement_mode", "agent_direct"),
+                    }
+                )
+                existing.input_data = extra
+                if not existing.completion_webhook_url:
+                    existing.completion_webhook_url = SHOWCASE_COMPLETION_WEBHOOK
+                mutated = True
+                created += 1
+                print(f"  updated reward={reward}: {title}")
+            else:
+                print(f"  skip (exists): {title}")
             continue
         if not apply:
             print(f"  would create agent_direct showcase: {title}")
             created += 1
             continue
-        reward = int(spec.get("reward_points", 0) or 0)
         input_data = {
             "source": "seed_open_tasks",
             "skills": ["clawjob"],
@@ -193,8 +223,9 @@ def seed_open_tasks(db, *, apply: bool) -> int:
         )
         db.add(task)
         created += 1
+        mutated = True
         print(f"  created agent_direct showcase: {title}")
-    if apply and created:
+    if apply and (created or mutated):
         db.commit()
     return created
 
