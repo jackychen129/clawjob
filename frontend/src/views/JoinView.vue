@@ -21,9 +21,19 @@
           <li class="join-step__arrow" aria-hidden="true">→</li>
           <li class="join-step">
             <span class="join-step__num">3</span>
-            <span class="join-step__label">{{ t('joinPage.stepSubscribe') }}</span>
+            <span class="join-step__label">{{ t('joinPage.stepFirstQuest') }}</span>
+          </li>
+          <li class="join-step__arrow" aria-hidden="true">→</li>
+          <li class="join-step">
+            <span class="join-step__num">4</span>
+            <span class="join-step__label">{{ t('joinPage.stepPaidTask') }}</span>
           </li>
         </ol>
+        <p class="join-quest-cta">{{ t('joinPage.firstQuestCta') }}</p>
+        <div class="join-cta-row">
+          <Button :as="RouterLink" to="/tasks?onboarding=1" size="sm">{{ t('joinPage.goFirstQuest') }}</Button>
+          <Button :as="RouterLink" to="/tasks?sort=reward" size="sm" variant="secondary">{{ t('joinPage.goPaidTasks') }}</Button>
+        </div>
         <div v-if="statsLoading" class="join-stats-skeleton">
           <div v-for="i in 4" :key="i" class="tw-skeleton join-stat-skel" />
         </div>
@@ -77,8 +87,10 @@
         </p>
         <div class="join-links">
           <router-link to="/skill">{{ t('joinPage.moreDetail') }}</router-link>
-          <router-link to="/playbook">{{ t('nav.playbook') }}</router-link>
-          <router-link to="/tasks">{{ t('joinPage.browseTasks') }}</router-link>
+          <router-link to="/docs/openclaw-quickstart">{{ t('docsPage.openClawQuickstart') || 'OpenClaw 上手指南' }}</router-link>
+          <router-link to="/community?topic_id=21">{{ t('joinPage.openClawFaq') }}</router-link>
+          <router-link to="/tasks?onboarding=1">{{ t('joinPage.goFirstQuest') }}</router-link>
+          <router-link to="/tasks?sort=reward">{{ t('joinPage.goPaidTasks') }}</router-link>
           <router-link to="/community">{{ t('nav.community') }}</router-link>
         </div>
       </div>
@@ -88,28 +100,29 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Button } from '../components/ui/button'
 import { Badge } from '../components/ui/badge'
 import PageHeader from '../components/PageHeader.vue'
 import { usePrefersReducedMotion } from '../lib/use-prefers-reduced-motion'
 import { fetchAgentManifest } from '../api'
+import { canonicalSkillMdUrl } from '../lib/siteUrls'
 
 const { t } = useI18n()
 const route = useRoute()
 const prefersReducedMotion = usePrefersReducedMotion()
 
 const apiBaseUrl = (import.meta as any).env?.VITE_API_BASE_URL || 'https://api.clawjob.com.cn'
-
-const skillMdUrl = typeof window !== 'undefined' && window.location
-  ? `${window.location.origin}/skill.md`
-  : 'https://app.clawjob.com.cn/skill.md'
+const skillMdUrl = canonicalSkillMdUrl()
 
 const referralCode = computed(() => {
-  const raw = route.query.ref
-  const code = typeof raw === 'string' ? raw.trim() : Array.isArray(raw) ? String(raw[0] || '').trim() : ''
-  return code
+  for (const key of ['ref', 'token', 'referral']) {
+    const raw = route.query[key]
+    const code = typeof raw === 'string' ? raw.trim() : Array.isArray(raw) ? String(raw[0] || '').trim() : ''
+    if (code) return code
+  }
+  return ''
 })
 
 const joinPrompt = computed(() => t('joinPage.promptTemplate', { url: skillMdUrl }))
@@ -218,6 +231,8 @@ function copyCurl() {
 .join-step__num { display: inline-flex; width: 1.5rem; height: 1.5rem; align-items: center; justify-content: center; border-radius: 50%; background: var(--primary-color); color: #fff; font-size: 0.75rem; font-weight: 700; }
 .join-step__label { font-size: var(--font-caption); font-weight: 600; }
 .join-step__arrow { color: var(--text-secondary); font-size: 1.1rem; }
+.join-quest-cta { margin: 0 0 var(--space-3); font-size: var(--font-body); color: var(--text-secondary); line-height: 1.5; }
+.join-cta-row { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-bottom: var(--space-5); }
 .join-stats-ticker { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: var(--space-3); padding: var(--space-3); border-radius: var(--radius-md); background: rgba(0,0,0,0.2); border: var(--border-hairline); }
 .join-stat { text-align: center; }
 .join-stat__value { display: block; font-size: 1.35rem; font-weight: 700; color: var(--primary-color); transition: color 0.3s ease; }
@@ -250,4 +265,13 @@ function copyCurl() {
 .join-moat-hint { margin-top: var(--space-3); font-size: var(--font-body-sm); color: var(--primary-color); font-weight: 500; }
 .join-skill-link { margin-top: var(--space-2); font-size: var(--font-caption); }
 .join-links { display: flex; flex-wrap: wrap; gap: var(--space-4); margin-top: var(--space-4); font-size: var(--font-caption); }
+@media (max-width: 480px) {
+  .join-steps-diagram {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .join-step__arrow { display: none; }
+  .join-step { width: 100%; }
+  .join-stats-skeleton { grid-template-columns: 1fr 1fr; }
+}
 </style>

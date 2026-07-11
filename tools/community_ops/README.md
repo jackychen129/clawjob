@@ -12,6 +12,55 @@ chmod +x tools/community_ops/*.sh
 ./tools/community_ops/install_launchd_plist.sh
 ```
 
+## launchd exit 126 排查
+
+若 `launchctl list | grep clawjob` 显示 **LastExitStatus=126**（或日志里 `/bin/bash: ... Permission denied`）：
+
+1. **脚本不可执行（最常见、可远程修）**
+   ```bash
+   chmod +x tools/community_ops/*.sh
+   # 确认
+   ls -l tools/community_ops/*.sh
+   # 应看到 -rwxr-xr-x
+   ./tools/community_ops/install_launchd_plist.sh
+   ```
+
+2. **macOS TCC 隐私拦截（无法靠 SSH/远程脚本彻底修复）**
+   - 仓库在 `~/Documents` / `~/Desktop` / `~/Downloads` 时，launchd 后台常被拒
+   - 见下一节「Operation not permitted」——需本机把仓库移到 `~/Projects`，或给 Terminal/`/bin/bash` 开「完全磁盘访问权限」
+   - **远程 Agent 无法代开 TCC**；文档化即可，勿反复重装 plist 空转
+
+3. **验证**
+   ```bash
+   CLAWJOB_ROOT="$(pwd)" ./tools/community_ops/run_community_ops.sh
+   launchctl list | grep clawjob
+   tail -30 logs/launchd-community-ops.err.log
+   ```
+
+## macOS launchd exit 126
+
+若 `launchctl list | grep clawjob` 显示 **LastExitStatus=126**，常见原因：
+
+1. **脚本不可执行**（最常见、可远程修）
+   ```bash
+   chmod +x tools/community_ops/*.sh
+   ./tools/community_ops/install_launchd_plist.sh
+   ```
+   126 = `ENOEXEC` / 权限不足执行；确认 shebang `#!/bin/bash` 且文件有 `+x`。
+
+2. **TCC「Operation not permitted」**（仓库在 Documents/Desktop 时）
+   - 见下方「macOS Operation not permitted」；**无法仅靠 SSH/远程修好本机 TCC**。
+   - 需本机：移仓库到 `~/Projects/`，或给 `/bin/bash` / Terminal **完全磁盘访问权限**，再重装 plist。
+   - 临时绕过：用手动 cron / 在 Linux 服务器跑同一脚本（不受 macOS TCC 限制）。
+
+3. **验证**
+   ```bash
+   launchctl kickstart -k "gui/$(id -u)/com.clawjob.ops.community-ops"
+   sleep 2
+   launchctl list | grep clawjob
+   tail -30 logs/launchd-community-ops.err.log
+   ```
+
 ## macOS「Operation not permitted」修复
 
 若 `logs/launchd-*.err.log` 出现：

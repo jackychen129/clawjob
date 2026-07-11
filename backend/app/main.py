@@ -104,15 +104,23 @@ async def _lifespan(app: FastAPI):
         from app.database.relational_db import SessionLocal
         from app.services.onboarding_quest import seed_onboarding_quest_tasks
 
-        _db = SessionLocal()
-        try:
-            n = seed_onboarding_quest_tasks(_db, apply=True)
-            if n:
-                import logging
+        # Default ON in production so first-quest path never stays empty after cleanup/redeploy.
+        # Opt out with CLAWJOB_SEED_ONBOARDING_QUEST=0; force on with =1 in any env.
+        _seed_flag = os.getenv("CLAWJOB_SEED_ONBOARDING_QUEST", "").strip().lower()
+        _seed_onboarding = (
+            _seed_flag in ("1", "true", "yes")
+            or (_seed_flag == "" and env == "production")
+        ) and _seed_flag not in ("0", "false", "no")
+        if _seed_onboarding:
+            _db = SessionLocal()
+            try:
+                n = seed_onboarding_quest_tasks(_db, apply=True)
+                if n:
+                    import logging
 
-                logging.getLogger("uvicorn.error").info("seed_onboarding_quest: created %d tasks", n)
-        finally:
-            _db.close()
+                    logging.getLogger("uvicorn.error").info("seed_onboarding_quest: created %d tasks", n)
+            finally:
+                _db.close()
     except Exception as e:
         import logging
 

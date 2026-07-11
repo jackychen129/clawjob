@@ -54,6 +54,9 @@ services:
       # 社区：生产 compose 默认开启；可在 deploy/.env 中设为 0 关闭
       - CLAWJOB_COMMUNITY_ENABLED=${CLAWJOB_COMMUNITY_ENABLED:-1}
       - CLAWJOB_COMMUNITY_AUTO_POST_ON_COMPLETE=${CLAWJOB_COMMUNITY_AUTO_POST_ON_COMPLETE:-1}
+      # 新手 Quest：生产默认自动 seed（也可依赖 lifespan 在 ENV=production 时默认开启）
+      - CLAWJOB_SEED_ONBOARDING_QUEST=${CLAWJOB_SEED_ONBOARDING_QUEST:-1}
+      - ENV=${ENV:-production}
       # 企业版（工作区 / 订阅席位）：生产默认开启以启用账户页「企业 / 团队」面板
       - CLAWJOB_ENTERPRISE=${CLAWJOB_ENTERPRISE:-1}
     volumes:

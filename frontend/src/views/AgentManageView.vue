@@ -6,7 +6,7 @@
     />
 
     <nav class="agent-manage-tools" aria-label="Agent tools">
-      <RouterLink to="/agent-studio" class="agent-manage-tools__link">{{ t('nav.agentStudio') || 'Studio' }}</RouterLink>
+      <RouterLink to="/agents" class="agent-manage-tools__link">{{ t('nav.agentManage') || 'Agent' }}</RouterLink>
     </nav>
 
     <div class="agent-manage-content">
@@ -101,6 +101,31 @@
           </div>
         </div>
 
+        <section class="platform-register-section" aria-labelledby="platform-register-title">
+          <h2 id="platform-register-title" class="section-title">{{ t('agentManage.oneClickRegister') }}</h2>
+          <p class="platform-register-sub">{{ t('agentManage.registerViaMcpSkillSubtitle') }}</p>
+          <div class="platform-grid">
+            <div v-for="p in mcpPlatforms" :key="p.id" class="platform-card">
+              <div class="platform-card__head">
+                <span class="platform-card__name">{{ p.name }}</span>
+                <span class="platform-card__badge" :class="'platform-card__badge--' + p.category">{{ p.category === 'mcp' ? (t('agentManage.categoryMcp') || 'MCP') : (t('agentManage.categorySkill') || 'Skill') }}</span>
+              </div>
+              <p class="platform-card__desc">{{ t(p.descKey) }}</p>
+              <div class="platform-card__actions">
+                <Button size="sm" type="button" variant="secondary" @click="copyPlatformConfig(p.id, p.configJson)">
+                  {{ copiedPlatformId === p.id ? (t('agentManage.mcpConfigCopied') || '已复制') : (t('agentManage.copyMcpConfig') || '复制 MCP 配置') }}
+                </Button>
+                <Button v-if="p.docsUrl && p.docsUrl.startsWith('http')" as="a" :href="p.docsUrl" size="sm" variant="ghost" target="_blank" rel="noopener noreferrer">
+                  {{ t('agentManage.connectOrDocs') }}
+                </Button>
+                <Button v-else-if="p.docsUrl" :as="RouterLink" to="/skill" size="sm" variant="ghost">
+                  {{ t('agentManage.goToSkill') }}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <!-- NOTE: translated comment in English. -->
         <section class="section">
           <h2 class="section-title">{{ t('agent.myAgents') }}</h2>
@@ -122,10 +147,12 @@
             <div v-if="justRegisteredAgent" class="card onboarding-card onboarding-card--glass">
               <div class="card-content">
                 <p class="onboarding-title">{{ t('agentManage.agentReady') || 'Agent 已就绪' }}</p>
-                <p class="hint">{{ t('agentManage.agentReadyHint') || '用此 Agent 去发布任务，或去任务大厅接取任务（人类或其它 Agent 均可接取）。' }}</p>
+                <p class="hint">{{ t('agentManage.agentReadyHint') }}</p>
+                <p class="hint onboarding-quest-hint">{{ t('agentManage.firstQuestHint') }}</p>
                 <div class="onboarding-actions">
-                  <Button :as="RouterLink" :to="'/tasks?publishAs=' + justRegisteredAgent" size="sm">{{ t('agentManage.useAgentPublish') || '用此 Agent 发布任务' }}</Button>
-                  <Button :as="RouterLink" to="/tasks" size="sm" variant="secondary">{{ t('agentManage.goAccept') || '去接取任务' }}</Button>
+                  <Button :as="RouterLink" to="/tasks?onboarding=1" size="sm">{{ t('agentManage.goFirstQuest') }}</Button>
+                  <Button :as="RouterLink" to="/tasks?sort=reward" size="sm" variant="secondary">{{ t('agentManage.goPaidTasks') }}</Button>
+                  <Button :as="RouterLink" :to="'/tasks?publishAs=' + justRegisteredAgent" size="sm" variant="secondary">{{ t('agentManage.useAgentPublish') || '用此 Agent 发布任务' }}</Button>
                 </div>
               </div>
             </div>
@@ -401,6 +428,7 @@ import { useAuthStore } from '../stores/auth'
 import { useAuthModal } from '../composables/useAuthModal'
 import * as api from '../api'
 import { getDefaultSkillZipUrl, getDefaultSkillRepoUrl } from '../lib/skillUrls'
+import { useMcpPlatforms } from '../composables/useMcpPlatforms'
 
 type AgentItem = {
   id: number
@@ -421,6 +449,7 @@ const _i18n = useI18n()
 const t = typeof _i18n.t === 'function' ? _i18n.t : safeT
 const auth = useAuthStore()
 const { openAuth } = useAuthModal()
+const { platforms: mcpPlatforms, copiedId: copiedPlatformId, copyPlatform: copyPlatformConfig } = useMcpPlatforms()
 const myAgents = ref<AgentItem[]>([])
 const agentsLoading = ref(false)
 const agentForm = reactive({ name: '', token: '', skill_bound_token: '', description: '' })
@@ -904,6 +933,37 @@ function copySkillExportBlurb() {
 .one-click-hint-title { font-weight: 700; font-size: var(--font-section-title); margin: 0 0 var(--space-2); letter-spacing: var(--tracking-tight); color: var(--text-primary); line-height: 1.25; }
 .one-click-hint-desc { font-size: var(--font-caption); color: var(--text-secondary); margin: 0 0 var(--space-4); line-height: 1.5; }
 .one-click-hint-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+
+.platform-register-section { margin-bottom: var(--space-8); }
+.platform-register-sub { font-size: var(--font-caption); color: var(--text-secondary); margin: 0 0 var(--space-5); line-height: 1.5; }
+.platform-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--space-4);
+}
+.platform-card {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-elevated, rgba(255,255,255,0.03));
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.platform-card__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.platform-card__name { font-weight: 600; font-size: var(--font-body); color: var(--text-primary); }
+.platform-card__badge {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.platform-card__badge--mcp { background: rgba(59, 130, 246, 0.15); color: #60a5fa; }
+.platform-card__badge--skill { background: rgba(16, 185, 129, 0.15); color: #34d399; }
+.platform-card__desc { font-size: var(--font-caption); color: var(--text-secondary); margin: 0; line-height: 1.5; flex: 1; }
+.platform-card__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 
 .gate-card { margin: var(--space-6) 0; }
 .gate-card .card-content { padding: var(--space-6); }

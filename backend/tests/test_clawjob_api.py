@@ -1111,6 +1111,9 @@ def test_escrow_dispute_blocks_submission():
     assert td.get("escrow", {}).get("disputed") is True
     assert reason[:50] in (td.get("escrow", {}).get("dispute_reason") or "")
     assert (td.get("escrow", {}).get("dispute_evidence", {}) or {}).get("summary") is not None
+    precheck = (td.get("escrow", {}) or {}).get("dispute_ai_precheck") or {}
+    assert precheck.get("summary")
+    assert precheck.get("recommendation")
 
     with patch("app.main.httpx") as m:
         m.Client.return_value.__enter__.return_value.post.return_value.status_code = 200
@@ -1913,6 +1916,34 @@ def test_verification_chain_and_runtime_breakers_api():
     assert rvc.status_code == 200, rvc.text
     data = rvc.json()
     assert "declaration" in data and "sandbox" in data and "cross" in data
+
+    # Escrow milestones in verification chain (acceptance_criteria)
+    pub2 = f"chain_esc_{_unique()}"
+    _register_user(pub2, f"{pub2}@example.com", "pass1234")
+    h2 = {"Authorization": f"Bearer {client.post('/auth/login', json={'username': pub2, 'password': 'pass1234'}).json()['access_token']}"}
+    client.post("/account/recharge", json={"amount": 20}, headers=h2)
+    te = client.post(
+        "/tasks",
+        json={
+            "title": "chain escrow",
+            "description": "x",
+            "reward_points": 10,
+            "completion_webhook_url": "https://example.com/cb",
+            "escrow_milestones": [
+                {"title": "M1", "weight": 0.5, "acceptance_criteria": "Deliver API spec"},
+                {"title": "M2", "weight": 0.5, "acceptance_criteria": "Ship code"},
+            ],
+        },
+        headers=h2,
+    )
+    assert te.status_code == 200, te.text
+    eid = te.json()["id"]
+    rvc2 = client.get(f"/tasks/{eid}/verification-chain", headers=h2)
+    assert rvc2.status_code == 200
+    decl = rvc2.json().get("declaration") or {}
+    ms = decl.get("escrow_milestones") or []
+    assert len(ms) == 2
+    assert ms[0].get("acceptance_criteria") == "Deliver API spec"
 
     rcb = client.get("/runtime/circuit-breakers", headers=headers)
     assert rcb.status_code == 200, rcb.text
@@ -5246,6 +5277,41 @@ def test_register_minimal_includes_onboarding_quest():
     assert len(ids) >= 3
     assert len(data.get("onboarding_tasks") or []) >= 3
     assert data.get("next_steps", {}).get("onboarding_task_ids")
+
+
+def test_cleanup_ops_preserves_onboarding_quests():
+    """cleanup_ops_content must not delete seed_onboarding_quest / 【新手 Quest tasks."""
+    from app.database.relational_db import Agent, SessionLocal, Task, User
+    from app.services.onboarding_quest import seed_onboarding_quest_tasks
+    from scripts.cleanup_ops_content import _task_delete_reason
+
+    db = SessionLocal()
+    try:
+        seed_onboarding_quest_tasks(db, apply=True)
+        tasks = (
+            db.query(Task)
+            .filter(Task.title.like("【新手 Quest%"))
+            .all()
+        )
+        assert len(tasks) >= 3
+        for task in tasks:
+            owner = db.query(User).filter(User.id == task.owner_id).first()
+            creator = (
+                db.query(Agent).filter(Agent.id == task.creator_agent_id).first()
+                if task.creator_agent_id
+                else None
+            )
+            reason = _task_delete_reason(task, owner, creator, ops_agent_ids=set(), ops_owner_ids=set())
+            assert reason is None, f"onboarding task {task.id} would be deleted: {reason}"
+            # Even if mistaken for system owner, onboarding guard must win
+            reason2 = _task_delete_reason(
+                task, owner, creator, ops_agent_ids={int(creator.id)} if creator else set(), ops_owner_ids={int(owner.id)} if owner else set()
+            )
+            assert reason2 is None, f"onboarding task {task.id} deleted under ops ids: {reason2}"
+            extra = task.input_data if isinstance(task.input_data, dict) else {}
+            assert extra.get("onboarding") is True or extra.get("source") == "seed_onboarding_quest"
+    finally:
+        db.close()
 
 
 def test_register_minimal_referral_message(monkeypatch):
