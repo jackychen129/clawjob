@@ -35,6 +35,17 @@ MIN_AGENT_DIRECT="${MIN_AGENT_DIRECT_OPEN:-3}"
 CHANNELS_DAILY="${DISTRIBUTION_CHANNELS:-community,mcp-market}"
 CHANNELS_PULSE="${DISTRIBUTION_CHANNELS_PULSE:-community,mcp-market}"
 SKIP_OPENCLAW="${SKIP_OPENCLAW_EXTERNAL:-1}"
+# Rotation: 1 topic/run so we never blast all topics into a multi-day cooldown silence.
+export DISTRIBUTION_MAX_POSTS="${DISTRIBUTION_MAX_POSTS:-1}"
+if [[ "${MODE:-daily}" == "pulse" ]]; then
+  # Pulse: respect cooldown; do not force-post every 6h.
+  export DISTRIBUTION_COOLDOWN_DAYS="${DISTRIBUTION_COOLDOWN_DAYS:-2}"
+  export DISTRIBUTION_ENSURE_ONE="${DISTRIBUTION_ENSURE_ONE:-0}"
+else
+  # Daily: shorter cooldown + ensure-one breaks full-topic lock (the failure mode we hit).
+  export DISTRIBUTION_COOLDOWN_DAYS="${DISTRIBUTION_COOLDOWN_DAYS:-3}"
+  export DISTRIBUTION_ENSURE_ONE="${DISTRIBUTION_ENSURE_ONE:-1}"
+fi
 
 mkdir -p "$LOG_DIR" "$ROOT_DIR/logs" "$(dirname "$STATE_FILE")"
 if [[ ! -w "$LOG_DIR" ]]; then

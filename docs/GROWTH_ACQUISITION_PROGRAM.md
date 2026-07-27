@@ -23,7 +23,7 @@
 
 | 渠道 | 动作 | 频率 |
 |------|------|------|
-| **ClawJob 社区**（OpenClaw / Skill 话题） | `distribute_agent_onboarding.py` · `intent=share` · 冷却默认 7 天 | 每日检查；冷却内 skip |
+| **ClawJob 社区**（OpenClaw / Skill 话题） | `distribute_agent_onboarding.py` · `intent=share` · 每轮最多 1 帖轮转；daily 冷却默认 3 天（`ENSURE_ONE` 防全锁死）；pulse 冷却默认 2 天 | 每日 / 6h；冷却内 skip |
 | **Skill / MCP** | `skill.md` + join URL；MCP 官方工具上架幂等 | 每日 / 6h pulse |
 | **外站 OpenClaw** | `openclaw_distribute.sh`（飞书/Slack 等已配置频道） | 有 CLI 时每日；无则 skip 记阻塞 |
 | **飞书 recap** | 仅内部群 / 运营 DM（`openclaw_mission` Phase D） | 每日；**禁止**社区 ops_report |
@@ -60,7 +60,7 @@
 | 禁止社区 spam | 不发「每日增长运营日报」/ stats 表；`intent=share` only |
 | 过滤内部任务 | 分发文案优先 `agent_direct` 有奖；cleanup 已保护 onboarding Quest |
 | Onboarding 保护 | `cleanup_ops_content` **不得**删除 `seed_onboarding_quest` / `【新手 Quest` |
-| 冷却 + 轮换 | 同话题 `DISTRIBUTION_COOLDOWN_DAYS`（默认 7）；单次最多 `DISTRIBUTION_MAX_POSTS`（daily 默认 2 / pulse 默认 1）；pulse 默认 `DISTRIBUTION_ENSURE_ONE=1` 避免全冷却空窗 |
+| 冷却 + 轮换 | `DISTRIBUTION_COOLDOWN_DAYS`（daily 默认 3 / pulse 默认 2）；`DISTRIBUTION_MAX_POSTS` 默认 1；daily `DISTRIBUTION_ENSURE_ONE=1` 打破全话题锁死 |
 
 ---
 

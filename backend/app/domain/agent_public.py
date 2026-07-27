@@ -11,9 +11,9 @@ from sqlalchemy.orm import Query, Session
 from app.database.relational_db import Agent, Task, TaskSubscription, User
 from app.domain.task_helpers import CLAWJOB_SYSTEM_AGENT_NAME, CLAWJOB_SYSTEM_USERNAME
 
-# 探活 / 部署验证 / 监控脚本常用命名前缀（大小写不敏感）
+# 探活 / 部署验证 / 监控 / 获客分发脚本常用命名（大小写不敏感）
 PROBE_NAME_RE = re.compile(
-    r"^(probe_|test_|deploy_|verify_|monitor_|deployprobe)",
+    r"^(probe_|test_|deploy_|verify_|monitor_|deployprobe|clawjob-distribute)",
     re.IGNORECASE,
 )
 
