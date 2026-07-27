@@ -143,9 +143,10 @@ def agent_is_public(agent: Agent, owner: Optional[User]) -> bool:
 
 
 def apply_public_agent_filters(q: Query, *, AgentModel=Agent, UserModel=User) -> Query:
-    """SQL 层预过滤：活跃 + 非系统账号 owner（探活名等仍在 Python 层二次过滤）。"""
+    """SQL 层过滤：物化 is_public + 活跃 owner（探活/演示等已在 sync 时写入 is_public）。"""
     return (
-        q.filter(AgentModel.is_active == True)  # noqa: E712
+        q.filter(AgentModel.is_public == True)  # noqa: E712
+        .filter(AgentModel.is_active == True)  # noqa: E712
         .filter(UserModel.is_active == True)  # noqa: E712
         .filter(UserModel.username != CLAWJOB_SYSTEM_USERNAME)
     )
@@ -166,16 +167,68 @@ def filter_public_agent_rows(
     return out
 
 
+def paginate_public_agent_rows(
+    q: Query,
+    *,
+    skip: int,
+    limit: int,
+    max_scan: int = 4000,
+) -> Tuple[List[Tuple[Any, ...]], bool]:
+    """SQL OFFSET/LIMIT on is_public-filtered query (max_scan kept for API compat)."""
+    del max_scan
+    rows = q.offset(skip).limit(limit + 1).all()
+    has_more = len(rows) > limit
+    return rows[:limit], has_more
+
+
+def sync_agent_is_public(db: Session, agent: Agent, owner: Optional[User] = None) -> bool:
+    """根据规则物化 agents.is_public；调用方负责 commit。"""
+    if owner is None and getattr(agent, "owner_id", None):
+        owner = db.query(User).filter(User.id == agent.owner_id).first()
+    public = agent_is_public(agent, owner)
+    agent.is_public = public
+    return public
+
+
+def backfill_all_agent_is_public(db: Session, *, batch_size: int = 500) -> int:
+    """全量回填 is_public；返回变更行数。"""
+    updated = 0
+    offset = 0
+    while True:
+        chunk = (
+            db.query(Agent, User)
+            .join(User, Agent.owner_id == User.id)
+            .order_by(Agent.id)
+            .offset(offset)
+            .limit(batch_size)
+            .all()
+        )
+        if not chunk:
+            break
+        for agent, owner in chunk:
+            pub = agent_is_public(agent, owner)
+            if bool(getattr(agent, "is_public", False)) != pub:
+                agent.is_public = pub
+                updated += 1
+        db.commit()
+        offset += batch_size
+        if len(chunk) < batch_size:
+            break
+    if updated:
+        try:
+            from app.services.platform_stats_cache import invalidate_platform_stats_cache
+
+            invalidate_platform_stats_cache()
+        except Exception:
+            pass
+    return updated
+
+
 def count_public_agents(db: Session, *, since: Optional[datetime] = None) -> int:
-    q = db.query(Agent, User).join(User, Agent.owner_id == User.id)
-    q = apply_public_agent_filters(q)
+    q = db.query(Agent).filter(Agent.is_public == True)  # noqa: E712
     if since is not None:
         q = q.filter(Agent.created_at >= since)
-    n = 0
-    for agent, owner in q.all():
-        if agent_is_public(agent, owner):
-            n += 1
-    return n
+    return q.count()
 
 
 def count_total_agents(db: Session, *, since: Optional[datetime] = None) -> int:
@@ -219,5 +272,12 @@ def cleanup_apply_hide(agent: Agent, reason: str, *, deactivate: bool) -> None:
     cfg["hidden_reason"] = reason
     cfg["hidden_at"] = datetime.utcnow().isoformat() + "Z"
     agent.config = cfg
+    agent.is_public = False
     if deactivate and not agent_is_system_agent(agent, None):
         agent.is_active = False
+    try:
+        from app.services.platform_stats_cache import invalidate_platform_stats_cache
+
+        invalidate_platform_stats_cache()
+    except Exception:
+        pass

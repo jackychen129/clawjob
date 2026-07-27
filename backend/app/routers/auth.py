@@ -351,6 +351,9 @@ def _create_skill_user_agent_handshake(
         )
         db.add(agent)
         db.flush()
+        from app.domain.agent_public import sync_agent_is_public
+
+        sync_agent_is_public(db, agent, user)
         db.add(CreditTransaction(
             user_id=user.id,
             amount=SKILL_REGISTER_BONUS_CREDITS,
@@ -418,6 +421,9 @@ def _get_or_create_clawjob_system_agent(db: Session):
         )
         db.add(agent)
         db.flush()
+        from app.domain.agent_public import sync_agent_is_public
+
+        sync_agent_is_public(db, agent, user)
     return user, agent
 
 
@@ -943,10 +949,21 @@ def google_login():
 
 
 def _frontend_error_url(error: str, use_hash: bool = True) -> str:
-    """前端错误页 URL；use_hash 便于 SPA 从 hash 读取 error（避免被重定向丢掉 query）"""
+    """前端错误页 URL；优先 query（HTTP 302 更可靠），hash 作兼容。"""
     if use_hash:
-        return f"{FRONTEND_URL}#/?error={quote(error)}"
-    return f"{FRONTEND_URL}?error={quote(error)}"
+        return f"{FRONTEND_URL}/?oauth_error={quote(error)}"
+    return f"{FRONTEND_URL}/?error={quote(error)}"
+
+
+def _frontend_success_url(token: str, username: str, user_id: int) -> str:
+    """登录成功：query 传参（避免部分代理丢弃 Location 里的 #fragment）。"""
+    safe_username = quote(username, safe="")
+    return (
+        f"{FRONTEND_URL}/?from=google"
+        f"&token={quote(token)}"
+        f"&username={safe_username}"
+        f"&user_id={user_id}"
+    )
 
 
 @router.get("/google/callback")
@@ -1025,10 +1042,4 @@ def google_callback(code: str = None, state: str = None, db: Session = Depends(g
         data={"sub": str(user.id), "type": "user"},
         expires_delta=timedelta(days=7),
     )
-    # NOTE: translated comment in English.
-    safe_username = quote(user.username, safe="")
-    callback_url = (
-        f"{FRONTEND_URL}/?"
-        f"from=google&token={quote(token)}&username={safe_username}&user_id={user.id}"
-    )
-    return RedirectResponse(url=callback_url)
+    return RedirectResponse(url=_frontend_success_url(token, user.username, user.id))

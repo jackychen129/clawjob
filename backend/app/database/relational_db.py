@@ -69,17 +69,33 @@ class Agent(Base):
     personality_traits = Column(JSON)  # Store personality traits as JSON
     capabilities = Column(JSON)  # Store agent capabilities
     config = Column(JSON)  # Store agent configuration
-    owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    is_active = Column(Boolean, default=True)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    is_active = Column(Boolean, default=True, index=True)
+    is_public = Column(Boolean, default=False, index=True, nullable=False)
     category = Column(String(32), nullable=True)  # 注册来源：skill | mcp | web | api
-    created_at = Column(DateTime, default=func.now())
+    created_at = Column(DateTime, default=func.now(), index=True)
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
-    
+
     # NOTE: translated comment in English.
     owner = relationship("User", back_populates="agents")
     tasks = relationship("Task", back_populates="agent", foreign_keys="Task.agent_id")
     conversations = relationship("Conversation", back_populates="agent")
     published_template = relationship("PublishedAgentTemplate", back_populates="agent", uselist=False)
+
+
+class AgentStats(Base):
+    """Pre-aggregated task metrics per agent (scale path for candidates/leaderboard)."""
+    __tablename__ = "agent_stats"
+
+    agent_id = Column(Integer, ForeignKey("agents.id"), primary_key=True)
+    completed_count = Column(Integer, default=0, nullable=False)
+    earned_points = Column(Integer, default=0, nullable=False)
+    published_count = Column(Integer, default=0, nullable=False)
+    assigned_count = Column(Integer, default=0, nullable=False)
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    agent = relationship("Agent", backref="stats_row", uselist=False)
+
 
 class PublishedAgentTemplate(Base):
     """已发布的 Agent 模板 / Skill：供市场展示与下载（OpenClaw 配置 + Skill 或仅 Skill）"""
@@ -149,14 +165,14 @@ class Task(Base):
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String, nullable=False)
     description = Column(Text)
-    status = Column(String, default="pending")  # pending, running, completed, failed
+    status = Column(String, default="pending", index=True)  # pending, running, completed, failed
     priority = Column(String, default="medium")  # low, medium, high, critical
     task_type = Column(String, nullable=False)  # e.g., "research", "coding", "analysis"
     input_data = Column(JSON)  # Input data for the task
     output_data = Column(JSON)  # Output data from the task
-    agent_id = Column(Integer, ForeignKey("agents.id"), nullable=True)  # 接取者 agent，空表示待接取
+    agent_id = Column(Integer, ForeignKey("agents.id"), nullable=True, index=True)  # 接取者 agent，空表示待接取
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)  # 发布者
-    creator_agent_id = Column(Integer, ForeignKey("agents.id"), nullable=True)  # 可选：由某 Agent 代发，空表示用户直接发布
+    creator_agent_id = Column(Integer, ForeignKey("agents.id"), nullable=True, index=True)  # 可选：由某 Agent 代发，空表示用户直接发布
     reward_points = Column(Integer, default=0)  # 任务奖励点（完成时发给接取者）
     completion_webhook_url = Column(Text, nullable=True)  # 完成回调 URL（有奖励时发布者必填，接取者提交完成时 POST 通知）
     submitted_at = Column(DateTime, nullable=True)  # 接取者提交完成时间
@@ -167,7 +183,8 @@ class Task(Base):
     parent_task_id = Column(Integer, ForeignKey("tasks.id"))  # For subtasks
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
-    completed_at = Column(DateTime)
+    completed_at = Column(DateTime, index=True)
+    is_public_listing = Column(Boolean, default=False, index=True, nullable=False)
     
     # NOTE: translated comment in English.
     agent = relationship("Agent", back_populates="tasks", foreign_keys=[agent_id])
@@ -779,6 +796,33 @@ def init_db():
                     conn.commit()
                 except Exception:
                     conn.rollback()
+            try:
+                if engine.dialect.name == "postgresql":
+                    conn.execute(text("ALTER TABLE agents ADD COLUMN IF NOT EXISTS is_public BOOLEAN NOT NULL DEFAULT false"))
+                else:
+                    conn.execute(text("ALTER TABLE agents ADD COLUMN is_public BOOLEAN NOT NULL DEFAULT 0"))
+                conn.commit()
+            except Exception:
+                conn.rollback()
+            try:
+                if engine.dialect.name == "postgresql":
+                    conn.execute(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS is_public_listing BOOLEAN NOT NULL DEFAULT false"))
+                else:
+                    conn.execute(text("ALTER TABLE tasks ADD COLUMN is_public_listing BOOLEAN NOT NULL DEFAULT 0"))
+                conn.commit()
+            except Exception:
+                conn.rollback()
+            try:
+                from app.domain.agent_public import backfill_all_agent_is_public
+                from app.database.relational_db import SessionLocal
+
+                _db = SessionLocal()
+                try:
+                    backfill_all_agent_is_public(_db, batch_size=500)
+                finally:
+                    _db.close()
+            except Exception:
+                pass
     except Exception:
         pass
     _ensure_admin_user_from_env()
