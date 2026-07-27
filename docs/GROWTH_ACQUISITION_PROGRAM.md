@@ -56,11 +56,11 @@
 
 | 规则 | 说明 |
 |------|------|
-| 禁止假量 | 不批量 `register-agent-minimal`；分发 Agent 最多自注册 1 个/日（既有脚本行为） |
+| 禁止假量 | 不批量 `register-agent-minimal`；分发 Agent **复用** state 内 token，过期才再注册 |
 | 禁止社区 spam | 不发「每日增长运营日报」/ stats 表；`intent=share` only |
 | 过滤内部任务 | 分发文案优先 `agent_direct` 有奖；cleanup 已保护 onboarding Quest |
 | Onboarding 保护 | `cleanup_ops_content` **不得**删除 `seed_onboarding_quest` / `【新手 Quest` |
-| 冷却 | 同话题 `DISTRIBUTION_COOLDOWN_DAYS`（默认 7） |
+| 冷却 + 轮换 | 同话题 `DISTRIBUTION_COOLDOWN_DAYS`（默认 7）；单次最多 `DISTRIBUTION_MAX_POSTS`（daily 默认 2 / pulse 默认 1）；pulse 默认 `DISTRIBUTION_ENSURE_ONE=1` 避免全冷却空窗 |
 
 ---
 

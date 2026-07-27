@@ -10,11 +10,13 @@
   python3 tools/growth/distribute_agent_onboarding.py --channels community,mcp-market,skill-sync
 
 环境变量：
-  CLAWJOB_ACCESS_TOKEN / CLAWJOB_AGENT_ID — 可选，否则 register-agent-minimal
+  CLAWJOB_ACCESS_TOKEN / CLAWJOB_AGENT_ID — 可选，否则复用 state 内分发 Agent / register-agent-minimal
   CLAWJOB_ADMIN_TOKEN — 可选 admin JWT
   NPM_TOKEN — 若设置则尝试 npm publish @clawjob/mcp-server
   SMITHERY_API_KEY — 若设置则尝试 smithery CLI 发布
   DISTRIBUTION_COOLDOWN_DAYS — 同话题重复发帖冷却（默认 7）
+  DISTRIBUTION_MAX_POSTS — 单次最多发帖话题数（默认 1，避免一次刷满后冷却空窗）
+  DISTRIBUTION_ENSURE_ONE — 若全部冷却仍强制发最旧话题 1 条（默认 0；pulse 建议 1）
 """
 from __future__ import annotations
 
@@ -35,6 +37,8 @@ API = os.environ.get("CLAWJOB_API_URL", "https://api.clawjob.com.cn").rstrip("/"
 APP = os.environ.get("CLAWJOB_APP_URL", "https://app.clawjob.com.cn").rstrip("/")
 WEB = os.environ.get("CLAWJOB_WEB_URL", "https://clawjob.com.cn").rstrip("/")
 COOLDOWN_DAYS = int(os.environ.get("DISTRIBUTION_COOLDOWN_DAYS", "7"))
+MAX_POSTS_DEFAULT = int(os.environ.get("DISTRIBUTION_MAX_POSTS", "1"))
+ENSURE_ONE_DEFAULT = os.environ.get("DISTRIBUTION_ENSURE_ONE", "0").strip() in ("1", "true", "yes")
 
 # 社区话题：OpenClaw / Skill / Agent 协作（intent=share，非 ops_report）
 COMMUNITY_TARGETS: list[dict] = [
@@ -85,24 +89,66 @@ def load_state() -> dict:
             return json.loads(STATE_FILE.read_text())
         except Exception:
             pass
-    return {"topics": {}, "mcp_published": False, "last_run": None}
+    return {"topics": {}, "mcp_published": False, "last_run": None, "distributor": {}}
 
 
 def save_state(state: dict) -> None:
     state["last_run"] = _now_iso()
+    STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
     STATE_FILE.write_text(json.dumps(state, indent=2, ensure_ascii=False) + "\n")
+    try:
+        STATE_FILE.chmod(0o600)
+    except OSError:
+        pass
+
+
+def _parse_iso(ts: str | None) -> datetime | None:
+    if not ts:
+        return None
+    try:
+        return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    except Exception:
+        return None
 
 
 def topic_on_cooldown(state: dict, topic_id: int) -> bool:
     last = state.get("topics", {}).get(str(topic_id))
-    if not last:
+    last_dt = _parse_iso(last)
+    if not last_dt:
         return False
-    try:
-        last_dt = datetime.fromisoformat(last.replace("Z", "+00:00"))
-        delta = datetime.now(timezone.utc) - last_dt
-        return delta.days < COOLDOWN_DAYS
-    except Exception:
-        return False
+    delta = datetime.now(timezone.utc) - last_dt
+    return delta.total_seconds() < COOLDOWN_DAYS * 86400
+
+
+def topic_last_posted_at(state: dict, topic_id: int) -> datetime:
+    last_dt = _parse_iso(state.get("topics", {}).get(str(topic_id)))
+    return last_dt or datetime.fromtimestamp(0, tz=timezone.utc)
+
+
+def select_community_targets(
+    state: dict,
+    *,
+    force_topics: bool,
+    max_posts: int,
+    ensure_one: bool,
+) -> list[dict]:
+    """Round-robin: prefer off-cooldown topics (oldest first); optionally unlock one if all cooling."""
+    if max_posts <= 0:
+        return []
+    ranked = sorted(COMMUNITY_TARGETS, key=lambda t: topic_last_posted_at(state, int(t["topic_id"])))
+    eligible = [
+        t for t in ranked if force_topics or not topic_on_cooldown(state, int(t["topic_id"]))
+    ]
+    if eligible:
+        return eligible[:max_posts]
+    if ensure_one and ranked:
+        oldest = ranked[0]
+        print(
+            f"[info] all topics on cooldown — ensure-one unlocking topic {oldest['topic_id']}",
+            file=sys.stderr,
+        )
+        return [oldest]
+    return []
 
 
 def register_agent() -> tuple[str, int]:
@@ -110,8 +156,8 @@ def register_agent() -> tuple[str, int]:
         "POST",
         "/auth/register-agent-minimal",
         {
-            "agent_name": f"ClawJob-Distribute-{datetime.now().strftime('%m%d')}",
-            "description": "Agent onboarding distribution bot",
+            "agent_name": "ClawJob-Distribute",
+            "description": "Agent onboarding distribution bot (reuse across runs)",
         },
     )
     token = data.get("access_token")
@@ -119,6 +165,44 @@ def register_agent() -> tuple[str, int]:
     if not token or agent_id is None:
         raise RuntimeError(f"register-agent-minimal failed: {data}")
     return str(token), int(agent_id)
+
+
+def token_seems_valid(token: str) -> bool:
+    try:
+        _req("GET", "/account/me", token=token)
+        return True
+    except urllib.error.HTTPError as e:
+        if e.code in (401, 403):
+            return False
+        # Other errors: keep token and let post fail loudly
+        return True
+    except Exception:
+        return True
+
+
+def resolve_distributor(state: dict) -> tuple[str, int]:
+    """Reuse env or persisted distributor; register at most when missing/expired."""
+    token = os.environ.get("CLAWJOB_ACCESS_TOKEN", "").strip()
+    agent_id_env = os.environ.get("CLAWJOB_AGENT_ID", "").strip()
+    if token and agent_id_env:
+        return token, int(agent_id_env)
+
+    dist = state.get("distributor") or {}
+    saved_token = str(dist.get("access_token") or "").strip()
+    saved_id = dist.get("agent_id")
+    if saved_token and saved_id is not None and token_seems_valid(saved_token):
+        print(f"Reusing distribution agent_id={saved_id}")
+        return saved_token, int(saved_id)
+
+    print("Registering distribution agent…")
+    token, agent_id = register_agent()
+    state["distributor"] = {
+        "agent_id": agent_id,
+        "access_token": token,
+        "registered_at": _now_iso(),
+    }
+    print(f"  agent_id={agent_id}")
+    return token, agent_id
 
 
 def fetch_live_context() -> dict:
@@ -334,31 +418,62 @@ def main() -> int:
         help="Comma-separated: community,mcp-market,skill-sync,npm,smithery,openclaw",
     )
     parser.add_argument("--force-topics", action="store_true", help="Ignore topic cooldown")
+    parser.add_argument(
+        "--max-posts",
+        type=int,
+        default=MAX_POSTS_DEFAULT,
+        help="Max community topics to post this run (default DISTRIBUTION_MAX_POSTS or 1)",
+    )
+    parser.add_argument(
+        "--ensure-one",
+        action="store_true",
+        default=ENSURE_ONE_DEFAULT,
+        help="If all topics cooling, still post the oldest one",
+    )
+    parser.add_argument(
+        "--no-ensure-one",
+        action="store_true",
+        help="Disable ensure-one even if DISTRIBUTION_ENSURE_ONE=1",
+    )
     args = parser.parse_args()
     channels = {c.strip() for c in args.channels.split(",") if c.strip()}
+    ensure_one = bool(args.ensure_one) and not args.no_ensure_one
+    max_posts = max(0, int(args.max_posts))
 
     print("=== ClawJob Agent 获客分发 ===")
-    print(f"API={API} channels={','.join(sorted(channels))}")
+    print(
+        f"API={API} channels={','.join(sorted(channels))} "
+        f"max_posts={max_posts} ensure_one={ensure_one} cooldown_days={COOLDOWN_DAYS}"
+    )
 
     ctx = fetch_live_context()
     state = load_state()
     results: dict = {"community": [], "mcp_published": [], "errors": []}
 
-    token = os.environ.get("CLAWJOB_ACCESS_TOKEN", "").strip()
-    agent_id_env = os.environ.get("CLAWJOB_AGENT_ID", "").strip()
-    agent_id: int | None = int(agent_id_env) if agent_id_env else None
-
-    if not args.dry_run and (not token or agent_id is None):
-        print("Registering distribution agent…")
-        token, agent_id = register_agent()
-        print(f"  agent_id={agent_id}")
+    token: str | None = None
+    agent_id: int | None = None
+    need_auth = ("community" in channels) or ("mcp-market" in channels)
+    if not args.dry_run and need_auth:
+        token, agent_id = resolve_distributor(state)
 
     if "community" in channels:
-        for target in COMMUNITY_TARGETS:
+        targets = select_community_targets(
+            state,
+            force_topics=args.force_topics,
+            max_posts=max_posts,
+            ensure_one=ensure_one,
+        )
+        skipped = len(COMMUNITY_TARGETS) - len(targets)
+        if skipped > 0 and not targets:
+            for target in COMMUNITY_TARGETS:
+                tid = int(target["topic_id"])
+                if topic_on_cooldown(state, tid):
+                    print(f"[skip] topic {tid} on cooldown ({COOLDOWN_DAYS}d)")
+        elif skipped > 0:
+            print(f"[info] posting {len(targets)}/{len(COMMUNITY_TARGETS)} topics this run (rotation)")
+
+        for target in targets:
             tid = int(target["topic_id"])
-            if not args.force_topics and topic_on_cooldown(state, tid):
-                print(f"[skip] topic {tid} on cooldown ({COOLDOWN_DAYS}d)")
-                continue
             msg = build_message(target, ctx)
             if args.dry_run:
                 print(f"\n--- topic {tid} ({target['title_hint']}) ---\n{msg[:400]}…")
@@ -402,6 +517,7 @@ def main() -> int:
 
     print("\n=== 完成 ===")
     print(json.dumps(results, ensure_ascii=False, indent=2))
+    # Empty community with no errors is success (cooldown rotation)
     return 0 if not results["errors"] else 1
 
 
