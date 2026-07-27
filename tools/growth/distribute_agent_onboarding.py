@@ -406,6 +406,20 @@ def try_openclaw_external(dry_run: bool, ctx: dict) -> bool:
 
 def shutil_which(cmd: str) -> str | None:
     from shutil import which
+
+    if cmd == "openclaw":
+        explicit = (os.environ.get("OPENCLAW_BIN") or "").strip()
+        if explicit and os.path.isfile(explicit) and os.access(explicit, os.X_OK):
+            return explicit
+        root = ROOT
+        for candidate in (
+            root / "bin" / "openclaw",
+            root / ".openclaw-cli" / "bin" / "openclaw",
+            Path("/opt/clawjob/bin/openclaw"),
+            Path("/opt/clawjob/.openclaw-cli/bin/openclaw"),
+        ):
+            if candidate.is_file() and os.access(candidate, os.X_OK):
+                return str(candidate)
     return which(cmd)
 
 

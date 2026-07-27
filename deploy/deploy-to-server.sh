@@ -106,6 +106,9 @@ rsync -avz --delete \
   --exclude 'tools/growth/.distribution_state.json' \
   --exclude 'tools/growth/.acquisition_paused' \
   --exclude 'tools/growth/*.log' \
+  --exclude '.openclaw-cli/' \
+  --exclude 'bin/openclaw' \
+  --exclude 'bin/node' \
   --exclude 'logs/' \
   --exclude '*.log' \
   ${RSYNC_RSH:+-e "$RSYNC_RSH"} \

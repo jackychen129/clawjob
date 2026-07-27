@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # 通过本地 OpenClaw Gateway 触发 ClawJob 增长运营任务（精简版：社区分发 > 自刷任务）
-# 依赖：openclaw CLI、Gateway 运行中（openclaw gateway status）
+# 依赖：openclaw CLI、Gateway 运行中、飞书已配置。缺任一条件时 soft-skip（exit 0），不拖垮 acquisition cron。
+# Linux：优先 /opt/clawjob/bin/openclaw（见 tools/growth/resolve_openclaw.sh），不依赖 macOS TCC。
 set -euo pipefail
 
 ROOT_DIR="${CLAWJOB_ROOT:-$(cd "$(dirname "$0")/../.." && pwd)}"
@@ -15,14 +16,22 @@ TIMEOUT="${OPENCLAW_MISSION_TIMEOUT:-420}"
 TS="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 LOG_FILE="$LOG_DIR/openclaw_mission.log"
 
-if ! command -v openclaw >/dev/null 2>&1; then
-  echo "[$TS] ERROR: openclaw CLI not found. Install: npm i -g openclaw && openclaw onboard" | tee -a "$LOG_FILE"
-  exit 1
+# shellcheck source=../growth/resolve_openclaw.sh
+source "$ROOT_DIR/tools/growth/resolve_openclaw.sh"
+if ! resolve_openclaw_bin; then
+  echo "[$TS] skip: openclaw CLI not found. Install: CLAWJOB_ROOT=$ROOT_DIR ./tools/growth/install_openclaw_cli_server.sh" | tee -a "$LOG_FILE"
+  exit 0
+fi
+export PATH="$(dirname "$OPENCLAW_BIN"):${PATH:-/usr/bin}"
+
+if ! openclaw_feishu_configured; then
+  echo "[$TS] skip: Feishu not configured — set FEISHU_APP_ID+FEISHU_APP_SECRET or channels.feishu in openclaw.json. See docs/GROWTH_ACQUISITION_PROGRAM.md §8" | tee -a "$LOG_FILE"
+  exit 0
 fi
 
-if ! openclaw gateway status >/dev/null 2>&1; then
-  echo "[$TS] ERROR: OpenClaw Gateway not reachable. Run: openclaw gateway start" | tee -a "$LOG_FILE"
-  exit 1
+if ! "$OPENCLAW_BIN" gateway status >/dev/null 2>&1; then
+  echo "[$TS] skip: OpenClaw Gateway not reachable. After Feishu+model keys: openclaw gateway start (or systemd). Do not require Mac TCC." | tee -a "$LOG_FILE"
+  exit 0
 fi
 
 # 轻量探活（health/stats/growth）
@@ -51,10 +60,10 @@ Phase F：返回 Markdown 摘要（stats、飞书结果、阻塞、下一步；c
 
 约束：禁止 fake registration；禁止无真实交付 submit；stats 必须来自当次 API；禁止对外主推平台管理员提现叙事。}"
 
-echo "[$TS] openclaw_mission start agent=$AGENT_ID api=$API_URL (agent-direct-settlement v3)" | tee -a "$LOG_FILE"
+echo "[$TS] openclaw_mission start agent=$AGENT_ID api=$API_URL bin=$OPENCLAW_BIN (agent-direct-settlement v3)" | tee -a "$LOG_FILE"
 
 OUT="$(mktemp)"
-if openclaw agent --agent "$AGENT_ID" --message "$MISSION" --json --timeout "$TIMEOUT" >"$OUT" 2>&1; then
+if "$OPENCLAW_BIN" agent --agent "$AGENT_ID" --message "$MISSION" --json --timeout "$TIMEOUT" >"$OUT" 2>&1; then
   echo "[$TS] openclaw_mission OK" | tee -a "$LOG_FILE"
   cat "$OUT" >> "$LOG_FILE"
   if command -v jq >/dev/null 2>&1; then
@@ -63,9 +72,9 @@ if openclaw agent --agent "$AGENT_ID" --message "$MISSION" --json --timeout "$TI
     cat "$OUT"
   fi
 else
-  echo "[$TS] openclaw_mission FAILED" | tee -a "$LOG_FILE"
+  echo "[$TS] openclaw_mission FAILED (non-fatal)" | tee -a "$LOG_FILE"
   cat "$OUT" | tee -a "$LOG_FILE"
   rm -f "$OUT"
-  exit 1
+  exit 0
 fi
 rm -f "$OUT"

@@ -34,7 +34,9 @@ PAUSE_FILE="$ROOT_DIR/tools/growth/.acquisition_paused"
 MIN_AGENT_DIRECT="${MIN_AGENT_DIRECT_OPEN:-3}"
 CHANNELS_DAILY="${DISTRIBUTION_CHANNELS:-community,mcp-market}"
 CHANNELS_PULSE="${DISTRIBUTION_CHANNELS_PULSE:-community,mcp-market}"
-SKIP_OPENCLAW="${SKIP_OPENCLAW_EXTERNAL:-1}"
+# Optional-but-detected: unset SKIP_OPENCLAW_EXTERNAL → auto (enable when CLI found).
+# Explicit 1 = force skip; explicit 0 = force include channel (still soft-skips if CLI missing).
+SKIP_OPENCLAW="${SKIP_OPENCLAW_EXTERNAL:-auto}"
 # Rotation: 1 topic/run so we never blast all topics into a multi-day cooldown silence.
 export DISTRIBUTION_MAX_POSTS="${DISTRIBUTION_MAX_POSTS:-1}"
 if [[ "${MODE:-daily}" == "pulse" ]]; then
@@ -45,6 +47,16 @@ else
   # Daily: shorter cooldown + ensure-one breaks full-topic lock (the failure mode we hit).
   export DISTRIBUTION_COOLDOWN_DAYS="${DISTRIBUTION_COOLDOWN_DAYS:-3}"
   export DISTRIBUTION_ENSURE_ONE="${DISTRIBUTION_ENSURE_ONE:-1}"
+fi
+
+# Prefer project-local OpenClaw (Linux /opt/clawjob) — no macOS TCC dependency.
+# shellcheck source=resolve_openclaw.sh
+source "$ROOT_DIR/tools/growth/resolve_openclaw.sh"
+OPENCLAW_DETECTED=0
+if resolve_openclaw_bin; then
+  OPENCLAW_DETECTED=1
+  export OPENCLAW_BIN
+  export PATH="$(dirname "$OPENCLAW_BIN"):${PATH:-/usr/bin}"
 fi
 
 mkdir -p "$LOG_DIR" "$ROOT_DIR/logs" "$(dirname "$STATE_FILE")"
@@ -128,12 +140,23 @@ verify_supply
 # --- 4) Distribution ---
 CHANNELS="$CHANNELS_DAILY"
 [[ "$MODE" == "pulse" ]] && CHANNELS="$CHANNELS_PULSE"
-# Default: do not require openclaw on server; opt-in via SKIP_OPENCLAW_EXTERNAL=0 + channel list
-if [[ "$SKIP_OPENCLAW" != "1" ]]; then
+# Auto: add openclaw channel when CLI detected; force-off with SKIP_OPENCLAW_EXTERNAL=1
+INCLUDE_OPENCLAW=0
+case "$SKIP_OPENCLAW" in
+  1|true|TRUE|yes|YES) INCLUDE_OPENCLAW=0 ;;
+  0|false|FALSE|no|NO) INCLUDE_OPENCLAW=1 ;;
+  *) [[ "$OPENCLAW_DETECTED" == "1" ]] && INCLUDE_OPENCLAW=1 || INCLUDE_OPENCLAW=0 ;;
+esac
+if [[ "$INCLUDE_OPENCLAW" == "1" ]]; then
   case ",$CHANNELS," in
     *,openclaw,*) ;;
     *) CHANNELS="${CHANNELS},openclaw" ;;
   esac
+fi
+if [[ "$OPENCLAW_DETECTED" == "1" ]]; then
+  log "openclaw detected bin=$OPENCLAW_BIN include_channel=$INCLUDE_OPENCLAW feishu_cfg=$(openclaw_feishu_configured && echo yes || echo no)"
+else
+  log "openclaw not detected (optional — community/mcp still run)"
 fi
 
 # Use mode defaults exported above (do not invert ensure-one here).
@@ -153,7 +176,12 @@ fi
 export CLAWJOB_API_URL="$API_URL"
 export CLAWJOB_APP_URL="$APP_URL"
 export CLAWJOB_WEB_URL="$WEB_URL"
-export SKIP_OPENCLAW_EXTERNAL="$SKIP_OPENCLAW"
+# Pass through for Python: only hard-skip when explicitly forced off
+if [[ "$INCLUDE_OPENCLAW" == "1" ]]; then
+  export SKIP_OPENCLAW_EXTERNAL=0
+else
+  export SKIP_OPENCLAW_EXTERNAL=1
+fi
 
 log "distribute channels=$CHANNELS max_posts=$MAX_POSTS ensure_one=$ENSURE_ONE cooldown_days=${DISTRIBUTION_COOLDOWN_DAYS}"
 if python3 "$ROOT_DIR/tools/growth/distribute_agent_onboarding.py" "${DIST_ARGS[@]}" >>"$LOG_FILE" 2>&1; then
@@ -164,14 +192,17 @@ fi
 
 # --- 5) Optional OpenClaw daily mission (Feishu recap) — daily only ---
 if [[ "$MODE" == "daily" && "$DRY_RUN" != "1" ]]; then
-  if command -v openclaw >/dev/null 2>&1; then
-    if [[ -x "$ROOT_DIR/tools/community_ops/openclaw_mission.sh" ]]; then
+  if [[ "$OPENCLAW_DETECTED" == "1" ]]; then
+    if ! openclaw_feishu_configured; then
+      log "skip openclaw_mission (Feishu not configured — set FEISHU_APP_ID+FEISHU_APP_SECRET or openclaw.json; see docs/GROWTH_ACQUISITION_PROGRAM.md §8)"
+    elif [[ -x "$ROOT_DIR/tools/community_ops/openclaw_mission.sh" ]]; then
       log "openclaw_mission start"
       CLAWJOB_ROOT="$ROOT_DIR" CLAWJOB_API_URL="$API_URL" CLAWJOB_OPS_LOG_DIR="$LOG_DIR" \
-        "$ROOT_DIR/tools/community_ops/openclaw_mission.sh" >>"$LOG_FILE" 2>&1 || log "WARN: openclaw_mission failed"
+        OPENCLAW_BIN="$OPENCLAW_BIN" \
+        "$ROOT_DIR/tools/community_ops/openclaw_mission.sh" >>"$LOG_FILE" 2>&1 || log "WARN: openclaw_mission failed (non-fatal)"
     fi
   else
-    log "skip openclaw_mission (CLI not installed on server — Feishu recap blocked)"
+    log "skip openclaw_mission (CLI not installed — Feishu recap blocked)"
   fi
 elif [[ "$MODE" == "daily" && "$DRY_RUN" == "1" ]]; then
   log "dry-run: skip openclaw_mission"

@@ -56,14 +56,15 @@ fi
 
 ${MARKER} begin
 SHELL=/bin/bash
-PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+PATH=${ROOT_DIR}/bin:${ROOT_DIR}/.openclaw-cli/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 CLAWJOB_ROOT=${ROOT_DIR}
 CLAWJOB_API_URL=${API_URL}
 CLAWJOB_OPS_LOG_DIR=${LOG_DIR}
+OPENCLAW_PREFIX=${ROOT_DIR}/.openclaw-cli
 # Daily 09:05 Asia/Shanghai — full acquisition
-5 9 * * * cd ${ROOT_DIR} && CLAWJOB_ROOT=${ROOT_DIR} CLAWJOB_API_URL=${API_URL} CLAWJOB_OPS_LOG_DIR=${LOG_DIR} ${RUNNER} >> ${LOG_DIR}/acquisition-cron.log 2>&1
+5 9 * * * cd ${ROOT_DIR} && CLAWJOB_ROOT=${ROOT_DIR} CLAWJOB_API_URL=${API_URL} CLAWJOB_OPS_LOG_DIR=${LOG_DIR} OPENCLAW_PREFIX=${ROOT_DIR}/.openclaw-cli ${RUNNER} >> ${LOG_DIR}/acquisition-cron.log 2>&1
 # Every 6h — distribution pulse
-0 */6 * * * cd ${ROOT_DIR} && CLAWJOB_ROOT=${ROOT_DIR} CLAWJOB_API_URL=${API_URL} CLAWJOB_OPS_LOG_DIR=${LOG_DIR} ${RUNNER} --pulse >> ${LOG_DIR}/acquisition-cron.log 2>&1
+0 */6 * * * cd ${ROOT_DIR} && CLAWJOB_ROOT=${ROOT_DIR} CLAWJOB_API_URL=${API_URL} CLAWJOB_OPS_LOG_DIR=${LOG_DIR} OPENCLAW_PREFIX=${ROOT_DIR}/.openclaw-cli ${RUNNER} --pulse >> ${LOG_DIR}/acquisition-cron.log 2>&1
 ${MARKER} end
 EOF
 } | crontab -

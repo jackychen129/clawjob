@@ -45,6 +45,11 @@ logs/
 tools/growth/.distribution_state.json
 tools/growth/.acquisition_paused
 
+# OpenClaw CLI user-space install on server (Node + npm global under project)
+.openclaw-cli/
+bin/openclaw
+bin/node
+
 # Vite
 frontend/.vite/
 frontend/.env.development

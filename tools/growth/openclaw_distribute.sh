@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # 通过 OpenClaw 向**外站**（飞书/Slack 等）发送 MCP+Skill 获客帖 — 不调用 ClawJob 社区 API
+# Soft-skip (exit 0) when CLI / gateway / Feishu missing — never fail the acquisition pipeline.
 set -euo pipefail
 ROOT_DIR="${CLAWJOB_ROOT:-$(cd "$(dirname "$0")/../.." && pwd)}"
 API_URL="${CLAWJOB_API_URL:-https://api.clawjob.com.cn}"
@@ -12,9 +13,22 @@ mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/openclaw_distribute.log"
 TS="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
-if ! command -v openclaw >/dev/null 2>&1; then
-  echo "[$TS] openclaw not found" | tee -a "$LOG_FILE"
-  exit 1
+# shellcheck source=resolve_openclaw.sh
+source "$ROOT_DIR/tools/growth/resolve_openclaw.sh"
+if ! resolve_openclaw_bin; then
+  echo "[$TS] skip: openclaw CLI not found (optional)" | tee -a "$LOG_FILE"
+  exit 0
+fi
+export PATH="$(dirname "$OPENCLAW_BIN"):${PATH:-/usr/bin}"
+
+if ! openclaw_feishu_configured; then
+  echo "[$TS] skip: Feishu not configured (set FEISHU_APP_ID+FEISHU_APP_SECRET or channels.feishu appId/appSecret — see docs/GROWTH_ACQUISITION_PROGRAM.md §8)" | tee -a "$LOG_FILE"
+  exit 0
+fi
+
+if ! "$OPENCLAW_BIN" gateway status >/dev/null 2>&1; then
+  echo "[$TS] skip: OpenClaw Gateway not running (start after Feishu+model keys configured; do not require Mac TCC)" | tee -a "$LOG_FILE"
+  exit 0
 fi
 
 PROMPT="${OPENCLAW_DISTRIBUTE_PROMPT:-ClawJob 外站获客：向已配置的外部频道（飞书/Slack/Telegram 等）发一条 MCP+Skill 接入帖。
@@ -24,9 +38,9 @@ MCP: npx -y @clawjob/mcp-server（文档 ${APP_URL}/#/docs/mcp）
 官网 ${WEB_URL}/#mcp-skill
 禁止向 ClawJob 公开社区 API 发 stats 日报。}"
 
-echo "[$TS] openclaw_distribute start" | tee -a "$LOG_FILE"
-openclaw agent --agent "$AGENT_ID" --message "$PROMPT" --json --timeout "$TIMEOUT" >>"$LOG_FILE" 2>&1 || {
-  echo "[$TS] openclaw_distribute FAILED" | tee -a "$LOG_FILE"
-  exit 1
+echo "[$TS] openclaw_distribute start bin=$OPENCLAW_BIN" | tee -a "$LOG_FILE"
+"$OPENCLAW_BIN" agent --agent "$AGENT_ID" --message "$PROMPT" --json --timeout "$TIMEOUT" >>"$LOG_FILE" 2>&1 || {
+  echo "[$TS] openclaw_distribute FAILED (non-fatal for acquisition)" | tee -a "$LOG_FILE"
+  exit 0
 }
 echo "[$TS] openclaw_distribute OK" | tee -a "$LOG_FILE"
