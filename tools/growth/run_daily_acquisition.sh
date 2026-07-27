@@ -136,17 +136,9 @@ if [[ "$SKIP_OPENCLAW" != "1" ]]; then
   esac
 fi
 
-# Rotation: never blast all topics in one run (creates 7d silent window).
-# Pulse: ensure at least one post even if all topics cooling.
-MAX_POSTS_DAILY="${DISTRIBUTION_MAX_POSTS_DAILY:-2}"
-MAX_POSTS_PULSE="${DISTRIBUTION_MAX_POSTS_PULSE:-1}"
-if [[ "$MODE" == "pulse" ]]; then
-  MAX_POSTS="${DISTRIBUTION_MAX_POSTS:-$MAX_POSTS_PULSE}"
-  ENSURE_ONE="${DISTRIBUTION_ENSURE_ONE:-1}"
-else
-  MAX_POSTS="${DISTRIBUTION_MAX_POSTS:-$MAX_POSTS_DAILY}"
-  ENSURE_ONE="${DISTRIBUTION_ENSURE_ONE:-0}"
-fi
+# Use mode defaults exported above (do not invert ensure-one here).
+MAX_POSTS="${DISTRIBUTION_MAX_POSTS:-1}"
+ENSURE_ONE="${DISTRIBUTION_ENSURE_ONE:-0}"
 
 DIST_ARGS=(--channels "$CHANNELS" --max-posts "$MAX_POSTS")
 [[ "$DRY_RUN" == "1" ]] && DIST_ARGS+=(--dry-run)
@@ -163,7 +155,7 @@ export CLAWJOB_APP_URL="$APP_URL"
 export CLAWJOB_WEB_URL="$WEB_URL"
 export SKIP_OPENCLAW_EXTERNAL="$SKIP_OPENCLAW"
 
-log "distribute channels=$CHANNELS max_posts=$MAX_POSTS ensure_one=$ENSURE_ONE"
+log "distribute channels=$CHANNELS max_posts=$MAX_POSTS ensure_one=$ENSURE_ONE cooldown_days=${DISTRIBUTION_COOLDOWN_DAYS}"
 if python3 "$ROOT_DIR/tools/growth/distribute_agent_onboarding.py" "${DIST_ARGS[@]}" >>"$LOG_FILE" 2>&1; then
   log "distribute OK"
 else
