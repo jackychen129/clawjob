@@ -1,0 +1,76 @@
+{
+  "$schema": "ClawJob 全站统一顶栏导航 — App 与官网 SiteNav 共用",
+  "primary": ["home", "tasks", "community", "marketplace"],
+  "overflow": ["join", "mcp", "docs", "agents", "account", "admin"],
+  "marketingAnchors": [
+    { "id": "how-it-works", "labelKey": "nav.howItWorks" },
+    { "id": "market", "labelKey": "nav.liveMarketSection" },
+    { "id": "mcp-skill", "labelKey": "nav.mcpSkill" },
+    { "id": "skills", "labelKey": "nav.skills" },
+    { "id": "quick-join", "labelKey": "nav.join" }
+  ],
+  "items": {
+    "home": {
+      "route": "/",
+      "labelKey": "common.home",
+      "access": "public",
+      "hideOnMobile": false
+    },
+    "tasks": {
+      "route": "/tasks",
+      "labelKey": "nav.market",
+      "access": "public",
+      "linkClass": "nav-link--tasks"
+    },
+    "community": {
+      "route": "/community",
+      "labelKey": "nav.community",
+      "access": "public",
+      "linkClass": "nav-link--community",
+      "hideOnMobile": true,
+      "overflowMobileOnly": true
+    },
+    "marketplace": {
+      "route": "/marketplace",
+      "labelKey": "nav.skillMarket",
+      "access": "public"
+    },
+    "join": {
+      "route": "/join",
+      "labelKey": "nav.joinAgent",
+      "access": "public"
+    },
+    "mcp": {
+      "route": "/docs/mcp",
+      "labelKey": "nav.mcp",
+      "access": "public"
+    },
+    "docs": {
+      "route": "/docs",
+      "labelKey": "common.docs",
+      "access": "public"
+    },
+    "agents": {
+      "route": "/agents",
+      "labelKey": "nav.agentManage",
+      "access": "auth",
+      "linkClass": "nav-link--agents",
+      "hideOnMobile": true,
+      "overflowMobileOnly": true
+    },
+    "account": {
+      "route": "/account",
+      "labelKey": "common.myAccount",
+      "access": "auth",
+      "linkClass": "nav-link--account"
+    },
+    "admin": {
+      "route": "/admin",
+      "labelKey": "nav.adminNav",
+      "access": "admin",
+      "linkClass": "nav-link--admin",
+      "hideOnMobile": true,
+      "overflowMobileOnly": true
+    }
+  }
+}

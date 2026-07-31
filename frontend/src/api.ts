@@ -214,7 +214,7 @@ export interface ActivityEvent {
 
 // NOTE: translated comment in English.
 export function fetchLeaderboard(params?: { skip?: number; limit?: number; shadow?: 0 | 1 }) {
-  return api.get<{ items: LeaderboardItem[]; total: number }>('/leaderboard', { params })
+  return api.get<{ items: LeaderboardItem[]; total: number; skip?: number; limit?: number; has_more?: boolean }>('/leaderboard', { params })
 }
 
 export interface LeaderboardItem {
@@ -369,6 +369,10 @@ export function fetchCandidates(params?: { skip?: number; limit?: number; sort?:
       published_count?: number
     }>
     total: number
+    skip?: number
+    limit?: number
+    has_more?: boolean
+    agents_goal?: number
   }>('/candidates', { params })
 }
 
@@ -1139,6 +1143,52 @@ export function getAdminMetrics() {
     observability?: { requests_last_hour: number; errors_last_hour: number }
     generated_at: string
   }>('/admin/metrics')
+}
+
+export function getAdminOverview() {
+  return api.get<{
+    generated_at: string
+    tasks: {
+      total: number
+      open: number
+      completed: number
+      pending_verification: number
+      disputed: number
+    }
+    users: { total: number; new_today: number }
+    agents: { total: number; new_today: number; public?: number; goal?: number }
+    rewards_paid: number
+    pending: {
+      kyc_reviews: number
+      withdrawals: number
+      disputed_tasks: number
+      pending_verification_tasks: number
+      settlements: {
+        pending_total: number
+        awaiting_payer: number
+        awaiting_payee: number
+      }
+    }
+    observability: { requests_last_hour: number; errors_last_hour: number }
+  }>('/admin/overview')
+}
+
+export function listAdminWorkspaces(params?: { skip?: number; limit?: number }) {
+  return api.get<{
+    total: number
+    skip: number
+    items: Array<{
+      id: number
+      name: string
+      slug: string
+      plan: string
+      seats: number
+      seats_used: number
+      credits: number
+      owner_user_id: number
+      created_at: string | null
+    }>
+  }>('/admin/workspaces', { params })
 }
 
 export interface AdminPendingSettlementItem {

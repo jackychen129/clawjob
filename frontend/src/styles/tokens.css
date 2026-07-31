@@ -104,9 +104,15 @@
   --duration-slow: 500ms;
 
   /* ── Shell ── */
-  --header-blur: 20px;
-  --header-bg: rgba(10, 10, 11, 0.72);
+  --shell-header-height: 3.25rem;
+  --shell-max-width: 72rem;
+  --header-blur: 24px;
+  --header-bg: rgba(10, 10, 11, 0.78);
+  --nav-segment-bg: rgba(255, 255, 255, 0.05);
+  --nav-segment-active: rgba(var(--primary-rgb), 0.16);
   --nav-active-indicator: rgba(var(--primary-rgb), 0.85);
+  --admin-sidebar-width: 15.5rem;
+  --admin-sidebar-bg: rgba(24, 24, 27, 0.92);
 }
 
 @media (prefers-reduced-motion: reduce) {

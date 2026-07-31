@@ -2,72 +2,58 @@
   <div id="app" class="app-container relative min-h-screen">
     <a class="skip-link" href="#main-content">{{ t('common.skipToContent') || '跳到主内容' }}</a>
     <!-- NOTE: translated comment in English. -->
+    <div class="future-ambient" aria-hidden="true">
+      <div class="future-grid"></div>
+      <div class="future-scanline"></div>
+    </div>
     <div class="aura-glow aura-glow--tl" aria-hidden="true"></div>
     <div class="aura-glow aura-glow--br" aria-hidden="true"></div>
 
-    <header class="app-header">
-      <div class="header-content">
-        <a :href="canonicalWwwUrl('/')" class="header-brand" :title="t('common.websiteHome') || '返回官网'" target="_self">
-          <h1 class="header-brand-logo">ClawJob <span class="header-brand-website">{{ t('common.websiteShort') || '官网' }}</span></h1>
-          <p class="tagline">{{ t('common.tagline') }}</p>
-          <p class="header-eyebrow">{{ t('common.heroEyebrow') }}</p>
-        </a>
-        <nav class="header-nav" aria-label="Main">
-          <section class="nav-group nav-group--primary">
+    <header v-if="!isMarketingLayout" class="app-header">
+      <div class="app-shell-header__inner">
+        <router-link to="/" class="app-shell-brand header-brand" :title="t('common.home') || '首页'" @click="dismissNavOverlays">
+          <span class="app-shell-brand__wordmark header-brand-logo">ClawJob</span>
+        </router-link>
+        <nav class="app-shell-nav header-nav" aria-label="Main">
+          <div class="nav-segmented nav-group nav-group--primary">
             <div class="nav-group-links">
               <router-link
-                to="/tasks"
-                class="nav-link nav-link--primary nav-link--tasks"
-                :class="{ active: route.path === '/tasks' }"
-                :aria-current="route.path === '/tasks' ? 'page' : undefined"
-                :aria-label="navTasksLinkAriaLabel"
+                v-for="item in primaryNavItems"
+                :key="item.id"
+                :to="item.to"
+                class="nav-segmented__item nav-link nav-link--primary"
+                :class="[item.linkClass, { active: isNavItemActive(item, route.path), 'nav-link--auth': item.access === 'auth' && !auth.isLoggedIn }]"
+                :aria-current="isNavItemActive(item, route.path) ? 'page' : undefined"
+                :aria-label="navItemAriaLabel(item)"
                 @click="dismissNavOverlays"
               >
-                <TrendingUp class="nav-icon" aria-hidden="true" />
-                <span>{{ t('nav.market') || '任务大厅' }}</span>
+                <component :is="item.icon" class="nav-icon" aria-hidden="true" />
+                <span>{{ t(item.labelKey) }}</span>
                 <span
-                  v-if="auth.isLoggedIn && taskPulse.disputes > 0"
+                  v-if="item.id === 'tasks' && auth.isLoggedIn && taskPulse.disputes > 0"
                   class="nav-task-dispute-dot"
                   :title="String(t('marketing.navDisputeBadgeTitle', { n: taskPulse.disputes }))"
                   aria-hidden="true"
                 />
                 <span
-                  v-else-if="auth.isLoggedIn && taskPulseTotal > 0"
+                  v-else-if="item.id === 'tasks' && auth.isLoggedIn && taskPulseTotal > 0"
                   class="nav-task-pulse-dot"
                   :title="String(t('marketing.navTaskPulseBadgeTitle', { n: taskPulseTotal }))"
                   aria-hidden="true"
                 />
-              </router-link>
-              <router-link to="/community" class="nav-link nav-link--primary nav-link--community" :class="{ active: route.path === '/community' }" :aria-current="route.path === '/community' ? 'page' : undefined" @click="dismissNavOverlays">
-                <MessagesSquare class="nav-icon" aria-hidden="true" />
-                <span>{{ t('nav.community') || '社区' }}</span>
                 <span
-                  v-if="route.path !== '/community' && route.path !== '/' && communityHotDeltaCount > 0"
+                  v-else-if="item.id === 'community' && route.path !== '/community' && route.path !== '/' && communityHotDeltaCount > 0"
                   class="nav-community-dot"
                   :title="String(t('marketing.communityHotDotTitle', { n: communityHotDeltaCount }))"
                   aria-hidden="true"
                 />
               </router-link>
-              <router-link to="/agents" class="nav-link nav-link--primary" :class="{ active: route.path.startsWith('/agents') }" :aria-current="route.path.startsWith('/agents') ? 'page' : undefined" @click="dismissNavOverlays">
-                <Bot class="nav-icon" aria-hidden="true" />
-                <span>{{ t('nav.agentManage') || 'Agent' }}</span>
-              </router-link>
-              <router-link
-                to="/account"
-                class="nav-link nav-link--primary nav-link--account"
-                :class="{ active: route.path === '/account' }"
-                :aria-current="route.path === '/account' ? 'page' : undefined"
-                @click="dismissNavOverlays"
-              >
-                <Wallet class="nav-icon" aria-hidden="true" />
-                <span>{{ t('common.myAccount') }}</span>
-              </router-link>
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                class="nav-overflow-btn"
-                :aria-label="t('nav.navGroupDiscover')"
+                class="nav-segmented__item nav-segmented__item--more nav-overflow-btn"
+                :aria-label="t('nav.navGroupMore')"
                 :aria-expanded="navOverflowOpen"
                 aria-controls="nav-overflow-sheet"
                 @click="navOverflowOpen = true"
@@ -75,9 +61,9 @@
                 <Menu class="nav-icon" aria-hidden="true" />
               </Button>
             </div>
-          </section>
+          </div>
         </nav>
-        <div class="header-actions">
+        <div class="app-shell-actions header-actions">
           <Button
             type="button"
             size="sm"
@@ -88,49 +74,56 @@
           >
             <span aria-hidden="true">⌘K</span>
           </Button>
-          <select v-model="locale" class="locale-select" @change="onLocaleChange">
-            <option value="zh-CN">中文</option>
-            <option value="en">English</option>
-          </select>
+          <div class="app-locale-pills" role="group" :aria-label="t('common.language') || '语言'">
+            <button
+              type="button"
+              class="app-locale-pill"
+              :class="{ 'app-locale-pill--active': locale === 'zh-CN' }"
+              @click="setLocaleDirect('zh-CN')"
+            >中文</button>
+            <button
+              type="button"
+              class="app-locale-pill"
+              :class="{ 'app-locale-pill--active': locale === 'en' }"
+              @click="setLocaleDirect('en')"
+            >EN</button>
+          </div>
           <template v-if="auth.isLoggedIn">
             <span class="username">{{ auth.username }}</span>
-            <span class="credits-badge" :title="t('common.credits')">💰 {{ accountCredits }}</span>
-            <Button size="sm" variant="secondary" @click="auth.logout()">
+            <span class="credits-badge" :title="t('common.credits')">
+              <Coins class="credits-badge__icon" aria-hidden="true" />
+              {{ accountCredits }}
+            </span>
+            <Button size="sm" variant="secondary" class="header-actions__logout" :aria-label="t('common.logout')" @click="auth.logout()">
               <LogOut class="btn-icon" aria-hidden="true" />
-              {{ t('common.logout') }}
+              <span class="header-actions__label">{{ t('common.logout') }}</span>
             </Button>
           </template>
           <template v-else>
-            <Button size="sm" data-testid="login-btn" @click="openAuth()">
+            <Button size="sm" data-testid="login-btn" class="header-actions__login" :aria-label="t('common.loginOrRegister')" @click="openAuth()">
               <LogIn class="btn-icon" aria-hidden="true" />
-              {{ t('common.loginOrRegister') }}
+              <span class="header-actions__label">{{ t('common.loginOrRegister') }}</span>
             </Button>
           </template>
         </div>
       </div>
     </header>
 
-    <div v-if="oauthError" class="oauth-error-banner" role="alert">
-      <span>{{ t('common.oauthErrorPrefix') }} {{ t('oauthError.' + oauthError.split(':')[0], t('oauthError.unknown')) }}{{ oauthError.includes(':') ? ' ' + oauthError.split(':').slice(1).join(':') : '' }}</span>
-      <Button size="sm" variant="secondary" type="button" @click="oauthError = ''">{{ t('common.dismiss') }}</Button>
-    </div>
-    <div v-if="auth.isLoggedIn && auth.isGuestUser" class="guest-hint-banner" role="status">
-      <span>{{ t('auth.guestHint') }}</span>
-      <Button size="sm" type="button" @click="showGuestRegisterModal = true">{{ t('auth.guestRegisterAgent') }}</Button>
-      <Button size="sm" variant="ghost" type="button" @click="openAuth('register')">{{ t('auth.goRegister') }}</Button>
-    </div>
-    <div v-if="postPublishRegisterHint" class="guest-hint-banner post-publish-register-hint" role="status">
-      <span>{{ t('task.publishThenRegisterAgentHint') }}</span>
-      <Button :as="RouterLink" to="/skill" size="sm" @click="postPublishRegisterHint = false">{{ t('playbook.step1Agent') }}</Button>
-      <Button size="sm" variant="ghost" type="button" @click="postPublishRegisterHint = false">{{ t('common.close') }}</Button>
-    </div>
-    <div v-if="draftExists" class="guest-hint-banner draft-bar-global" role="status">
-      <span>{{ t('task.draftExists') || '您有未完成的草稿' }}</span>
-      <Button size="sm" type="button" @click="openCreateTaskModalWithDraft">{{ t('task.draftRestore') || '从草稿恢复' }}</Button>
-      <Button size="sm" variant="ghost" type="button" @click="discardPublishDraft">{{ t('task.draftDiscard') || '丢弃草稿' }}</Button>
+    <div v-if="!isMarketingLayout && primaryNotice" class="app-context-banner" :class="`app-context-banner--${primaryNotice.kind}`" role="status">
+      <span class="app-context-banner__text">{{ primaryNotice.text }}</span>
+      <div class="app-context-banner__actions">
+        <Button
+          v-for="(action, ai) in primaryNotice.actions"
+          :key="ai"
+          size="sm"
+          :variant="action.variant || 'secondary'"
+          type="button"
+          @click="action.onClick"
+        >{{ action.label }}</Button>
+      </div>
     </div>
     <div
-      v-if="auth.isLoggedIn && taskPulseTotal > 0"
+      v-if="!isMarketingLayout && showPulseBanner"
       class="task-pulse-banner"
       :class="{ 'task-pulse-banner--reduce-motion': prefersReducedMotion }"
       role="status"
@@ -161,12 +154,17 @@
         <RouterLink to="/tasks" class="task-pulse-banner__cta">{{ t('marketing.pulseCta') }} →</RouterLink>
       </div>
     </div>
-    <main id="main-content" class="main-content relative z-0" tabindex="-1">
+    <main
+      id="main-content"
+      class="main-content relative z-0"
+      :class="{ 'main-content--marketing': isMarketingLayout }"
+      tabindex="-1"
+    >
       <router-view v-slot="{ Component }">
         <Transition name="page-fade">
           <component
             :is="Component"
-            :key="route.path"
+            :key="route.fullPath"
             class="app-view-shell"
             @success="showSuccess"
             @register-hint="postPublishRegisterHint = true"
@@ -216,6 +214,7 @@
 
     <CommandPalette
       v-model:open="commandPaletteOpen"
+      :is-admin="isAdmin"
       @publish-task="showCreateTaskModal = true"
       @join-agent="router.push('/join')"
     />
@@ -227,62 +226,36 @@
     >
       <template #header>
         <div class="nav-overflow-sheet-head">
-          <h2 class="nav-overflow-sheet-title">{{ t('nav.navGroupDiscover') }}</h2>
+          <h2 class="nav-overflow-sheet-title">{{ t('nav.navGroupMore') || '更多' }}</h2>
           <Button type="button" variant="ghost" size="sm" class="nav-overflow-close" :aria-label="t('common.close') || '关闭'" @click="closeNavOverflow">
             ✕
           </Button>
         </div>
       </template>
-      <nav class="nav-overflow-links" :aria-label="String(t('nav.navGroupDiscover'))">
-        <router-link to="/agent-studio" class="nav-overflow-link" :class="{ active: route.path === '/agent-studio' }" @click="closeNavOverflow">
-          <Bot class="nav-overflow-icon" aria-hidden="true" />
-          <span>{{ t('nav.agentStudio') }}</span>
-        </router-link>
-        <router-link to="/dashboard" class="nav-overflow-link" :class="{ active: route.path === '/dashboard' }" @click="closeNavOverflow">
-          <LayoutGrid class="nav-icon" aria-hidden="true" />
-          <span>{{ t('nav.dashboard') }}</span>
-        </router-link>
-        <router-link to="/inbox" class="nav-overflow-link" :class="{ active: route.path === '/inbox' }" @click="closeNavOverflow">
-          <Mail class="nav-icon" aria-hidden="true" />
-          <span>{{ t('nav.inbox') }}</span>
-        </router-link>
-        <router-link to="/marketplace" class="nav-overflow-link" :class="{ active: route.path === '/marketplace' || route.path === '/marketplace/' }" @click="closeNavOverflow">
-          <BookOpen class="nav-icon" aria-hidden="true" />
-          <span>{{ t('nav.skillMarket') }}</span>
-        </router-link>
-        <router-link to="/discover" class="nav-overflow-link" :class="{ active: route.path.startsWith('/discover') }" @click="closeNavOverflow">
-          <Users class="nav-icon" aria-hidden="true" />
-          <span>{{ t('nav.discover') }}</span>
-        </router-link>
-        <router-link to="/playbook" class="nav-overflow-link" :class="{ active: route.path === '/playbook' }" @click="closeNavOverflow">
-          <ListChecks class="nav-icon" aria-hidden="true" />
-          <span>{{ t('nav.playbook') }}</span>
-        </router-link>
-        <router-link to="/docs" class="nav-overflow-link" :class="{ active: route.path.startsWith('/docs') }" @click="closeNavOverflow">
-          <BookOpen class="nav-icon" aria-hidden="true" />
-          <span>{{ t('common.docs') }}</span>
-        </router-link>
-        <router-link to="/join" class="nav-overflow-link" :class="{ active: route.path === '/join' }" @click="closeNavOverflow">
-          <UserPlus class="nav-icon" aria-hidden="true" />
-          <span>{{ t('nav.joinAgent') }}</span>
-        </router-link>
-        <router-link v-if="isAdmin" to="/admin" class="nav-overflow-link" :class="{ active: route.path === '/admin' }" @click="closeNavOverflow">
-          <Shield class="nav-icon" aria-hidden="true" />
-          <span>{{ t('nav.adminNav') }}</span>
-        </router-link>
-        <router-link v-if="isAdmin" to="/ops" class="nav-overflow-link" :class="{ active: route.path === '/ops' }" @click="closeNavOverflow">
-          <Shield class="nav-icon" aria-hidden="true" />
-          <span>{{ t('nav.opsNav') }}</span>
+      <nav class="nav-overflow-links" :aria-label="String(t('nav.navGroupMore'))">
+        <router-link
+          v-for="item in overflowNavItems"
+          :key="item.id"
+          :to="item.to"
+          class="nav-overflow-link"
+          :class="[
+            { active: isNavItemActive(item, route.path), 'nav-overflow-link--mobile-only': item.overflowMobileOnly },
+          ]"
+          @click="closeNavOverflow"
+        >
+          <component :is="item.icon" class="nav-icon" aria-hidden="true" />
+          <span>{{ t(item.labelKey) }}</span>
         </router-link>
       </nav>
     </Sheet>
 
-    <footer class="app-footer">
+    <footer v-if="!isMarketingLayout" class="app-footer">
       <div class="app-footer-inner">
         <nav class="app-footer-links" :aria-label="t('common.footerNavAria')">
+          <router-link to="/">{{ t('common.home') }}</router-link>
           <router-link to="/docs">{{ t('common.docs') }}</router-link>
           <router-link to="/skill">{{ t('common.skill') }}</router-link>
-          <a href="https://github.com" target="_blank" rel="noopener noreferrer">GitHub</a>
+          <a href="https://github.com/jackychen129/clawjob" target="_blank" rel="noopener noreferrer">GitHub</a>
         </nav>
         <p>ClawJob · {{ t('common.tagline') }} <span class="build-id" aria-hidden="true">· {{ buildId }}</span></p>
       </div>
@@ -292,7 +265,7 @@
 
 <script setup lang="ts">
 declare const __BUILD_ID__: string | undefined
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { i18n, setLocale, safeT, type LocaleKey } from './i18n'
@@ -309,14 +282,43 @@ import { Sheet } from './components/ui/sheet'
 import { hasPublishDraft } from './composables/usePublishTaskForm'
 import { provideAuthModal } from './composables/useAuthModal'
 import { usePrefersReducedMotion } from './lib/use-prefers-reduced-motion'
-import { canonicalWwwUrl } from './lib/siteUrls'
-import { BookOpen, Bot, LayoutGrid, ListChecks, LogIn, LogOut, Mail, Menu, MessagesSquare, Shield, TrendingUp, Trophy, UserPlus, Users, Wallet } from 'lucide-vue-next'
+import { navItemsForZone, isNavItemActive, type NavItemDef } from './config/navigation'
+import {
+  clearOAuthFromUrl,
+  parseOAuthFromLocation,
+  takeStashedOAuthError,
+} from './lib/oauthCallback'
+import { LogIn, LogOut, Menu, Coins } from 'lucide-vue-next'
 
 const route = useRoute()
 const router = useRouter()
 const prefersReducedMotion = usePrefersReducedMotion()
 const commandPaletteOpen = ref(false)
 const navOverflowOpen = ref(false)
+const isMobileNav = ref(false)
+
+function updateMobileNav() {
+  if (typeof window === 'undefined') return
+  isMobileNav.value = window.matchMedia('(max-width: 768px)').matches
+}
+
+const isMarketingLayout = computed(() => route.meta.layout === 'marketing')
+
+const primaryNavItems = computed(() =>
+  navItemsForZone('primary', {
+    isAdmin: isAdmin.value,
+    isLoggedIn: auth.isLoggedIn,
+    mobile: isMobileNav.value,
+  }),
+)
+const overflowNavItems = computed(() =>
+  navItemsForZone('overflow', { isAdmin: isAdmin.value, isLoggedIn: auth.isLoggedIn }),
+)
+
+function navItemAriaLabel(item: NavItemDef) {
+  if (item.id === 'tasks') return String(navTasksLinkAriaLabel.value)
+  return String(t(item.labelKey))
+}
 
 function closeNavOverflow() {
   navOverflowOpen.value = false
@@ -332,6 +334,10 @@ const t = typeof _i18n.t === 'function' ? _i18n.t : safeT
 const auth = useAuthStore()
 const buildId = typeof __BUILD_ID__ !== 'undefined' ? String(__BUILD_ID__).slice(-8) : 'dev'
 const locale = ref<LocaleKey>('zh-CN')
+function setLocaleDirect(next: LocaleKey) {
+  locale.value = next
+  setLocale(next)
+}
 function onLocaleChange() {
   setLocale(locale.value)
 }
@@ -430,6 +436,64 @@ const taskPulseTotal = computed(
     taskPulse.value.disputes,
 )
 
+type NoticeAction = { label: string; onClick: () => void; variant?: 'default' | 'secondary' | 'ghost' }
+
+const primaryNotice = computed<{ kind: string; text: string; actions: NoticeAction[] } | null>(() => {
+  if (oauthError.value) {
+    const code = oauthError.value.split(':')[0]
+    const tail = oauthError.value.includes(':') ? ' ' + oauthError.value.split(':').slice(1).join(':') : ''
+    return {
+      kind: 'error',
+      text: `${t('common.oauthErrorPrefix')} ${t('oauthError.' + code, t('oauthError.unknown'))}${tail}`,
+      actions: [{ label: String(t('common.dismiss')), onClick: () => { oauthError.value = '' }, variant: 'secondary' }],
+    }
+  }
+  if (auth.isLoggedIn && auth.isGuestUser) {
+    return {
+      kind: 'guest',
+      text: String(t('auth.guestHint')),
+      actions: [
+        { label: String(t('auth.guestRegisterAgent')), onClick: () => { showGuestRegisterModal.value = true } },
+        { label: String(t('auth.goRegister')), onClick: () => openAuth('register'), variant: 'ghost' },
+      ],
+    }
+  }
+  if (postPublishRegisterHint.value) {
+    return {
+      kind: 'hint',
+      text: String(t('task.publishThenRegisterAgentHint')),
+      actions: [
+        { label: String(t('playbook.step1Agent')), onClick: () => { router.push('/skill'); postPublishRegisterHint.value = false } },
+        { label: String(t('common.close')), onClick: () => { postPublishRegisterHint.value = false }, variant: 'ghost' },
+      ],
+    }
+  }
+  if (showSkillBanner.value) {
+    return {
+      kind: 'promo',
+      text: String(t('marketing.mcpSkillPromo')),
+      actions: [
+        { label: String(t('marketing.mcpSkillPromoMcp')), onClick: () => { router.push('/docs/mcp'); dismissSkillBanner() } },
+        { label: String(t('marketing.mcpSkillPromoSkill')), onClick: () => { router.push('/skill'); dismissSkillBanner() }, variant: 'secondary' },
+        { label: String(t('marketing.mcpSkillPromoDismiss')), onClick: () => dismissSkillBanner(), variant: 'ghost' },
+      ],
+    }
+  }
+  if (draftExists.value) {
+    return {
+      kind: 'draft',
+      text: String(t('task.draftExists') || '您有未完成的草稿'),
+      actions: [
+        { label: String(t('task.draftRestore') || '从草稿恢复'), onClick: () => openCreateTaskModalWithDraft() },
+        { label: String(t('task.draftDiscard') || '丢弃草稿'), onClick: () => discardPublishDraft(), variant: 'ghost' },
+      ],
+    }
+  }
+  return null
+})
+
+const showPulseBanner = computed(() => auth.isLoggedIn && taskPulseTotal.value > 0 && !primaryNotice.value)
+
 const navTasksLinkAriaLabel = computed(() => {
   if (auth.isLoggedIn && taskPulse.value.disputes > 0) {
     return String(t('marketing.navDisputeAria', { n: taskPulse.value.disputes }))
@@ -527,8 +591,28 @@ function onDocumentVisibilityForPulse() {
 }
 
 let removeRouterAfterEach: (() => void) | null = null
+let removeMobileNavMq: (() => void) | null = null
+
+watch(
+  () => auth.isLoggedIn,
+  (loggedIn) => {
+    if (!loggedIn) return
+    if (route.query.login === '1') {
+      const q = { ...route.query }
+      delete q.login
+      router.replace({ path: route.path, query: q, hash: route.hash }).catch(() => {})
+    }
+  },
+)
 
 onMounted(() => {
+  updateMobileNav()
+  if (typeof window !== 'undefined') {
+    const mq = window.matchMedia('(max-width: 768px)')
+    const onMq = () => updateMobileNav()
+    mq.addEventListener('change', onMq)
+    removeMobileNavMq = () => mq.removeEventListener('change', onMq)
+  }
   api.loadAppFeatures().catch(() => {})
   // NOTE: translated comment in English.
   api.getGoogleOAuthStatus().then((s) => {
@@ -537,55 +621,27 @@ onMounted(() => {
   }).catch(() => { googleOAuthConfigured.value = true; googleConfigError.value = '' })
   document.addEventListener('keydown', onEscapeKey)
   locale.value = i18n.global.locale.value as LocaleKey
-  try { showSkillBanner.value = false } catch (_) {}
-  // NOTE: translated comment in English.
-  const hash = window.location.hash
-  const search = window.location.search
-  const getError = () => {
-    if (hash) {
-      const q = hash.indexOf('?')
-      if (q >= 0) {
-        const e = new URLSearchParams(hash.slice(q + 1)).get('error')
-        if (e) return e
-      }
-    }
-    if (search) {
-      const e = new URLSearchParams(search.slice(1)).get('error')
-      if (e) return e
-    }
-    return ''
+  try {
+    showSkillBanner.value = !localStorage.getItem(SKILL_BANNER_KEY)
+  } catch (_) {
+    showSkillBanner.value = true
   }
-  const oauthErr = getError()
-  if (oauthErr) {
-    oauthError.value = oauthErr
-    window.history.replaceState(null, '', window.location.pathname)
-    window.location.hash = ''
+  // Google OAuth：main.ts 在 router.isReady 后处理跳转；此处兜底并展示错误
+  const stashedErr = takeStashedOAuthError()
+  if (stashedErr) {
+    oauthError.value = stashedErr
+    clearOAuthFromUrl('#/tasks')
   } else {
-    // NOTE: translated comment in English.
-    let token: string | null = null
-    let username: string | null = null
-    let userId: number | undefined
-    const fromQuery = search ? new URLSearchParams(search.slice(1)).get('from') === 'google' : false
-    if (fromQuery && search) {
-      const params = new URLSearchParams(search.slice(1))
-      token = params.get('token')
-      username = params.get('username')
-      const userIdParam = params.get('user_id')
-      userId = userIdParam ? parseInt(userIdParam, 10) : undefined
-    } else if (hash.startsWith('#/auth/callback')) {
-      const q = hash.indexOf('?')
-      const params = new URLSearchParams(q >= 0 ? hash.slice(q + 1) : '')
-      token = params.get('token')
-      username = params.get('username')
-      const userIdParam = params.get('user_id')
-      userId = userIdParam ? parseInt(userIdParam, 10) : undefined
-    }
-    if (token && username) {
-      auth.setUser(token, decodeURIComponent(username), Number.isInteger(userId) ? userId : undefined)
-      window.history.replaceState(null, '', window.location.pathname)
-      window.location.hash = ''
+    const oauth = parseOAuthFromLocation()
+    if (oauth.error) {
+      oauthError.value = oauth.error
+      clearOAuthFromUrl('#/tasks')
+    } else if (oauth.token && !auth.isLoggedIn) {
+      auth.setUser(oauth.token, oauth.username || 'user', oauth.userId)
+      clearOAuthFromUrl('#/tasks')
       loadAccountMe()
       loadMyAgents()
+      router.replace('/tasks').catch(() => {})
     }
   }
   refreshDraftExists()
@@ -595,10 +651,16 @@ onMounted(() => {
     loadMyAgents()
     refreshAdminFlag()
   }
+  if (route.query.login === '1' && !auth.isLoggedIn) {
+    openAuth('login')
+  }
 
   removeRouterAfterEach = router.afterEach((to, from) => {
     navOverflowOpen.value = false
     commandPaletteOpen.value = false
+    if (to.query.login === '1' && !auth.isLoggedIn) {
+      openAuth('login')
+    }
     if (taskPulseRelevantNav(to.path, from.path)) refreshTaskPulseThrottled()
     if (to.path === '/community') communityHotDeltaCount.value = 0
   })
@@ -614,6 +676,8 @@ onUnmounted(() => {
   document.removeEventListener('visibilitychange', onDocumentVisibilityForPulse)
   removeRouterAfterEach?.()
   removeRouterAfterEach = null
+  removeMobileNavMq?.()
+  removeMobileNavMq = null
   if (communityRefreshTimer) {
     clearInterval(communityRefreshTimer)
     communityRefreshTimer = null
@@ -1011,20 +1075,7 @@ onUnmounted(() => {
   color: #86efac;
 }
 
-/* 顶栏「任务管理」：争议优先强提示，其余待办弱提示 */
-.header-nav {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem 1.25rem;
-  align-items: flex-start;
-}
-.nav-group--primary .nav-group-links {
-  gap: 0.25rem;
-}
-.nav-group--primary .nav-link--primary {
-  font-weight: 600;
-  padding: 0.5rem 0.75rem;
-}
+/* 顶栏导航徽标（争议 / 待办 / 社区热点） */
 .nav-overflow-btn {
   display: inline-flex;
   align-items: center;
@@ -1098,6 +1149,11 @@ onUnmounted(() => {
   color: var(--text-primary);
   background: rgba(var(--primary-rgb), 0.12);
 }
+@media (min-width: 769px) {
+  .nav-overflow-link--mobile-only {
+    display: none;
+  }
+}
 .task-pulse-banner--reduce-motion .pulse-chip,
 .task-pulse-banner--reduce-motion .pulse-chip--link {
   animation: none !important;
@@ -1162,12 +1218,15 @@ onUnmounted(() => {
   box-shadow: 0 0 0 2px #0a0a0b;
   pointer-events: none;
 }
-@media (max-width: 1200px) {
-  .nav-group { min-width: 10rem; }
-}
 @media (max-width: 900px) {
   .nav-group {
-    min-width: 100%;
+    min-width: 0;
+  }
+  .task-pulse-banner__cta {
+    margin-left: 0;
+    width: 100%;
+    text-align: center;
+    padding-top: 0.25rem;
   }
 }
 @media (prefers-reduced-motion: reduce) {

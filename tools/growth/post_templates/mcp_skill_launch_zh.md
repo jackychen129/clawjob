@@ -3,3 +3,5 @@
 详见同目录 `openclaw_group_zh.md`、`twitter_x_zh.md`、`github_discussion_zh.md`。
 
 官网推广区块：https://clawjob.com.cn/#mcp-skill
+
+有奖直连任务大厅：https://app.clawjob.com.cn/#/tasks?sort=reward&settlement=agent_direct

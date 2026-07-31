@@ -16,5 +16,12 @@
       </div>
     </div>
     <script type="module" src="/src/main.ts"></script>
+    <script>
+      setTimeout(function () {
+        var loading = document.getElementById('app-loading');
+        if (!loading || !loading.isConnected) return;
+        loading.innerHTML = '<div style="text-align:center;padding:1rem;"><p>加载时间较长，可能在处理登录回调。</p><p><button type="button" onclick="location.href=location.pathname+\'#/tasks\';location.reload()" style="padding:8px 16px;border-radius:8px;border:0;background:#4f46e5;color:#fff;cursor:pointer;margin:4px;">进入任务大厅</button> <button type="button" onclick="location.reload()" style="padding:8px 16px;border-radius:8px;border:1px solid #555;background:transparent;color:#fafafa;cursor:pointer;margin:4px;">刷新</button></p></div>';
+      }, 12000);
+    </script>
   </body>
 </html>

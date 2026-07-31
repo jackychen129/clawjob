@@ -1,0 +1,173 @@
+/**
+ * ClawJob future motion system — shared enter/stagger, ambient aura, admin transitions.
+ * Respects prefers-reduced-motion via tokens.css global override.
+ */
+
+@keyframes aura-drift-tl {
+  0% { transform: translate(0, 0) scale(1); opacity: 0.32; }
+  50% { transform: translate(2rem, 1.5rem) scale(1.08); opacity: 0.42; }
+  100% { transform: translate(-1rem, 2rem) scale(0.96); opacity: 0.3; }
+}
+
+@keyframes aura-drift-br {
+  0% { transform: translate(0, 0) scale(1); opacity: 0.28; }
+  50% { transform: translate(-2rem, -1rem) scale(1.06); opacity: 0.38; }
+  100% { transform: translate(1.5rem, -1.5rem) scale(0.94); opacity: 0.26; }
+}
+
+@keyframes future-grid-shift {
+  0% { background-position: 0 0, 0 0, 50% 50%; opacity: 0.35; }
+  50% { background-position: 24px 24px, -24px -24px, 52% 48%; opacity: 0.5; }
+  100% { background-position: 48px 0, 0 48px, 48% 52%; opacity: 0.35; }
+}
+
+@keyframes motion-enter-up {
+  from { opacity: 0; transform: translateY(14px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes motion-glow-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(var(--primary-rgb), 0); }
+  50% { box-shadow: 0 0 24px -4px rgba(var(--primary-rgb), 0.35); }
+}
+
+@keyframes scanline-sweep {
+  0% { transform: translateY(-100%); opacity: 0; }
+  8% { opacity: 0.06; }
+  100% { transform: translateY(100vh); opacity: 0; }
+}
+
+.aura-glow--tl {
+  animation: aura-drift-tl 20s var(--ease-apple) infinite alternate;
+}
+
+.aura-glow--br {
+  animation: aura-drift-br 24s var(--ease-apple) infinite alternate;
+}
+
+.future-ambient {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.future-grid {
+  position: absolute;
+  inset: -1px;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    radial-gradient(ellipse 90% 60% at 50% -10%, rgba(var(--primary-rgb), 0.12), transparent 55%);
+  background-size: 56px 56px, 56px 56px, 100% 100%;
+  mask-image: radial-gradient(ellipse 100% 80% at 50% 30%, #000 10%, transparent 75%);
+  animation: future-grid-shift 16s var(--ease-apple) infinite;
+}
+
+.future-scanline {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(var(--primary-rgb), 0.04) 50%,
+    transparent 100%
+  );
+  height: 120px;
+  animation: scanline-sweep 9s linear infinite;
+  opacity: 0.5;
+}
+
+/* Stagger children on mount (admin metrics, cards) */
+.motion-stagger > * {
+  animation: motion-enter-up var(--duration-m) var(--ease-spring) backwards;
+}
+
+.motion-stagger > *:nth-child(1) { animation-delay: 0ms; }
+.motion-stagger > *:nth-child(2) { animation-delay: 55ms; }
+.motion-stagger > *:nth-child(3) { animation-delay: 110ms; }
+.motion-stagger > *:nth-child(4) { animation-delay: 165ms; }
+.motion-stagger > *:nth-child(5) { animation-delay: 220ms; }
+.motion-stagger > *:nth-child(6) { animation-delay: 275ms; }
+.motion-stagger > *:nth-child(7) { animation-delay: 330ms; }
+.motion-stagger > *:nth-child(8) { animation-delay: 385ms; }
+
+.admin-metrics-v2 > :not(.admin-metric-skeleton) {
+  animation: motion-enter-up var(--duration-m) var(--ease-spring) backwards;
+}
+
+.admin-metrics-v2 > :not(.admin-metric-skeleton):nth-child(1) { animation-delay: 0ms; }
+.admin-metrics-v2 > :not(.admin-metric-skeleton):nth-child(2) { animation-delay: 60ms; }
+.admin-metrics-v2 > :not(.admin-metric-skeleton):nth-child(3) { animation-delay: 120ms; }
+.admin-metrics-v2 > :not(.admin-metric-skeleton):nth-child(4) { animation-delay: 180ms; }
+.admin-metrics-v2 > :not(.admin-metric-skeleton):nth-child(5) { animation-delay: 240ms; }
+.admin-metrics-v2 > :not(.admin-metric-skeleton):nth-child(6) { animation-delay: 300ms; }
+
+.admin-metric-card-v2 {
+  transition:
+    transform var(--duration-fast) var(--ease-spring),
+    box-shadow var(--duration-m) var(--ease-apple),
+    border-color var(--duration-m) var(--ease-apple);
+}
+
+.admin-metric-card-v2:hover {
+  transform: translateY(-2px);
+  animation: motion-glow-pulse 2.4s var(--ease-apple) infinite;
+}
+
+/* Admin sub-route transition */
+.admin-page-enter-active {
+  transition:
+    opacity var(--duration-m) var(--ease-apple),
+    transform var(--duration-m) var(--ease-spring);
+}
+
+.admin-page-leave-active {
+  transition: opacity var(--duration-fast) var(--ease-apple);
+}
+
+.admin-page-enter-from {
+  opacity: 0;
+  transform: translateY(10px) scale(0.992);
+}
+
+.admin-page-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+.admin-nav-link--active {
+  position: relative;
+  overflow: hidden;
+}
+
+.admin-nav-link--active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 20%;
+  bottom: 20%;
+  width: 3px;
+  border-radius: 0 4px 4px 0;
+  background: linear-gradient(180deg, var(--primary-color), rgba(var(--primary-rgb), 0.4));
+  box-shadow: 0 0 12px rgba(var(--primary-rgb), 0.5);
+  animation: motion-glow-pulse 2.8s var(--ease-apple) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aura-glow--tl,
+  .aura-glow--br,
+  .future-grid,
+  .future-scanline,
+  .admin-metrics-v2 > *,
+  .motion-stagger > *,
+  .admin-metric-card-v2:hover {
+    animation: none !important;
+  }
+
+  .admin-page-enter-active,
+  .admin-page-leave-active {
+    transition-duration: 1ms !important;
+  }
+}
