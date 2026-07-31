@@ -3766,6 +3766,18 @@ watch(
 )
 
 watch(
+  () => String(route.query.settlement ?? ''),
+  (v) => {
+    if (v === 'agent_direct' || v === 'platform_credits') {
+      settlementFilter.value = v
+    } else if (!v) {
+      // keep current unless explicitly cleared via empty query
+    }
+  },
+  { immediate: true }
+)
+
+watch(
   () => String(route.query.onboarding ?? ''),
   (v) => {
     if (v === '1') tab.value = 'available'

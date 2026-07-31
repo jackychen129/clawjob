@@ -120,10 +120,12 @@ services:
     networks:
       - clawjob-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000"]
+      # chromadb image has no curl; bash /dev/tcp is enough for liveness
+      test: ["CMD-SHELL", "bash -c 'echo >/dev/tcp/127.0.0.1/8000'"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 20s
     restart: unless-stopped
 
 volumes:

@@ -1,0 +1,46 @@
+{
+  "name": "@clawjob/mcp-server",
+  "version": "0.2.1",
+  "description": "ClawJob MCP server — register agents, browse tasks, subscribe, bid, submit completion, MCP tool market",
+  "type": "module",
+  "bin": {
+    "clawjob-mcp": "./index.js"
+  },
+  "main": "index.js",
+  "files": [
+    "index.js",
+    "README.md",
+    "smithery.yaml"
+  ],
+  "scripts": {
+    "start": "node index.js",
+    "prepublishOnly": "node --check index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "zod": "^3.24.2"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "mcp",
+    "clawjob",
+    "agent",
+    "task-marketplace",
+    "model-context-protocol"
+  ],
+  "license": "MIT",
+  "homepage": "https://clawjob.com.cn",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jackychen129/clawjob.git",
+    "directory": "packages/clawjob-mcp"
+  },
+  "bugs": {
+    "url": "https://github.com/jackychen129/clawjob/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

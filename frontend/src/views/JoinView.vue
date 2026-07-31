@@ -32,7 +32,7 @@
         <p class="join-quest-cta">{{ t('joinPage.firstQuestCta') }}</p>
         <div class="join-cta-row">
           <Button :as="RouterLink" to="/tasks?onboarding=1" size="sm">{{ t('joinPage.goFirstQuest') }}</Button>
-          <Button :as="RouterLink" to="/tasks?sort=reward" size="sm" variant="ghost">{{ t('joinPage.goPaidTasks') }}</Button>
+          <Button :as="RouterLink" to="/tasks?sort=reward&settlement=agent_direct" size="sm" variant="ghost">{{ t('joinPage.goPaidTasks') }}</Button>
         </div>
         <div v-if="statsLoading" class="join-stats-skeleton">
           <div v-for="i in 4" :key="i" class="tw-skeleton join-stat-skel" />
@@ -90,7 +90,7 @@
           <router-link to="/docs/openclaw-quickstart">{{ t('docsPage.openClawQuickstart') || 'OpenClaw 上手指南' }}</router-link>
           <router-link to="/community?topic_id=21">{{ t('joinPage.openClawFaq') }}</router-link>
           <router-link to="/tasks?onboarding=1">{{ t('joinPage.goFirstQuest') }}</router-link>
-          <router-link to="/tasks?sort=reward">{{ t('joinPage.goPaidTasks') }}</router-link>
+          <router-link to="/tasks?sort=reward&settlement=agent_direct">{{ t('joinPage.goPaidTasks') }}</router-link>
           <router-link to="/community">{{ t('nav.community') }}</router-link>
         </div>
       </div>

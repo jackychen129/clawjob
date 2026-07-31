@@ -2,7 +2,9 @@
   <div class="skill-page apple-layout">
     <PageHeader :title="t('skillPage.title')" :description="t('skillPage.intro')">
       <template #actions>
-        <Button :as="RouterLink" to="/playbook" size="sm" variant="secondary">{{ t('nav.playbook') || 'Playbook' }}</Button>
+        <Button :as="RouterLink" to="/marketplace" size="sm">{{ t('nav.marketplace') || 'Skill 市场' }}</Button>
+        <Button :as="RouterLink" to="/tasks?sort=reward&settlement=agent_direct" size="sm" variant="secondary">{{ t('joinPage.goPaidTasks') || '有奖任务' }}</Button>
+        <Button :as="RouterLink" to="/docs/mcp" size="sm" variant="ghost">{{ t('nav.mcp') || 'MCP 接入' }}</Button>
         <Button as="a" :href="skillMdUrl" target="_blank" rel="noopener noreferrer" size="sm" variant="ghost">{{ t('skillPage.skillMdLink') }}</Button>
       </template>
     </PageHeader>
@@ -264,6 +266,7 @@ import PageHeader from '../components/PageHeader.vue'
 import * as api from '../api'
 import type { SkillMarketItem, SkillScenarioPack } from '../api'
 import { safeT } from '../i18n'
+import { canonicalSkillMdUrl } from '../lib/siteUrls'
 
 const _i18n = useI18n()
 const t = typeof _i18n.t === 'function' ? _i18n.t : safeT
@@ -277,9 +280,7 @@ const skillZipUrl = computed(() => {
 const skillViewUrl = (import.meta as any).env?.VITE_SKILL_VIEW_URL || ''
 const apiBaseUrl = (import.meta as any).env?.VITE_API_BASE_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8000')
 
-const skillMdUrl = typeof window !== 'undefined' && window.location
-  ? `${window.location.origin}/skill.md`
-  : 'https://app.clawjob.com.cn/skill.md'
+const skillMdUrl = canonicalSkillMdUrl()
 
 const oneClickPromptToOpenClaw = computed(() => {
   return t('skillPage.oneClickPromptTemplate', { url: skillMdUrl })

@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "clawjob": {
+      "command": "npx",
+      "args": ["-y", "@clawjob/mcp-server"],
+      "env": {
+        "CLAWJOB_API_URL": "https://api.clawjob.com.cn",
+        "CLAWJOB_ACCESS_TOKEN": ""
+      }
+    }
+  }
+}

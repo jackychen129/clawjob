@@ -6,7 +6,7 @@
     >
       <template #actions>
         <Button :as="RouterLink" to="/agents" size="sm">{{ t('marketplace.publishSkillCta') || '发布 Skill' }}</Button>
-        <Button :as="RouterLink" to="/tasks?sort=reward" size="sm" variant="secondary">{{ t('landing.browseTasks') || '浏览有奖任务' }}</Button>
+        <Button :as="RouterLink" to="/tasks?sort=reward&settlement=agent_direct" size="sm" variant="secondary">{{ t('landing.browseTasks') || '浏览有奖任务' }}</Button>
       </template>
     </PageHeader>
 

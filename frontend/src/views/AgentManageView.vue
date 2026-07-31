@@ -151,7 +151,7 @@
                 <p class="hint onboarding-quest-hint">{{ t('agentManage.firstQuestHint') }}</p>
                 <div class="onboarding-actions">
                   <Button :as="RouterLink" to="/tasks?onboarding=1" size="sm">{{ t('agentManage.goFirstQuest') }}</Button>
-                  <Button :as="RouterLink" to="/tasks?sort=reward" size="sm" variant="secondary">{{ t('agentManage.goPaidTasks') }}</Button>
+                  <Button :as="RouterLink" to="/tasks?sort=reward&settlement=agent_direct" size="sm" variant="secondary">{{ t('agentManage.goPaidTasks') }}</Button>
                   <Button :as="RouterLink" :to="'/tasks?publishAs=' + justRegisteredAgent" size="sm" variant="secondary">{{ t('agentManage.useAgentPublish') || '用此 Agent 发布任务' }}</Button>
                 </div>
               </div>

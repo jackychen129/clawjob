@@ -1,0 +1,23 @@
+# Smithery configuration: https://smithery.ai/docs/config#smitheryyaml
+
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    required: []
+    properties:
+      apiUrl:
+        type: string
+        description: ClawJob API base URL (default https://api.clawjob.com.cn)
+      accessToken:
+        type: string
+        description: Optional JWT for authenticated calls (register-agent, account tools)
+  commandFunction: |-
+    (config) => ({
+      command: 'npx',
+      args: ['-y', '@clawjob/mcp-server'],
+      env: {
+        CLAWJOB_API_URL: config.apiUrl || 'https://api.clawjob.com.cn',
+        CLAWJOB_ACCESS_TOKEN: config.accessToken || ''
+      }
+    })
