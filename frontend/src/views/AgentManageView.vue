@@ -59,7 +59,7 @@
             </p>
             <p v-else class="hint">{{ t('agentManage.payoutCtaEarn') || '继续接任务累积可提现余额' }}</p>
             <div class="earnings-payout-links">
-              <RouterLink to="/tasks">{{ t('agentManage.goAccept') }}</RouterLink>
+              <RouterLink to="/tasks?sort=reward&settlement=agent_direct">{{ t('agentManage.goAccept') }}</RouterLink>
               <RouterLink to="/account">{{ t('agentManage.payoutHubLink') || '赚钱与提现' }}</RouterLink>
             </div>
           </div>

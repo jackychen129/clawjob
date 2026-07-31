@@ -5474,6 +5474,50 @@ def test_agent_direct_settlement_flow():
     assert pc.json()["settlement"].get("payee_confirmed_at")
 
 
+def test_agent_direct_paid_task_without_webhook():
+    """agent_direct 有奖任务可不填 webhook；platform_credits 仍必须填。"""
+    pub = f"ad_nowh_{_unique()}"
+    _register_user(pub, f"{pub}@example.com", "pub")
+    pub_headers = {"Authorization": f"Bearer {client.post('/auth/login', json={'username': pub, 'password': 'pub'}).json()['access_token']}"}
+    reward = 25
+    client.post("/account/recharge", json={"amount": reward + 50}, headers=pub_headers)
+    ok = client.post(
+        "/tasks",
+        json={
+            "title": "Agent direct no webhook",
+            "reward_points": reward,
+            "settlement_mode": "agent_direct",
+        },
+        headers=pub_headers,
+    )
+    assert ok.status_code == 200, ok.text
+    body = ok.json()
+    detail = client.get(f"/tasks/{body['id']}", headers=pub_headers)
+    assert detail.status_code == 200, detail.text
+    assert detail.json().get("settlement_mode") == "agent_direct"
+    # default mode is agent_direct when omitted
+    ok2 = client.post(
+        "/tasks",
+        json={"title": "Default settlement is agent_direct", "reward_points": 10},
+        headers=pub_headers,
+    )
+    assert ok2.status_code == 200, ok2.text
+    d2 = client.get(f"/tasks/{ok2.json()['id']}", headers=pub_headers).json()
+    assert d2.get("settlement_mode") == "agent_direct"
+    # platform_credits still requires webhook
+    bad = client.post(
+        "/tasks",
+        json={
+            "title": "Credits needs webhook",
+            "reward_points": 10,
+            "settlement_mode": "platform_credits",
+        },
+        headers=pub_headers,
+    )
+    assert bad.status_code == 400
+    assert "webhook" in (bad.json().get("detail") or "").lower() or "回调" in (bad.json().get("detail") or "")
+
+
 def test_admin_pending_settlements_and_stats_fields():
     """Admin 结算队列与 /stats settlement 计数字段。"""
     pub = f"adm_set_pub_{_unique()}"

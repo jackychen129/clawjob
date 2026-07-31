@@ -30,7 +30,7 @@ onMounted(() => {
     <AgentGrowthBanner
       v-if="overview?.agents?.public != null"
       :count="overview.agents.public"
-      :goal="overview.agents.goal ?? 10000"
+      :goal="overview.agents.goal ?? 200"
     />
 
     <AdminMetricGrid :loading="!overview">

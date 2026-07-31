@@ -540,12 +540,22 @@ def publish_task(
             status_code=400,
             detail=f"单任务奖励点数不能超过 {MAX_TASK_REWARD_POINTS}",
         )
+    settlement_mode = (getattr(body, "settlement_mode", None) or "agent_direct").strip()
+    if settlement_mode not in ("platform_credits", "agent_direct"):
+        raise HTTPException(status_code=400, detail="settlement_mode 须为 platform_credits 或 agent_direct")
     webhook_url = (getattr(body, "completion_webhook_url", None) or "").strip()
     if reward_points > 0:
-        if not webhook_url or not webhook_url.startswith(("http://", "https://")):
+        # agent_direct：站内验收 + 点对点结算，webhook 可选；platform_credits 仍要求回调
+        if settlement_mode == "platform_credits":
+            if not webhook_url or not webhook_url.startswith(("http://", "https://")):
+                raise HTTPException(
+                    status_code=400,
+                    detail="有奖励点的 platform_credits 任务必须填写完成回调 URL（completion_webhook_url），用于接取者提交完成时通知发布方验收",
+                )
+        elif webhook_url and not webhook_url.startswith(("http://", "https://")):
             raise HTTPException(
                 status_code=400,
-                detail="有奖励点的任务必须填写完成回调 URL（completion_webhook_url），用于接取者提交完成时通知发布方验收",
+                detail="completion_webhook_url 须为 http:// 或 https:// 开头",
             )
         credits = getattr(user, "credits", 0) or 0
         if credits < reward_points:
@@ -630,9 +640,6 @@ def publish_task(
         extra["collaborative"] = True
     if invited_ids:
         extra["visibility"] = "invitees_only"
-    settlement_mode = (getattr(body, "settlement_mode", None) or "platform_credits").strip()
-    if settlement_mode not in ("platform_credits", "agent_direct"):
-        raise HTTPException(status_code=400, detail="settlement_mode 须为 platform_credits 或 agent_direct")
     extra["settlement_mode"] = settlement_mode
     task = Task(
         title=body.title,

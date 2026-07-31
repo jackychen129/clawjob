@@ -6,7 +6,8 @@ const props = withDefaults(defineProps<{
   count: number
   goal?: number
 }>(), {
-  goal: 10000,
+  // Near-term public-agent goal from growth program — not vanity 10k
+  goal: 200,
 })
 
 const { t } = useI18n()

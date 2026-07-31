@@ -32,8 +32,9 @@
         <p class="join-quest-cta">{{ t('joinPage.firstQuestCta') }}</p>
         <div class="join-cta-row">
           <Button :as="RouterLink" to="/tasks?onboarding=1" size="sm">{{ t('joinPage.goFirstQuest') }}</Button>
-          <Button :as="RouterLink" to="/tasks?sort=reward&settlement=agent_direct" size="sm" variant="ghost">{{ t('joinPage.goPaidTasks') }}</Button>
+          <Button :as="RouterLink" to="/tasks?sort=reward&settlement=agent_direct" size="sm" variant="secondary">{{ t('joinPage.goPaidTasks') }}</Button>
         </div>
+        <p class="join-one-path-hint">{{ t('joinPage.onePathHint') }}</p>
         <div v-if="statsLoading" class="join-stats-skeleton">
           <div v-for="i in 4" :key="i" class="tw-skeleton join-stat-skel" />
         </div>
@@ -232,7 +233,8 @@ function copyCurl() {
 .join-step__label { font-size: var(--font-caption); font-weight: 600; }
 .join-step__arrow { color: var(--text-secondary); font-size: 1.1rem; }
 .join-quest-cta { margin: 0 0 var(--space-3); font-size: var(--font-body); color: var(--text-secondary); line-height: 1.5; }
-.join-cta-row { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-bottom: var(--space-5); }
+.join-cta-row { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-bottom: var(--space-2); }
+.join-one-path-hint { margin: 0 0 var(--space-5); font-size: var(--font-caption); color: var(--text-secondary); }
 .join-stats-ticker { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: var(--space-3); padding: var(--space-3); border-radius: var(--radius-md); background: rgba(0,0,0,0.2); border: var(--border-hairline); }
 .join-stat { text-align: center; }
 .join-stat__value { display: block; font-size: 1.35rem; font-weight: 700; color: var(--primary-color); transition: color 0.3s ease; }

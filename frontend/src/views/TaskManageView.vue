@@ -87,6 +87,10 @@
                   <option value="agent_direct">{{ t('taskManage.settlementFilterDirect') }}</option>
                   <option value="platform_credits">{{ t('taskManage.settlementFilterCredits') }}</option>
                 </select>
+                <label class="task-filter-paid-only" :title="t('taskManage.paidOnlyHint')">
+                  <input v-model="paidOnlyFilter" type="checkbox" :disabled="onboardingFilterActive" />
+                  {{ t('taskManage.paidOnly') }}
+                </label>
                 <div class="task-view-toggle" role="group" :aria-label="t('taskManage.viewTable')">
                   <Button
                     type="button"
@@ -144,7 +148,8 @@
                         <div class="task-table-title">{{ task.title }}</div>
                         <div class="task-table-meta">
                           <span v-if="task.category" class="task-table-category">{{ taskCategoryLabel(task.category) }}</span>
-                          <span v-if="task.settlement_mode === 'agent_direct' && task.reward_points" class="task-tag task-tag--exchange task-tag--agent_direct_settlement task-tag--sm">{{ t('task.settlementBadge') }}</span>
+                          <span v-if="task.settlement_mode === 'agent_direct'" class="task-tag task-tag--exchange task-tag--agent_direct_settlement task-tag--sm">{{ t('task.settlementBadge') }}</span>
+                          <span v-if="(task.category_completions ?? 0) > 0" class="task-table-completions mono">{{ t('task.completionsShort', { n: task.category_completions }) }}</span>
                         </div>
                       </TableCell>
                       <TableCell class="text-right">
@@ -184,14 +189,15 @@
                       <span v-if="item.data!.category" class="task-row__category">{{ taskCategoryLabel(item.data!.category) }}</span>
                       <span v-if="item.data!.collaborative" class="task-tag task-tag--collab">{{ t('task.collaborativeBadge') }}</span>
                       <span v-if="taskHasOpenAuction(item.data!)" class="task-tag task-tag--auction">{{ t('auction.statusOpen') }}</span>
-                      <span v-if="item.data!.settlement_mode === 'agent_direct' && item.data!.reward_points" class="task-tag task-tag--exchange task-tag--agent_direct_settlement">{{ t('task.settlementBadge') }}</span>
-                      <span v-for="b in (item.data!.badges || [])" :key="b" class="task-tag" :class="'task-tag--' + b">{{ taskBadgeLabel(b) }}</span>
+                      <span v-if="item.data!.settlement_mode === 'agent_direct'" class="task-tag task-tag--exchange task-tag--agent_direct_settlement">{{ t('task.settlementBadge') }}</span>
+                      <span v-for="b in (item.data!.badges || []).filter((x) => x !== 'agent_direct_settlement')" :key="b" class="task-tag" :class="'task-tag--' + b">{{ taskBadgeLabel(b) }}</span>
                       <span :class="taskStatusPillClass(item.data!.status)">{{ t('status.' + item.data!.status) || item.data!.status }}</span>
                       <span v-if="item.data!.reward_points" class="task-row__reward mono">{{ t('task.reward', { n: item.data!.reward_points }) }}</span>
+                      <span v-else class="task-row__reward task-row__reward--zero mono">{{ t('task.rewardZero') }}</span>
                     </div>
                     <h3 class="task-row__title">{{ item.data!.title }}</h3>
                     <p class="task-row__desc">{{ (item.data!.description || t('common.noDescription')).slice(0, 120) }}{{ (item.data!.description || '').length > 120 ? '…' : '' }}</p>
-                    <p class="task-row__meta">{{ t('task.publisher') }}：{{ item.data!.publisher_name }}<span v-if="item.data!.creator_agent_name"> · {{ t('task.publishedByAgent') }}：{{ item.data!.creator_agent_name }}</span><span v-if="item.data!.subscription_count != null"> · {{ item.data!.subscription_count }}{{ t('task.subscribers') }}</span></p>
+                    <p class="task-row__meta">{{ t('task.publisher') }}：{{ item.data!.publisher_name }}<span v-if="item.data!.creator_agent_name"> · {{ t('task.publishedByAgent') }}：{{ item.data!.creator_agent_name }}</span><span v-if="item.data!.subscription_count != null"> · {{ item.data!.subscription_count }}{{ t('task.subscribers') }}</span><span v-if="(item.data!.category_completions ?? 0) > 0"> · {{ t('task.completionsShort', { n: item.data!.category_completions }) }}</span></p>
                     <p v-if="item.data!.status === 'open' && (item.data!.category_completions ?? 0) > 0" class="task-row__meta task-row__meta--social">{{ t('task.similarCompletions', { n: item.data!.category_completions }) }}</p>
                     <p v-if="item.data!.related_skill?.skill_token" class="task-row__meta task-row__meta--skill">
                       Skill: {{ item.data!.related_skill?.skill_name || item.data!.related_skill?.skill_token }}
@@ -1497,9 +1503,25 @@
             <label class="form-label" for="publish-verification-reqs">{{ t('task.verificationRequirements') || '验收清单（每行一条）' }}</label>
             <Textarea id="publish-verification-reqs" v-model="publishForm.verification_requirements_text" rows="4" :placeholder="'示例：\n交付代码\n补充文档\n提供演示链接'" />
           </div>
+          <div class="form-group">
+            <label class="form-label" for="publish-settlement">{{ t('task.settlementModeLabel') }}</label>
+            <select id="publish-settlement" v-model="publishForm.settlement_mode" class="input select-input">
+              <option value="agent_direct">{{ t('task.settlementModeDirect') }}</option>
+              <option value="platform_credits">{{ t('task.settlementModeCredits') }}</option>
+            </select>
+            <p class="form-hint">{{ t('task.settlementModeHint') }}</p>
+          </div>
           <div class="form-group form-inline">
             <label class="form-label" for="publish-reward">{{ t('agentGuide.fieldRewardPoints') }}</label>
             <input id="publish-reward" v-model.number="publishForm.reward_points" type="number" min="0" class="input input-num" />
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              @click="publishForm.reward_points = Math.max(publishForm.reward_points, 20)"
+            >
+              {{ t('task.quickReward20') }}
+            </Button>
             <Button
               v-if="publishForm.category"
               type="button"
@@ -1542,8 +1564,13 @@
           </div>
           <template v-if="publishForm.reward_points > 0">
             <div class="form-group">
-              <label class="form-label" for="publish-webhook">{{ t('agentGuide.fieldWebhook') }}</label>
+              <label class="form-label" for="publish-webhook">
+                {{ t('agentGuide.fieldWebhook') }}
+                <span v-if="publishForm.settlement_mode === 'agent_direct'" class="form-optional">{{ t('task.webhookOptional') }}</span>
+                <span v-else class="required">*</span>
+              </label>
               <Input id="publish-webhook" v-model="publishForm.completion_webhook_url" class="w-full" type="url" :placeholder="t('task.webhookPlaceholder')" />
+              <p class="form-hint">{{ publishForm.settlement_mode === 'agent_direct' ? t('task.webhookHintDirect') : t('task.webhookHintCredits') }}</p>
             </div>
             <div class="form-group">
               <label class="form-label" for="publish-vhours">{{ t('task.verificationHoursLabel') }}</label>
@@ -1557,65 +1584,68 @@
               </select>
               <p class="form-hint">{{ t('task.verificationHoursHint') }}</p>
             </div>
-            <div class="form-group escrow-block">
-              <label class="form-label flex items-center gap-2">
-                <input v-model="publishForm.escrow_enabled" type="checkbox" class="rounded border-input" />
-                {{ t('task.escrowEnable') || '启用分阶段托管（里程碑）' }}
-              </label>
-              <p class="form-hint">{{ t('task.escrowHint') || '至少 2 个里程碑，权重之和须为 1；每阶段单独提交验收与放款。' }}</p>
-              <div v-if="publishForm.escrow_enabled" class="escrow-rows">
-                <div v-for="(row, idx) in publishForm.escrow_rows" :key="idx" class="escrow-row-wrap">
-                  <div class="escrow-row">
-                    <Input v-model="row.title" type="text" :placeholder="t('task.escrowMilestoneTitle') || '里程碑名称'" />
-                    <input v-model.number="row.weight" type="number" step="0.01" min="0" max="1" class="input input-num escrow-weight" :placeholder="t('task.escrowWeight') || '权重'" />
-                    <Button v-if="publishForm.escrow_rows.length > 2" type="button" size="sm" variant="ghost" @click="removeEscrowRow(idx)">×</Button>
+            <details class="publish-advanced">
+              <summary>{{ t('task.publishAdvanced') }}</summary>
+              <div class="form-group escrow-block">
+                <label class="form-label flex items-center gap-2">
+                  <input v-model="publishForm.escrow_enabled" type="checkbox" class="rounded border-input" />
+                  {{ t('task.escrowEnable') || '启用分阶段托管（里程碑）' }}
+                </label>
+                <p class="form-hint">{{ t('task.escrowHint') || '至少 2 个里程碑，权重之和须为 1；每阶段单独提交验收与放款。' }}</p>
+                <div v-if="publishForm.escrow_enabled" class="escrow-rows">
+                  <div v-for="(row, idx) in publishForm.escrow_rows" :key="idx" class="escrow-row-wrap">
+                    <div class="escrow-row">
+                      <Input v-model="row.title" type="text" :placeholder="t('task.escrowMilestoneTitle') || '里程碑名称'" />
+                      <input v-model.number="row.weight" type="number" step="0.01" min="0" max="1" class="input input-num escrow-weight" :placeholder="t('task.escrowWeight') || '权重'" />
+                      <Button v-if="publishForm.escrow_rows.length > 2" type="button" size="sm" variant="ghost" @click="removeEscrowRow(idx)">×</Button>
+                    </div>
+                    <Textarea
+                      v-model="row.acceptance_criteria"
+                      rows="2"
+                      class="escrow-criteria"
+                      :placeholder="t('task.escrowAcceptanceCriteriaPlaceholder') || '里程碑验收要点（可选）'"
+                    />
                   </div>
-                  <Textarea
-                    v-model="row.acceptance_criteria"
-                    rows="2"
-                    class="escrow-criteria"
-                    :placeholder="t('task.escrowAcceptanceCriteriaPlaceholder') || '里程碑验收要点（可选）'"
-                  />
-                </div>
-                <Button type="button" size="sm" variant="secondary" @click="addEscrowRow">{{ t('task.escrowAdd') || '添加里程碑' }}</Button>
-                <p class="form-hint escrow-sum">{{ t('task.escrowWeightSum') || '权重合计' }}：{{ escrowWeightSum.toFixed(4) }}</p>
-              </div>
-            </div>
-            <div class="form-group auction-block">
-              <label class="form-label flex items-center gap-2">
-                <input v-model="publishForm.auction_enabled" type="checkbox" class="rounded border-input" :disabled="publishForm.escrow_enabled" />
-                {{ t('auction.enablePublish') || '启用反向竞标（Agent 报价抢单）' }}
-              </label>
-              <p class="form-hint">{{ t('auction.enableHint') || '启用后任务进入竞标期；你将在报价中选择中标方，若最终成交价低于预算，余额将退还给你。' }}</p>
-              <div v-if="publishForm.auction_enabled" class="auction-form">
-                <div class="auction-form__row">
-                  <label class="form-label">
-                    {{ t('auction.minReward') || '最低可接受（pts）' }}
-                    <input v-model.number="publishForm.auction_min_reward" type="number" min="1" class="input input-num" />
-                  </label>
-                  <label class="form-label">
-                    {{ t('auction.maxReward') || '最高预算（pts）' }}
-                    <input v-model.number="publishForm.auction_max_reward" type="number" min="1" class="input input-num" />
-                  </label>
-                  <label class="form-label">
-                    {{ t('auction.deadline') || '截止时间' }}
-                    <input v-model="publishForm.auction_deadline" type="datetime-local" class="input" />
-                  </label>
-                  <label class="form-label">
-                    {{ t('auction.autoPick') || '自动选标' }}
-                    <select v-model="publishForm.auction_auto_pick" class="input select-input">
-                      <option value="none">{{ t('auction.autoPickNone') || '到期不自动选（退款）' }}</option>
-                      <option value="lowest_price">{{ t('auction.autoPickLowest') || '到期选最低价' }}</option>
-                    </select>
-                  </label>
+                  <Button type="button" size="sm" variant="secondary" @click="addEscrowRow">{{ t('task.escrowAdd') || '添加里程碑' }}</Button>
+                  <p class="form-hint escrow-sum">{{ t('task.escrowWeightSum') || '权重合计' }}：{{ escrowWeightSum.toFixed(4) }}</p>
                 </div>
               </div>
-            </div>
+              <div class="form-group auction-block">
+                <label class="form-label flex items-center gap-2">
+                  <input v-model="publishForm.auction_enabled" type="checkbox" class="rounded border-input" :disabled="publishForm.escrow_enabled" />
+                  {{ t('auction.enablePublish') || '启用反向竞标（Agent 报价抢单）' }}
+                </label>
+                <p class="form-hint">{{ t('auction.enableHint') || '启用后任务进入竞标期；你将在报价中选择中标方，若最终成交价低于预算，余额将退还给你。' }}</p>
+                <div v-if="publishForm.auction_enabled" class="auction-form">
+                  <div class="auction-form__row">
+                    <label class="form-label">
+                      {{ t('auction.minReward') || '最低可接受（pts）' }}
+                      <input v-model.number="publishForm.auction_min_reward" type="number" min="1" class="input input-num" />
+                    </label>
+                    <label class="form-label">
+                      {{ t('auction.maxReward') || '最高预算（pts）' }}
+                      <input v-model.number="publishForm.auction_max_reward" type="number" min="1" class="input input-num" />
+                    </label>
+                    <label class="form-label">
+                      {{ t('auction.deadline') || '截止时间' }}
+                      <input v-model="publishForm.auction_deadline" type="datetime-local" class="input" />
+                    </label>
+                    <label class="form-label">
+                      {{ t('auction.autoPick') || '自动选标' }}
+                      <select v-model="publishForm.auction_auto_pick" class="input select-input">
+                        <option value="none">{{ t('auction.autoPickNone') || '到期不自动选（退款）' }}</option>
+                        <option value="lowest_price">{{ t('auction.autoPickLowest') || '到期选最低价' }}</option>
+                      </select>
+                    </label>
+                  </div>
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="publish-discord">{{ t('task.discordWebhookLabel') }}</label>
+                <Input id="publish-discord" v-model="publishForm.discord_webhook_url" class="w-full" type="url" :placeholder="t('task.discordWebhookPlaceholder')" />
+              </div>
+            </details>
           </template>
-          <div class="form-group">
-            <label class="form-label" for="publish-discord">{{ t('task.discordWebhookLabel') }}</label>
-            <Input id="publish-discord" v-model="publishForm.discord_webhook_url" class="w-full" type="url" :placeholder="t('task.discordWebhookPlaceholder')" />
-          </div>
           <p class="hint">{{ t('task.balanceHint', { n: accountCredits }) }}</p>
           <p v-if="publishError" class="error-msg" role="alert">{{ publishError }}</p>
           <div v-if="hasTaskDraft" class="draft-banner">
@@ -1899,6 +1929,7 @@ const publishForm = reactive<{
   auction_max_reward: number | null
   auction_deadline: string
   auction_auto_pick: 'none' | 'lowest_price'
+  settlement_mode: 'agent_direct' | 'platform_credits'
 }>({
   title: '',
   description: '',
@@ -1924,6 +1955,7 @@ const publishForm = reactive<{
   auction_max_reward: null,
   auction_deadline: '',
   auction_auto_pick: 'lowest_price',
+  settlement_mode: 'agent_direct',
 })
 const escrowWeightSum = computed(() =>
   publishForm.escrow_rows.reduce((s, r) => s + (Number(r.weight) || 0), 0)
@@ -2066,7 +2098,8 @@ const confirmTaskId = ref<number | null>(null)
 const confirmForm = reactive({ verification_mode: 'manual_review', verification_note: '' })
 const categoryFilter = ref('')
 const taskSort = ref<'reward_desc' | 'created_at_desc' | 'deadline_asc' | 'comments_desc'>('reward_desc')
-const settlementFilter = ref<'' | 'agent_direct' | 'platform_credits'>('')
+const settlementFilter = ref<'' | 'agent_direct' | 'platform_credits'>('agent_direct')
+const paidOnlyFilter = ref(true)
 const relatedSkillFilter = ref<{ id: number; token: string } | null>(null)
 const categoryFilterOptions = [
   { value: 'development', labelKey: 'task.categoryDevelopment' },
@@ -2088,6 +2121,8 @@ const filteredTasks = computed(() => {
   }
   if (onboardingFilterActive.value) {
     list = list.filter((row) => String(row.title || '').includes('【新手 Quest'))
+  } else if (paidOnlyFilter.value) {
+    list = list.filter((row) => Number(row.reward_points || 0) > 0)
   }
   return list
 })
@@ -2436,12 +2471,19 @@ function formatMarketStat(n: number | undefined | null): string {
   return String(v)
 }
 
-const marketStats = ref<{ tasks_open?: number; rewards_paid?: number; agents_count?: number; tasks_completed?: number }>({})
+const marketStats = ref<{ tasks_open?: number; rewards_paid?: number; agents_count?: number; agents_count_public?: number; tasks_completed?: number; agents_with_completions?: number }>({})
 const marketStatsLoading = ref(true)
 function loadMarketStats() {
   marketStatsLoading.value = true
   api.fetchStats()
-    .then((res) => { marketStats.value = res.data || {} })
+    .then((res) => {
+      const d = res.data || {}
+      marketStats.value = {
+        ...d,
+        // Prefer public agents; never inflate with distribute/probe totals
+        agents_count: (d as { agents_count_public?: number }).agents_count_public ?? d.agents_count,
+      }
+    })
     .catch(() => { marketStats.value = {} })
     .finally(() => { marketStatsLoading.value = false })
 }
@@ -3290,8 +3332,14 @@ function doPublish() {
   publishLoading.value = true
   const reward = Math.max(0, publishForm.reward_points || 0)
   const webhook = reward > 0 ? (publishForm.completion_webhook_url || '').trim() : ''
-  if (reward > 0 && (!webhook || !webhook.startsWith('http'))) {
+  const isAgentDirect = publishForm.settlement_mode === 'agent_direct'
+  if (reward > 0 && !isAgentDirect && (!webhook || !webhook.startsWith('http'))) {
     publishError.value = t('task.webhookErrorRequired')
+    publishLoading.value = false
+    return
+  }
+  if (reward > 0 && webhook && !webhook.startsWith('http')) {
+    publishError.value = t('task.webhookErrorInvalid')
     publishLoading.value = false
     return
   }
@@ -3373,6 +3421,7 @@ function doPublish() {
     verification_hours: reward > 0 ? Math.min(168, Math.max(1, Number(publishForm.verification_hours) || 6)) : undefined,
     collaborative: publishForm.collaborative || undefined,
     auction: auctionPayload,
+    settlement_mode: publishForm.settlement_mode,
   }).then(() => {
     try { localStorage.removeItem(TASK_DRAFT_KEY) } catch {}
     hasTaskDraft.value = false
@@ -3400,6 +3449,7 @@ function doPublish() {
     publishForm.auction_max_reward = null
     publishForm.auction_deadline = ''
     publishForm.auction_auto_pick = 'lowest_price'
+    publishForm.settlement_mode = 'agent_direct'
     showSuccessLocal(t('task.publishSuccess'))
     showCreateModal.value = false
     if (auth.isGuestUser || !myAgents.value.length) emit('register-hint')
@@ -3760,6 +3810,10 @@ watch(
   (v) => {
     if (v === 'reward' || v === 'reward_desc') {
       taskSort.value = 'reward_desc'
+    } else if (v === 'newest' || v === 'created_at_desc') {
+      taskSort.value = 'created_at_desc'
+    } else if (v === 'deadline' || v === 'deadline_asc') {
+      taskSort.value = 'deadline_asc'
     }
   },
   { immediate: true }
@@ -3770,9 +3824,19 @@ watch(
   (v) => {
     if (v === 'agent_direct' || v === 'platform_credits') {
       settlementFilter.value = v
-    } else if (!v) {
-      // keep current unless explicitly cleared via empty query
+    } else if (v === 'all') {
+      settlementFilter.value = ''
     }
+    // empty query keeps default agent_direct
+  },
+  { immediate: true }
+)
+
+watch(
+  () => String(route.query.paid ?? ''),
+  (v) => {
+    if (v === '0' || v === 'all') paidOnlyFilter.value = false
+    else if (v === '1') paidOnlyFilter.value = true
   },
   { immediate: true }
 )
@@ -3780,7 +3844,11 @@ watch(
 watch(
   () => String(route.query.onboarding ?? ''),
   (v) => {
-    if (v === '1') tab.value = 'available'
+    if (v === '1') {
+      tab.value = 'available'
+      paidOnlyFilter.value = false
+      settlementFilter.value = ''
+    }
   },
   { immediate: true }
 )
@@ -4597,6 +4665,33 @@ watch(tab, (newTab) => {
 }
 .task-filter-row--toggle-only { justify-content: flex-end; }
 .task-filter-select { max-width: 200px; border-radius: var(--radius-md); border: var(--border-hairline); padding: var(--space-2) var(--space-3); font-size: var(--font-body); }
+.task-filter-paid-only {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-caption);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  user-select: none;
+}
+.task-filter-paid-only input { accent-color: var(--primary); }
+.task-row__reward--zero { opacity: 0.55; font-weight: 500; }
+.task-table-completions { font-size: var(--font-caption); color: var(--text-secondary); margin-left: var(--space-2); }
+.publish-advanced {
+  margin: var(--space-3) 0;
+  padding: var(--space-3);
+  border: var(--border-hairline);
+  border-radius: var(--radius-md);
+  background: rgba(255,255,255,0.02);
+}
+.publish-advanced > summary {
+  cursor: pointer;
+  font-size: var(--font-caption);
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-2);
+}
+.form-optional { font-weight: 400; color: var(--text-secondary); margin-left: var(--space-1); }
 @media (max-width: 640px) {
   .task-filter-row {
     display: grid;

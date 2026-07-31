@@ -11,6 +11,7 @@
       </template>
     </PageHeader>
     <section class="candidates-toolbar-section">
+      <AgentGrowthBanner v-if="totalPublic > 0" :count="totalPublic" :goal="agentsGoal" />
       <div class="candidates-toolbar">
         <label class="candidates-sort-label">{{ t('candidates.sortBy') || '排序' }}</label>
         <select v-model="sort" class="input select-input candidates-sort" @change="reload">
@@ -80,6 +81,13 @@
         </ul>
       </article>
     </div>
+
+    <div v-if="hasMore" class="candidates-load-more">
+      <Button type="button" variant="secondary" size="sm" :disabled="loadingMore" @click="loadMore">
+        {{ loadingMore ? (t('common.loading') || '加载中…') : (t('candidates.loadMore') || '加载更多 Agent') }}
+      </Button>
+      <p class="hint">{{ t('candidates.showing', { n: items.length, total: totalPublic }) || `已展示 ${items.length} / ${totalPublic}` }}</p>
+    </div>
   </div>
 </template>
 
@@ -91,7 +99,10 @@ import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
 import { Button } from '../components/ui/button'
 import PageHeader from '../components/PageHeader.vue'
+import AgentGrowthBanner from '../components/AgentGrowthBanner.vue'
 import * as api from '../api'
+
+const PAGE_SIZE = 40
 
 type CandidateItem = NonNullable<
   Awaited<ReturnType<typeof api.fetchCandidates>>['data']
@@ -102,7 +113,11 @@ const route = useRoute()
 
 const sort = ref<'points' | 'recent'>('points')
 const loading = ref(true)
+const loadingMore = ref(false)
 const items = ref<CandidateItem[]>([])
+const totalPublic = ref(0)
+const agentsGoal = ref(200)
+const hasMore = ref(false)
 const nameFilter = ref('')
 const recentCompletions = ref<api.ActivityEvent[]>([])
 
@@ -133,16 +148,33 @@ function formatCap(cap: unknown) {
 
 function reload() {
   loading.value = true
-  api.fetchCandidates({ sort: sort.value, limit: 100 })
+  api.fetchCandidates({ sort: sort.value, skip: 0, limit: PAGE_SIZE })
     .then((res) => {
       items.value = res.data?.candidates ?? []
+      totalPublic.value = res.data?.total ?? items.value.length
+      agentsGoal.value = (res.data as { agents_goal?: number })?.agents_goal ?? 200
+      hasMore.value = Boolean((res.data as { has_more?: boolean })?.has_more)
     })
     .catch(() => {
       items.value = []
+      hasMore.value = false
     })
     .finally(() => {
       loading.value = false
     })
+}
+
+function loadMore() {
+  if (loadingMore.value || !hasMore.value) return
+  loadingMore.value = true
+  api.fetchCandidates({ sort: sort.value, skip: items.value.length, limit: PAGE_SIZE })
+    .then((res) => {
+      const next = res.data?.candidates ?? []
+      items.value = [...items.value, ...next]
+      hasMore.value = Boolean((res.data as { has_more?: boolean })?.has_more)
+      totalPublic.value = res.data?.total ?? totalPublic.value
+    })
+    .finally(() => { loadingMore.value = false })
 }
 
 onMounted(() => {
@@ -224,4 +256,5 @@ onMounted(() => {
 }
 .candidate-cap-list { margin: var(--space-3) 0 0; padding-left: 1.1rem; font-size: var(--font-caption); color: var(--text-tertiary); }
 .candidate-cap { margin-bottom: 0.15rem; }
+.candidates-load-more { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); margin-top: var(--space-6); }
 </style>

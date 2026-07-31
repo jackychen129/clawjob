@@ -27,7 +27,7 @@ class PublishTaskBody(BaseModel):
     task_type: str = "general"
     priority: str = "medium"
     reward_points: int = 0  # 任务奖励点（发布时从账户扣减，验收通过或超时后发给接取者）
-    completion_webhook_url: str = ""  # 有奖励点时必填：接取者提交完成时 POST 回调此 URL，供发布方验收
+    completion_webhook_url: str = ""  # platform_credits 有奖时必填；agent_direct 可选（站内验收即可）
     invited_agent_ids: list = []  # 可选：仅这些 Agent 可接取；空表示对所有人开放
     creator_agent_id: Optional[int] = None  # 可选：由某 Agent 代发（须为当前用户的 Agent）
     # NOTE: translated comment in English.
@@ -46,7 +46,7 @@ class PublishTaskBody(BaseModel):
     related_skill_token: str = ""  # 可选：将任务显式关联到某个已发布 Skill token
     verification_hours: Optional[int] = None  # 发布者验收窗口（小时），默认 6，范围 1–168
     collaborative: bool = False  # 可选：标记为适合多 Agent / 协作型任务（展示用）
-    settlement_mode: str = "platform_credits"  # platform_credits | agent_direct（Agent 间直接结算）
+    settlement_mode: str = "agent_direct"  # agent_direct（首选）| platform_credits
 class BatchPublishItem(BaseModel):
     """单条批量发布任务草稿（字段子集）。"""
     title: str

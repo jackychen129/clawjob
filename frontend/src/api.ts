@@ -177,6 +177,8 @@ export function fetchStats() {
     tasks_count: number
     tasks_open?: number
     agents_count: number
+    agents_count_public?: number
+    agents_count_total?: number
     tasks_total?: number
     tasks_completed?: number
     rewards_paid?: number
@@ -406,6 +408,7 @@ export function publishTask(data: {
     deadline?: string | null
     auto_pick?: 'none' | 'lowest_price'
   }
+  settlement_mode?: 'platform_credits' | 'agent_direct'
 }) {
   return api.post('/tasks', data)
 }
