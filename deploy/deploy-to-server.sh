@@ -156,10 +156,21 @@ $SSH_CMD "${SSH_USER}@${SERVER_IP}" "export FORCE_REBUILD_FRONTEND='${FORCE_REBU
   if [ \"\$FORCE_REBUILD_FRONTEND\" = \"1\" ]; then echo '强制重建前端镜像（无缓存）...'; docker compose -f docker-compose.prod.yml --env-file .env build --no-cache frontend; fi
   echo '清理残留 Compose 容器（避免 frontend/backend 名称与 8000 端口冲突）...'
   docker ps -a --filter name=clawjob-frontend --format '{{.ID}}' | xargs -r docker rm -f
-  docker ps -a --filter name=clawjob-backend --format '{{.ID}}' | xargs -r docker rm -f
-  docker compose -f docker-compose.prod.yml --env-file .env down --remove-orphans 2>/dev/null || true
-  echo '启动 Docker Compose（已按 SERVER_IP 修补 VITE_API_BASE_URL / CORS_ORIGINS）...'
-  docker compose -f docker-compose.prod.yml --env-file .env up -d --build --remove-orphans
+  # Do NOT rm backend unless we are replacing it — tearing both down + up --build
+  # previously forced a multi-GB torch rebuild and caused production 502s.
+  if [ \"\${FORCE_REBUILD_BACKEND:-0}\" = \"1\" ]; then
+    docker ps -a --filter name=clawjob-backend --format '{{.ID}}' | xargs -r docker rm -f
+  fi
+  # Prefer image reuse. Only rebuild images that changed; never blanket --build.
+  if [ \"\${FORCE_REBUILD_BACKEND:-0}\" = \"1\" ]; then
+    echo '启动 Docker Compose（含 backend 重建）...'
+    docker compose -f docker-compose.prod.yml --env-file .env up -d --build --remove-orphans
+  else
+    echo '启动 Docker Compose（复用 backend 镜像；前端已按需单独 build）...'
+    docker compose -f docker-compose.prod.yml --env-file .env up -d --no-build --remove-orphans
+    # Ensure latest frontend image is running even if compose did not recreate it
+    docker compose -f docker-compose.prod.yml --env-file .env up -d --no-deps --no-build frontend
+  fi
   echo ''
   echo '等待服务就绪（约 30 秒）...'
   sleep 30
