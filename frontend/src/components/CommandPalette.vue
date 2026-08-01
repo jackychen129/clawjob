@@ -6,19 +6,18 @@ import {
   BookOpen,
   Bot,
   FileText,
-  LayoutGrid,
   ListTodo,
   MessagesSquare,
-  Rocket,
   Shield,
   UserPlus,
   UserRound,
-  Users,
 } from 'lucide-vue-next'
 import { Dialog } from './ui/dialog'
 import { cn } from '../lib/utils'
 
 const open = defineModel<boolean>('open', { default: false })
+
+const props = withDefaults(defineProps<{ isAdmin?: boolean }>(), { isAdmin: false })
 
 const emit = defineEmits<{
   'publish-task': []
@@ -83,44 +82,20 @@ const navItems = computed<CommandItem[]>(() => [
     run: () => router.push('/join'),
   },
   {
-    id: 'agent-studio',
-    kind: 'navigate',
-    label: t('nav.agentStudio'),
-    keywords: 'studio creator dashboard earnings',
-    icon: Bot,
-    run: () => router.push('/agent-studio'),
-  },
-  {
-    id: 'dashboard',
-    kind: 'navigate',
-    label: t('nav.dashboard'),
-    keywords: 'dashboard stats',
-    icon: LayoutGrid,
-    run: () => router.push('/dashboard'),
-  },
-  {
-    id: 'discover',
-    kind: 'navigate',
-    label: t('nav.discover'),
-    keywords: 'discover agents leaderboard candidates',
-    icon: Users,
-    run: () => router.push('/discover'),
-  },
-  {
     id: 'marketplace',
     kind: 'navigate',
     label: t('nav.skillMarket'),
-    keywords: 'marketplace skills',
+    keywords: 'marketplace skills mcp tools',
     icon: BookOpen,
     run: () => router.push('/marketplace'),
   },
   {
-    id: 'playbook',
+    id: 'mcp',
     kind: 'navigate',
-    label: t('nav.playbook'),
-    keywords: 'playbook start guide',
-    icon: Rocket,
-    run: () => router.push('/playbook'),
+    label: t('nav.mcp') || 'MCP 接入',
+    keywords: 'mcp cursor claude model context protocol',
+    icon: BookOpen,
+    run: () => router.push('/docs/mcp'),
   },
   {
     id: 'docs',
@@ -130,13 +105,48 @@ const navItems = computed<CommandItem[]>(() => [
     icon: FileText,
     run: () => router.push('/docs'),
   },
+])
+
+const adminNavItems = computed<CommandItem[]>(() => [
   {
     id: 'admin',
     kind: 'navigate',
     label: t('nav.adminNav'),
-    keywords: 'admin ops',
+    keywords: 'admin ops console',
     icon: Shield,
     run: () => router.push('/admin'),
+  },
+  {
+    id: 'admin-disputes',
+    kind: 'navigate',
+    label: `${t('nav.adminNav')} · ${t('admin.nav.disputes')}`,
+    keywords: 'admin disputes escrow',
+    icon: Shield,
+    run: () => router.push('/admin/disputes'),
+  },
+  {
+    id: 'admin-settlements',
+    kind: 'navigate',
+    label: `${t('nav.adminNav')} · ${t('admin.nav.settlements')}`,
+    keywords: 'admin settlements clearing',
+    icon: Shield,
+    run: () => router.push('/admin/settlements'),
+  },
+  {
+    id: 'admin-compliance',
+    kind: 'navigate',
+    label: `${t('nav.adminNav')} · ${t('admin.nav.compliance')}`,
+    keywords: 'admin kyc withdrawal',
+    icon: Shield,
+    run: () => router.push('/admin/compliance'),
+  },
+  {
+    id: 'admin-audit',
+    kind: 'navigate',
+    label: `${t('nav.adminNav')} · ${t('admin.nav.audit')}`,
+    keywords: 'admin audit logs export',
+    icon: Shield,
+    run: () => router.push('/admin/audit'),
   },
 ])
 
@@ -159,7 +169,11 @@ const actionItems = computed<CommandItem[]>(() => [
   },
 ])
 
-const allItems = computed(() => [...navItems.value, ...actionItems.value])
+const allItems = computed(() => [
+  ...navItems.value,
+  ...(props.isAdmin ? adminNavItems.value : []),
+  ...actionItems.value,
+])
 
 const filtered = computed(() => {
   const q = query.value.trim().toLowerCase()

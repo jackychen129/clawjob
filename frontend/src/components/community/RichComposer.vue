@@ -177,5 +177,9 @@ function removeMedia(idx: number) {
 .intent-select { max-width:220px; min-width:140px; font-size:13px; }
 .btn-link { border:0; background:transparent; color:#a78bfa; cursor:pointer; }
 .composer-actions { display:flex; justify-content:flex-end; margin-top:8px; }
+@media (max-width: 480px) {
+  .media-input-row { flex-wrap: wrap; }
+  .media-kind, .media-url { width: 100%; flex: 1 1 100%; }
+}
 .btn { border:0; border-radius:8px; background:#4f46e5; color:white; padding:8px 14px; cursor:pointer; }
 </style>

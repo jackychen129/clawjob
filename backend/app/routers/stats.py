@@ -61,49 +61,20 @@ async def health_check():
 @router.get("/stats")
 def get_public_stats(db: Session = Depends(get_db)):
     """公开统计：任务总数、开放数、已完成数、活跃 Agent、累计发放报酬（供首页/官网 Counters 与 Dashboard）。"""
-    from app.domain.agent_public import count_public_agents, count_total_agents
+    from app.services.platform_stats_cache import get_cached_public_stats_bundle
 
-    tasks_count = db.query(Task).count()
-    tasks_open = count_public_listing_tasks(db, status="open")
-    tasks_completed = db.query(Task).filter(Task.status == "completed").count()
-    rewards_paid = db.query(func.coalesce(func.sum(Task.reward_points), 0)).filter(
-        Task.status == "completed", Task.reward_points.isnot(None)
-    ).scalar() or 0
-    agents_count_public = count_public_agents(db)
-    agents_count_total = count_total_agents(db)
-    agents_active = db.query(Agent).filter(Agent.is_active == True).count()
-    agents_with_completions = db.query(Task.agent_id).filter(
-        Task.status == "completed", Task.agent_id.isnot(None)
-    ).distinct().count()
-    tasks_disputed = db.query(Task).filter(Task.status == "disputed").count()
-    from app.services import settlement as _settlement
-
-    settlement_counts = _settlement.count_unpaid_settlements(db)
-    return {
-        "tasks_count": tasks_count,
-        "tasks_open": tasks_open,
-        "agents_count": agents_count_public,
-        "agents_count_public": agents_count_public,
-        "agents_count_total": agents_count_total,
-        "tasks_total": tasks_count,
-        "tasks_completed": tasks_completed,
-        "tasks_disputed": int(tasks_disputed),
-        "rewards_paid": int(rewards_paid),
-        "agents_active": agents_active,
-        "agents_with_completions": agents_with_completions,
-        "settlement_pending_count": int(settlement_counts["pending_total"]),
-        "settlement_awaiting_payee_count": int(settlement_counts["awaiting_payee"]),
-    }
+    return get_cached_public_stats_bundle(db)
 
 
 @router.get("/stats/recent-agents")
 def get_recent_agents_count(db: Session = Depends(get_db)):
     """近 7 天新注册 Agent 数量（无 PII，供 Dashboard 社交证明）。"""
-    from app.domain.agent_public import count_public_agents, count_total_agents
+    from app.domain.agent_public import count_total_agents
+    from app.services.platform_stats_cache import get_cached_public_agents_count
 
     since = datetime.utcnow() - timedelta(days=7)
     return {
-        "recent_agents_7d": int(count_public_agents(db, since=since)),
+        "recent_agents_7d": int(get_cached_public_agents_count(db, since=since)),
         "recent_agents_7d_total": int(count_total_agents(db, since=since)),
         "period_days": 7,
     }
@@ -178,47 +149,36 @@ def get_activity(limit: int = 50, db: Session = Depends(get_db)):
 @router.get("/leaderboard")
 def get_leaderboard(skip: int = 0, limit: int = 50, shadow: int = 0, db: Session = Depends(get_db)):
     """Agent 声誉排行榜：Earned、完成任务数、成功率。shadow=1 时仅返回新星（任务数少但成功率高的 Agent）。"""
-    # NOTE: translated comment in English.
-    from sqlalchemy import case
-    completed_subq = (
-        db.query(
-            Task.agent_id,
-            func.count(Task.id).label("completed_count"),
-            func.coalesce(func.sum(Task.reward_points), 0).label("earned"),
-        )
-        .filter(Task.status == "completed", Task.agent_id.isnot(None))
-        .group_by(Task.agent_id)
-    ).subquery()
-    total_subq = (
-        db.query(Task.agent_id, func.count(Task.id).label("total_count"))
-        .filter(Task.agent_id.isnot(None))
-        .group_by(Task.agent_id)
-    ).subquery()
-    from app.domain.agent_public import apply_public_agent_filters, filter_public_agent_rows
+    from app.database.relational_db import AgentStats
+    from app.domain.agent_public import apply_public_agent_filters, paginate_public_agent_rows
+    from app.services.platform_stats_cache import get_cached_public_agents_count
 
     q = (
         db.query(
             Agent,
             User,
-            func.coalesce(completed_subq.c.completed_count, 0).label("completed_count"),
-            func.coalesce(completed_subq.c.earned, 0).label("earned"),
-            func.coalesce(total_subq.c.total_count, 0).label("total_count"),
+            func.coalesce(AgentStats.completed_count, 0).label("completed_count"),
+            func.coalesce(AgentStats.earned_points, 0).label("earned"),
+            func.coalesce(AgentStats.assigned_count, 0).label("total_count"),
         )
         .join(User, Agent.owner_id == User.id)
-        .outerjoin(completed_subq, Agent.id == completed_subq.c.agent_id)
-        .outerjoin(total_subq, Agent.id == total_subq.c.agent_id)
+        .outerjoin(AgentStats, Agent.id == AgentStats.agent_id)
     )
     q = apply_public_agent_filters(q)
     is_shadow = bool(int(shadow or 0))
-    # 影子榜（新星）需要更大候选集，便于在内存中按成功率筛选 / 排序
-    fetch_n = 500 if is_shadow else max(limit * 3, limit + 20)
-    rows = (
-        q.order_by(completed_subq.c.earned.desc().nullslast(), Agent.id.desc())
-        .offset(0 if is_shadow else skip)
-        .limit(fetch_n)
-        .all()
-    )
-    rows = filter_public_agent_rows(rows)
+    skip = max(0, int(skip or 0))
+    limit = max(1, min(int(limit or 50), 100))
+    if is_shadow:
+        fetch_n = min(800, max(limit * 8, 200))
+        rows = (
+            q.order_by(AgentStats.earned_points.desc().nullslast(), Agent.id.desc())
+            .offset(0)
+            .limit(fetch_n)
+            .all()
+        )
+    else:
+        rows, has_more_flag = paginate_public_agent_rows(q, skip=skip, limit=limit)
+        has_more = has_more_flag
     entries = []
     for (a, owner, completed_count, earned, total_count) in rows:
         total_count = total_count or 0
@@ -241,14 +201,23 @@ def get_leaderboard(skip: int = 0, limit: int = 50, shadow: int = 0, db: Session
             if e["tasks_completed"] >= 1 and e["tasks_total"] <= 5 and e["success_rate"] >= 50.0
         ]
         entries.sort(key=lambda e: (e["success_rate"], e["earned"]), reverse=True)
-        entries = entries[skip: skip + limit]
+        shadow_all = entries
+        entries = shadow_all[skip: skip + limit]
+        has_more = len(shadow_all) > skip + limit
     else:
         entries = entries[:limit]
     out = []
     for i, e in enumerate(entries):
         e["rank"] = skip + i + 1
         out.append(e)
-    return {"items": out, "total": len(out)}
+    total_public = get_cached_public_agents_count(db)
+    return {
+        "items": out,
+        "total": total_public,
+        "skip": skip,
+        "limit": limit,
+        "has_more": has_more,
+    }
 @router.get("/stats/roi-series")
 def get_roi_series(days: int = 14, db: Session = Depends(get_db)):
     # NOTE: translated comment in English.

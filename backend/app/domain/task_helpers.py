@@ -247,6 +247,10 @@ def get_or_create_clawjob_system_agent(db: Session):
         db.add(user)
         db.flush()
     ensure_agents_category_column()
+    from app.domain.agent_helpers import ensure_agents_is_public_column
+    from app.domain.agent_public import sync_agent_is_public
+
+    ensure_agents_is_public_column()
     agent = db.query(Agent).filter(
         Agent.owner_id == user.id,
         Agent.name == CLAWJOB_SYSTEM_AGENT_NAME,
@@ -259,12 +263,73 @@ def get_or_create_clawjob_system_agent(db: Session):
             category="api",
             owner_id=user.id,
             capabilities=[{"name": "clawjob", "category": "skill"}],
-            config={},
+            config={"hidden_from_public": True},
             is_active=True,
         )
         db.add(agent)
         db.flush()
+    sync_agent_is_public(db, agent, user)
     return user, agent
+
+
+def run_task_completed_side_effects(db: Session, task: Task) -> None:
+    """任务进入 completed 后的社区与信誉副作用（幂等友好，失败静默）。"""
+    try:
+        from app.services import agent_stats as _agent_stats
+
+        _agent_stats.on_task_completed(db, task)
+    except Exception:
+        pass
+    try:
+        from app.services.platform_stats_cache import invalidate_platform_stats_cache
+
+        invalidate_platform_stats_cache()
+    except Exception:
+        pass
+    try:
+        from app.services import community_task_hooks as _ct_hooks
+
+        _ct_hooks.on_task_completed_community_hooks(db, task)
+    except Exception:
+        pass
+    try:
+        from app.services.reputation_hooks import touch_agent_reputation_for_task
+
+        touch_agent_reputation_for_task(db, task)
+    except Exception:
+        pass
+
+
+def after_task_published(db: Session, task: Task, owner: User) -> None:
+    """发布任务后：物化 listing 标记 + 统计 + 缓存失效。"""
+    try:
+        sync_task_public_listing(task, owner)
+        from app.services import agent_stats as _agent_stats
+
+        _agent_stats.on_task_published(db, task)
+    except Exception:
+        pass
+    try:
+        from app.services.platform_stats_cache import invalidate_platform_stats_cache
+
+        invalidate_platform_stats_cache()
+    except Exception:
+        pass
+
+
+def after_task_assigned(db: Session, task: Task, agent_id: int) -> None:
+    try:
+        from app.services import agent_stats as _agent_stats
+
+        _agent_stats.on_task_assigned(db, agent_id)
+    except Exception:
+        pass
+    try:
+        from app.services.platform_stats_cache import invalidate_platform_stats_cache
+
+        invalidate_platform_stats_cache()
+    except Exception:
+        pass
 
 
 def pay_task_reward(task: Task, db: Session, *, skip_credits: bool = False) -> bool:
@@ -326,12 +391,7 @@ def pay_task_reward(task: Task, db: Session, *, skip_credits: bool = False) -> b
         maybe_settle_skill_revenue(task, db)
     except Exception:
         db.rollback()
-    try:
-        from app.services import community_task_hooks as _ct_hooks
-
-        _ct_hooks.on_task_completed_community_hooks(db, task)
-    except Exception:
-        pass
+    run_task_completed_side_effects(db, task)
     return True
 
 
@@ -458,6 +518,7 @@ def task_extra(t: Task, db: Session) -> dict:
             ],
             "dispute_reason": (esc.get("dispute_reason") or None),
             "dispute_evidence": esc.get("dispute_evidence") or None,
+            "dispute_ai_precheck": esc.get("dispute_ai_precheck") or None,
             "admin_resolve_note": (esc.get("admin_resolve_note") or None),
         }
     else:
@@ -594,8 +655,22 @@ def task_is_public_listing(task: Task, owner: Optional[User]) -> bool:
     return True
 
 
+def sync_task_public_listing(task: Task, owner: Optional[User]) -> bool:
+    """Materialize tasks.is_public_listing for SQL counts."""
+    public = task_is_public_listing(task, owner)
+    task.is_public_listing = public
+    return public
+
+
 def count_public_listing_tasks(db, *, status: Optional[str] = None) -> int:
-    """统计应出现在公开大厅的任务数（排除内部/握手/探活）。"""
+    """统计应出现在公开大厅的任务数（物化 is_public_listing）。"""
+    try:
+        q = db.query(Task).filter(Task.is_public_listing == True)  # noqa: E712
+        if status:
+            q = q.filter(Task.status == status)
+        return q.count()
+    except Exception:
+        pass
     q = db.query(Task, User).join(User, Task.owner_id == User.id)
     if status:
         q = q.filter(Task.status == status)

@@ -5,10 +5,9 @@
       :description="t('account.descNew') || t('account.desc')"
     >
       <template #actions>
-        <Button :as="RouterLink" to="/agent-studio" size="sm" variant="secondary">{{ t('account.navStudio') }}</Button>
+        <Button :as="RouterLink" to="/docs/mcp" size="sm" variant="secondary">{{ t('nav.mcp') || 'MCP 接入' }}</Button>
         <Button :as="RouterLink" to="/tasks" size="sm" variant="secondary">{{ t('account.navTasks') }}</Button>
         <Button :as="RouterLink" to="/agents" size="sm" variant="secondary">{{ t('account.navAgents') }}</Button>
-        <Button :as="RouterLink" to="/inbox" size="sm" variant="ghost">{{ t('account.navInbox') }}</Button>
       </template>
     </PageHeader>
     <div v-if="!auth.token" class="card card-content">
@@ -553,6 +552,7 @@ import * as api from '../api'
 import type { SkillNode } from '../api'
 import { useAuthStore } from '../stores/auth'
 import { useToast } from '../composables/useToast'
+import { appOrigin } from '../lib/siteUrls'
 
 const { t } = useI18n()
 const auth = useAuthStore()
@@ -703,7 +703,7 @@ function copyReferralCode() {
 
 function copyReferralLink() {
   if (!referral.value) return
-  const appBase = (import.meta as any).env?.VITE_APP_URL || 'https://app.clawjob.com.cn'
+  const appBase = (import.meta as any).env?.VITE_APP_URL || appOrigin()
   const link = referral.value.referral_link || `${appBase}/#/r/${encodeURIComponent(referral.value.referral_code)}`
   const text = t('account.referralLinkCopyText', {
     link,

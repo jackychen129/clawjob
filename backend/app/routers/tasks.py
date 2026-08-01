@@ -417,6 +417,46 @@ def list_tasks_public(
             viewer_agent_ids = [int(a.id) for a in db.query(Agent.id).filter(Agent.owner_id == viewer_uid).all()]
 
     cat_completion_counts = _category_completion_counts(db)
+    owner_ids = list({int(t.owner_id) for t, _ in tasks_with_count if t.owner_id is not None})
+    publisher_completed_map: Dict[int, int] = {}
+    if owner_ids:
+        rows = (
+            db.query(Task.owner_id, func.count(Task.id))
+            .filter(Task.owner_id.in_(owner_ids), Task.status == "completed")
+            .group_by(Task.owner_id)
+            .all()
+        )
+        publisher_completed_map = {int(oid): int(cnt or 0) for oid, cnt in rows}
+
+    rep_agent_ids: List[int] = []
+    for t, _ in tasks_with_count:
+        cid = getattr(t, "creator_agent_id", None)
+        if cid:
+            rep_agent_ids.append(int(cid))
+    # Fallback: one representative agent per publisher without creator_agent
+    owners_needing_agent = [
+        int(t.owner_id)
+        for t, _ in tasks_with_count
+        if t.owner_id and not getattr(t, "creator_agent_id", None)
+    ]
+    owner_agent_fallback: Dict[int, int] = {}
+    if owners_needing_agent:
+        uniq_owners = list(set(owners_needing_agent))
+        for oid in uniq_owners:
+            aid = (
+                db.query(Agent.id)
+                .filter(Agent.owner_id == oid, Agent.is_active.is_(True))
+                .order_by(Agent.id.asc())
+                .limit(1)
+                .scalar()
+            )
+            if aid:
+                owner_agent_fallback[oid] = int(aid)
+                rep_agent_ids.append(int(aid))
+    from app.services.reputation import compute_bulk_reputations
+
+    rep_map = compute_bulk_reputations(db, list(set(rep_agent_ids))) if rep_agent_ids else {}
+
     out = []
     for t, comment_count in tasks_with_count:
         maybe_auto_confirm(t, db)
@@ -429,6 +469,10 @@ def list_tasks_public(
         sub_count = db.query(TaskSubscription).filter(TaskSubscription.task_id == t.id).count()
         invited = getattr(t, "invited_agent_ids", None)
         creator_agent = db.query(Agent).filter(Agent.id == t.creator_agent_id).first() if getattr(t, "creator_agent_id", None) else None
+        rep_aid = int(t.creator_agent_id) if getattr(t, "creator_agent_id", None) else owner_agent_fallback.get(int(t.owner_id))
+        rep_card = rep_map.get(rep_aid) if rep_aid else None
+        pub_rep = int(rep_card.get("reputation_score", 0) or 0) if isinstance(rep_card, dict) else None
+        pub_done = int(publisher_completed_map.get(int(t.owner_id), 0) or 0)
         out.append({
             "id": t.id,
             "title": t.title,
@@ -444,6 +488,8 @@ def list_tasks_public(
             "reward_points": getattr(t, "reward_points", 0) or 0,
             "subscription_count": sub_count,
             "category_completions": cat_completion_counts.get(str(getattr(t, "category", "") or ""), 0),
+            "publisher_completed_count": pub_done,
+            "publisher_reputation_score": pub_rep,
             "comment_count": comment_count,
             "invited_agent_ids": invited if invited else [],
             "submitted_at": iso_utc(getattr(t, "submitted_at", None)),
@@ -544,6 +590,8 @@ def publish_task(
     if settlement_mode not in ("platform_credits", "agent_direct"):
         raise HTTPException(status_code=400, detail="settlement_mode 须为 platform_credits 或 agent_direct")
     webhook_url = (getattr(body, "completion_webhook_url", None) or "").strip()
+    # agent_direct: reward_points is a declared bounty for peer settlement — do not lock platform credits.
+    lock_platform_credits = settlement_mode == "platform_credits" and reward_points > 0
     if reward_points > 0:
         # agent_direct：站内验收 + 点对点结算，webhook 可选；platform_credits 仍要求回调
         if settlement_mode == "platform_credits":
@@ -557,12 +605,13 @@ def publish_task(
                 status_code=400,
                 detail="completion_webhook_url 须为 http:// 或 https:// 开头",
             )
-        credits = getattr(user, "credits", 0) or 0
-        if credits < reward_points:
-            raise HTTPException(
-                status_code=400,
-                detail=f"信用点不足：当前 {credits}，需要 {reward_points}",
-            )
+        if lock_platform_credits:
+            credits = getattr(user, "credits", 0) or 0
+            if credits < reward_points:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"信用点不足：当前 {credits}，需要 {reward_points}",
+                )
     invited_ids = getattr(body, "invited_agent_ids", None) or []
     invited_ids = [int(x) for x in invited_ids if x is not None] if invited_ids else None
     creator_agent_id = getattr(body, "creator_agent_id", None)
@@ -663,7 +712,7 @@ def publish_task(
     except Exception:
         db.rollback()
         raise HTTPException(status_code=500, detail="发布任务失败")
-    if reward_points > 0:
+    if lock_platform_credits:
         current_credits = int(getattr(user, "credits", 0) or 0)
         if current_credits < reward_points:
             db.rollback()
@@ -947,6 +996,15 @@ def cancel_task(
     reward_points = int(getattr(task, "reward_points", 0) or 0)
     refund_points = 0
     if reward_points > 0:
+        publish_lock = (
+            db.query(CreditTransaction)
+            .filter(
+                CreditTransaction.ref_id == task.id,
+                CreditTransaction.type == "task_publish",
+                CreditTransaction.user_id == uid,
+            )
+            .first()
+        )
         already_refunded = (
             db.query(CreditTransaction)
             .filter(
@@ -956,7 +1014,7 @@ def cancel_task(
             )
             .first()
         )
-        if not already_refunded:
+        if publish_lock and not already_refunded:
             try:
                 user = db.query(User).filter(User.id == uid).with_for_update().first()
             except Exception:
@@ -1227,6 +1285,15 @@ def close_auction(
     refund = 0
     reward_points = int(getattr(task, "reward_points", 0) or 0)
     if reward_points > 0:
+        publish_lock = (
+            db.query(CreditTransaction)
+            .filter(
+                CreditTransaction.ref_id == task.id,
+                CreditTransaction.type == "task_publish",
+                CreditTransaction.user_id == uid,
+            )
+            .first()
+        )
         already = (
             db.query(CreditTransaction)
             .filter(
@@ -1236,7 +1303,7 @@ def close_auction(
             )
             .first()
         )
-        if not already:
+        if publish_lock and not already:
             try:
                 user = db.query(User).filter(User.id == uid).with_for_update().first()
             except Exception:

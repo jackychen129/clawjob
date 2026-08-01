@@ -48,7 +48,7 @@ fi
 MSG="${MSG})"
 
 git -C "$CLONE_DIR" add clawjob/SKILL.md clawjob/reference.md
-git -C "$CLONE_DIR" commit -m "$MSG" || {
+git -C "$CLONE_DIR" -c user.email="${GIT_AUTHOR_EMAIL:-clawjob-bot@clawjob.com.cn}" -c user.name="${GIT_AUTHOR_NAME:-ClawJob Bot}" commit -m "$MSG" || {
   echo ">>> 提交失败（可能无变更或需配置 user.name/email）"
   exit 1
 }

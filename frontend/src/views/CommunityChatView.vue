@@ -1,9 +1,9 @@
 <template>
-  <div class="community-view apple-layout">
+  <div class="community-view apple-layout apple-layout--wide">
     <PageHeader :title="t('community.title')" :description="t('community.desc')">
       <template #actions>
         <Button :as="RouterLink" to="/tasks" size="sm" variant="secondary">{{ t('community.growthLinkTasks') }}</Button>
-        <Button :as="RouterLink" to="/playbook" size="sm" variant="ghost">{{ t('community.growthLinkPlaybook') }}</Button>
+        <Button :as="RouterLink" to="/docs/openclaw-quickstart" size="sm" variant="ghost">{{ t('community.growthLinkPlaybook') }}</Button>
       </template>
     </PageHeader>
     <div class="community-layout">
@@ -36,7 +36,7 @@
           <p class="composer-upsell__links">
             <RouterLink class="growth-link" to="/account">{{ t('community.guestBannerAccount') }}</RouterLink>
             <span class="composer-upsell__sep">·</span>
-            <RouterLink class="growth-link" to="/playbook">{{ t('community.growthLinkPlaybook') }}</RouterLink>
+            <RouterLink class="growth-link" to="/join">{{ t('nav.joinAgent') }}</RouterLink>
             <span class="composer-upsell__sep">·</span>
             <span class="composer-upsell__nav-hint">{{ t('community.guestBannerNavHint') }}</span>
           </p>
@@ -45,7 +45,7 @@
           <p>{{ t('community.needAgentBanner') }}</p>
           <div class="composer-upsell__actions">
             <RouterLink class="composer-upsell__btn" to="/agents">{{ t('community.needAgentCta') }}</RouterLink>
-            <RouterLink class="composer-upsell__btn composer-upsell__btn--ghost" to="/playbook">{{ t('community.needAgentPlaybook') }}</RouterLink>
+            <RouterLink class="composer-upsell__btn composer-upsell__btn--ghost" to="/join">{{ t('community.needAgentPlaybook') }}</RouterLink>
           </div>
           <p class="composer-upsell__muted">{{ t('community.needAgentMuted') }}</p>
         </div>
@@ -388,6 +388,11 @@ function applyStarterDraft(text: string) {
 }
 
 onMounted(async () => {
+  if (typeof window !== 'undefined') {
+    rightPanelMq = window.matchMedia('(min-width: 1101px)')
+    syncRightPanelOpen()
+    rightPanelMq.addEventListener('change', syncRightPanelOpen)
+  }
   if (route.query.tab === 'tasks') {
     await router.replace('/tasks')
     return
@@ -439,7 +444,13 @@ watch(canSpeak, (v) => {
 onBeforeUnmount(() => {
   clearTypingPeers()
   closeWs()
+  if (rightPanelMq) rightPanelMq.removeEventListener('change', syncRightPanelOpen)
 })
+
+let rightPanelMq: MediaQueryList | null = null
+function syncRightPanelOpen() {
+  if (rightPanelMq) rightPanelOpen.value = rightPanelMq.matches
+}
 
 async function pushSkill() {
   if (!selectedTopicId.value || !pushTargetAgentId.value || !pushSkillId.value) return
@@ -458,14 +469,36 @@ async function pushSkill() {
 </script>
 
 <style scoped>
-.community-view { max-width: 1320px; margin: 0 auto; padding: 0 16px; }
-.community-header h1 { margin: 0 0 6px; }
-.community-header p { margin: 0 0 14px; opacity: .8; }
-.growth-strip { margin: 0 0 14px !important; font-size: 13px; opacity: .88 !important; line-height: 1.5; }
-.growth-link { color: #a78bfa; text-decoration: none; }
+.community-view {
+  padding: 0;
+  max-width: none;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.community-layout {
+  display: grid;
+  grid-template-columns: 280px 1fr 280px;
+  grid-template-rows: minmax(0, 1fr);
+  gap: 12px;
+  align-items: stretch;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  overflow: hidden;
+}
+.community-layout > * { min-width: 0; min-height: 0; }
+.community-main {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  min-height: 0;
+}
+.growth-link { color: var(--primary-color, #a78bfa); text-decoration: none; }
 .growth-link:hover { text-decoration: underline; }
-.community-layout { display:grid; grid-template-columns: 280px 1fr 280px; gap:12px; align-items:start; }
-.community-main { display:flex; flex-direction:column; gap:10px; }
 .typing-hint { margin:0; font-size:12px; min-height:22px; color:#c4b5fd; display:flex; align-items:center; gap:8px; }
 .typing-dots { display:inline-flex; gap:3px; }
 .typing-dots i { width:5px; height:5px; border-radius:50%; background:#a78bfa; animation:typing-bounce 1.2s ease-in-out infinite; }
@@ -473,7 +506,7 @@ async function pushSkill() {
 .typing-dots i:nth-child(3) { animation-delay: 0.3s; }
 @keyframes typing-bounce { 0%, 60%, 100% { transform: translateY(0); opacity: 0.45; } 30% { transform: translateY(-3px); opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .typing-dots i { animation: none; opacity: 0.8; } }
-.community-right { display:block; }
+.community-right { display: block; min-height: 0; overflow: hidden; }
 .community-right-summary {
   display: none;
   cursor: pointer;
@@ -485,7 +518,14 @@ async function pushSkill() {
   list-style: none;
 }
 .community-right-summary::-webkit-details-marker { display: none; }
-.community-right-inner { display:flex; flex-direction:column; gap:10px; }
+.community-right-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  max-height: 100%;
+  overflow: auto;
+}
 .tasks-tab-cta-panel {
   border: 1px solid var(--border-color, #2a2a2a);
   border-radius: 12px;
@@ -509,7 +549,10 @@ async function pushSkill() {
 .skill-push-panel { border:0; border-radius:0; padding:0 10px 10px; display:flex; flex-direction:column; gap:8px; }
 .hint { margin:0; font-size:12px; opacity:.75; }
 .push-btn { width:100%; }
-@media (max-width: 1100px) { .community-layout { grid-template-columns: 1fr; } }
+@media (max-width: 1100px) {
+  .community-layout { grid-template-columns: 1fr; grid-template-rows: auto; overflow: visible; }
+  .community-main { order: -1; }
+}
 .comm-onboard-backdrop {
   position: fixed;
   inset: 0;

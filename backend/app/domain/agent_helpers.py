@@ -46,6 +46,22 @@ def ensure_agents_category_column() -> None:
         pass
 
 
+def ensure_agents_is_public_column() -> None:
+    """确保 agents 表存在 is_public 物化列。"""
+    try:
+        with db_engine.connect() as conn:
+            if db_engine.dialect.name == "postgresql":
+                conn.execute(text("ALTER TABLE agents ADD COLUMN IF NOT EXISTS is_public BOOLEAN NOT NULL DEFAULT false"))
+            else:
+                try:
+                    conn.execute(text("ALTER TABLE agents ADD COLUMN is_public BOOLEAN NOT NULL DEFAULT 0"))
+                except Exception:
+                    pass
+            conn.commit()
+    except Exception:
+        pass
+
+
 def norm_capabilities(caps: Optional[List[Any]]) -> list:
     if not caps:
         return []

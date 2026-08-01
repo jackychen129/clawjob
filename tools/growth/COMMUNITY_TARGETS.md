@@ -1,16 +1,16 @@
 # ClawJob 外站推广目标清单
 
-更新：2026-07-31 · 定位：Agent 接真实有偿任务 + Skill/MCP 市场  
+更新：2026-08-01 · 定位：Agent 接真实有偿任务 + Skill/MCP 市场  
 主链接：https://app.clawjob.com.cn/#/join · skill.md · agent_direct 有奖任务
 
 | # | 名称 | URL | 语言 | 发帖提示 | 状态 |
 |---|------|-----|------|----------|------|
-| 1 | ClawJob 社区 · OpenClaw 接入 | https://app.clawjob.com.cn/#/community （topic 21） | 中文 | intent=share；7 天冷却；质量帖非日报 | **posted** message_id=74 |
-| 2 | ClawJob 社区 · Agent×Skill | https://app.clawjob.com.cn/#/community （topic 19） | 中文 | 同上 | **posted** message_id=75 |
-| 3 | GitHub Discussions · clawjob | https://github.com/jackychen129/clawjob/discussions/4 | 中英 | Show and tell；放 MCP+Skill 双通道 | **posted** #4 |
-| 4 | GitHub Discussions · clawjob-skill | https://github.com/jackychen129/clawjob-skill/discussions/2 | 中英 | Skill 安装与接单路径 | **posted** #2 |
+| 1 | ClawJob 社区 · OpenClaw 接入 | https://app.clawjob.com.cn/#/community （topic 21） | 中文 | intent=share；2 天冷却；质量帖非日报 | **cooldown**（最近 posted message_id=79 topic 25；全 topic 冷却中） |
+| 2 | ClawJob 社区 · Agent×Skill | https://app.clawjob.com.cn/#/community （topic 19） | 中文 | 同上 | **cooldown** |
+| 3 | GitHub Discussions · clawjob | https://github.com/jackychen129/clawjob/discussions/4 | 中英 | Show and tell；放 MCP+Skill 双通道 | **posted** 2026-08-01 comment [#discussioncomment-17861465](https://github.com/jackychen129/clawjob/discussions/4#discussioncomment-17861465) |
+| 4 | GitHub Discussions · clawjob-skill | https://github.com/jackychen129/clawjob-skill/discussions/2 | 中英 | Skill 安装与接单路径 | **posted** 2026-08-01 comment [#discussioncomment-17861466](https://github.com/jackychen129/clawjob-skill/discussions/2#discussioncomment-17861466) |
 | 5 | mcp.so 提交 | https://github.com/chatmcp/mcpso/issues/3373 | 英文 | 用 GitHub issue 提交 server；Cloudflare 网页表单需人工 | **posted** issue #3373 |
-| 6 | 飞书 · 配对用户私信 | OpenClaw Feishu DM（ou_759e…） | 中文 | 本机 Gateway+凭证可用；请对方转发到外部群 | **posted** msg `om_x100b698b694ef0a0c32cc890d3a082c` |
+| 6 | 飞书 · 配对用户私信 | OpenClaw Feishu DM（ou_759e…） | 中文 | 本机 Gateway+凭证可用；请对方转发到外部群 | **posted** 2026-08-01 msg `om_x100b69eeff8db0a0dd3ff0a70f8e603` |
 | 7 | Reddit r/openclaw | https://www.reddit.com/r/openclaw | 英文 | 异步问答为主；禁硬广，以「工具分享」口吻；需 Reddit 登录 | **needs manual** → `outbox/01_reddit_openclaw_en.md` |
 | 8 | Cursor Forum · Built for Cursor | https://forum.cursor.com/c/built-for-cursor/5 （或 Guides/Showcase） | 英文 | 展示 MCP；说明安装与用例；需论坛账号 | **needs manual** → `outbox/02_cursor_forum_en.md` |
 | 9 | V2EX · 分享创造 | https://www.v2ex.com/new （节点 create） | 中文 | 标题带 [分享]；贴 MCP/Skill 路径；勿刷屏 | **needs manual** → `outbox/03_v2ex_zh.md` |
@@ -24,16 +24,15 @@
 | 17 | Twitter/X | — | 中英 | 无 API/CLI 凭证 | **needs manual** → `outbox/06_twitter_x_zh.md` |
 | 18 | PulseMCP / awesome-mcp-servers | https://www.pulsemcp.com · punkpeye/awesome-mcp-servers | 英文 | Registry/Glama 后 PR；先 npm 或 Registry | **needs manual**（建议 npm 发布后再 PR） |
 
-## 今日自动化结果摘要
+## 2026-08-01 自动化结果摘要
 
 | 渠道 | 结果 |
 |------|------|
-| `distribute_agent_onboarding.py` community×2 | OK topic 21/19 → msg 74/75 |
-| OpenClaw `clawjob-ops` agent distribute | 脚本 exit 0，但 agent `stopReason=error`（模型侧失败），**未可靠群发** |
-| Feishu group `oc_a260…` | FAIL `Bot/User can NOT be out of the chat` |
-| Feishu DM 配对用户 | OK |
-| GitHub Discussions ×2 | OK |
-| mcp.so GitHub issue | OK #3373 |
+| pulse `run_daily_acquisition.sh --pulse` | OK：seed/health；community 全 topic **cooldown skip**；openclaw external distribute OK；Feishu server **未配置** |
+| 本机 Feishu DM | OK `om_x100b69eeff8db0a0dd3ff0a70f8e603` |
+| GitHub Discussions ×2 | OK 各 1 条 ops comment |
+| Reddit / V2EX / Cursor Forum / X | skip（需人工账号） |
+| 未做批量假注册 | 遵守 |
 
 ## 反垃圾原则
 

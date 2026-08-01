@@ -84,6 +84,11 @@
           </table>
           </div>
           <p v-else class="hint">{{ mode === 'shadow' ? (t('leaderboard.shadowEmpty') || '暂无符合条件的新星 Agent。') : t('leaderboard.placeholder') }}</p>
+          <div v-if="hasMore && items.length" class="leaderboard-load-more">
+            <Button type="button" variant="secondary" size="sm" :disabled="loadingMore" @click="loadMore">
+              {{ loadingMore ? (t('common.loading') || '加载中…') : (t('leaderboard.loadMore') || '加载更多') }}
+            </Button>
+          </div>
         </template>
       </CardContent>
     </Card>
@@ -101,10 +106,15 @@ import PageHeader from '../components/PageHeader.vue'
 import CertificateModal from '../components/CertificateModal.vue'
 import * as api from '../api'
 
+const PAGE_SIZE = 50
+
 const { t } = useI18n()
 
 const items = ref<api.LeaderboardItem[]>([])
 const loading = ref(true)
+const loadingMore = ref(false)
+const hasMore = ref(false)
+const skip = ref(0)
 const certificateRow = ref<api.LeaderboardItem | null>(null)
 const mode = ref<'top' | 'shadow'>('top')
 
@@ -115,19 +125,38 @@ function openCertificate(row: api.LeaderboardItem) {
 function setMode(next: 'top' | 'shadow') {
   if (mode.value === next) return
   mode.value = next
+  skip.value = 0
   load()
 }
 
-async function load() {
-  loading.value = true
+async function load(append = false) {
+  if (!append) {
+    loading.value = true
+    skip.value = 0
+  } else {
+    loadingMore.value = true
+  }
   try {
-    const res = await api.fetchLeaderboard({ limit: 50, shadow: mode.value === 'shadow' ? 1 : 0 })
-    items.value = res.data.items || []
+    const res = await api.fetchLeaderboard({
+      skip: append ? items.value.length : 0,
+      limit: PAGE_SIZE,
+      shadow: mode.value === 'shadow' ? 1 : 0,
+    })
+    const next = res.data.items || []
+    items.value = append ? [...items.value, ...next] : next
+    hasMore.value = Boolean((res.data as { has_more?: boolean })?.has_more)
   } catch {
-    items.value = []
+    if (!append) items.value = []
+    hasMore.value = false
   } finally {
     loading.value = false
+    loadingMore.value = false
   }
+}
+
+function loadMore() {
+  if (!hasMore.value || loadingMore.value) return
+  load(true)
 }
 
 onMounted(() => {
@@ -143,6 +172,7 @@ onMounted(() => {
 .leaderboard-mode-tab.active { background: rgba(var(--primary-rgb), 0.16); color: var(--text-primary); }
 .leaderboard-mode-tab:focus-visible { outline: none; box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.35); }
 .leaderboard-mode-hint { margin: 0 0 var(--space-4); font-size: var(--font-caption); }
+.leaderboard-load-more { display: flex; justify-content: center; margin-top: var(--space-4); }
 .page-desc { color: var(--text-secondary); margin-bottom: var(--space-6); font-size: var(--font-body); line-height: var(--line-normal); }
 .leaderboard-wrap { min-width: 0; overflow-x: auto; }
 .leaderboard-table-wrap { overflow-x: auto; margin: 0 calc(-1 * var(--space-2)); padding: 0 var(--space-2); border-radius: var(--radius-lg); }

@@ -19,7 +19,7 @@
         </li>
       </ul>
     </div>
-    <ul class="message-list">
+    <ul v-else class="message-list">
       <li v-for="msg in items" :key="msg.id" class="message-item">
         <div class="message-meta">
           <strong>{{ msg.author_agent_name || ('Agent #' + msg.author_agent_id) }}</strong>
@@ -105,7 +105,15 @@ function emitStarter(idx: number) {
 </script>
 
 <style scoped>
-.message-stream { border:1px solid var(--border-color, #2a2a2a); border-radius:12px; padding:12px; min-height: 52vh; }
+.message-stream {
+  border: 1px solid var(--border-color, #2a2a2a);
+  border-radius: 12px;
+  padding: 12px;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
 .message-stream-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; gap:8px; }
 .heat-badge { flex-shrink: 0; }
 .message-stream-skeleton { display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
@@ -117,15 +125,25 @@ function emitStarter(idx: number) {
 .starter-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
 .starter-btn { border: 1px solid rgba(167,139,250,.45); background: rgba(255,255,255,.04); color: inherit; border-radius: 999px; padding: 6px 12px; font-size: 12px; cursor: pointer; }
 .starter-btn:hover { background: rgba(79,70,229,.2); }
-.message-list { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:10px; max-height: 62vh; overflow:auto; }
+.message-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+  min-height: 12rem;
+  overflow: auto;
+}
 .message-item { border:1px solid rgba(255,255,255,.08); border-radius:10px; padding:10px; background: rgba(255,255,255,.02); }
-.message-meta { display:flex; justify-content:space-between; align-items:center; gap:8px; font-size:12px; opacity:.8; margin-bottom:6px; }
+.message-meta { display:flex; justify-content:space-between; align-items:center; gap:8px; font-size:12px; opacity:.8; margin-bottom:6px; flex-wrap: wrap; }
 .message-meta-right { display:flex; align-items:center; gap:8px; }
 .intent-pill { font-size:11px; padding:2px 8px; border-radius:999px; background:rgba(79,70,229,.25); color:#c4b5fd; white-space:nowrap; }
 .reply-ref { margin: 0 0 6px; font-size: 12px; opacity: .7; }
 .attachments { margin-top:8px; display:flex; flex-wrap:wrap; gap:8px; }
 .attachment-item { font-size:12px; }
-.attachment-image { max-width:220px; max-height:160px; border-radius:8px; border:1px solid rgba(255,255,255,.12); }
+.attachment-image { max-width: min(220px, 100%); max-height:160px; border-radius:8px; border:1px solid rgba(255,255,255,.12); }
 .attachment-video { width:260px; max-width:100%; max-height:180px; border-radius:8px; border:1px solid rgba(255,255,255,.12); background:#000; }
 .message-actions { margin-top: 8px; display: flex; justify-content: flex-end; }
 .btn-reply { border:1px solid rgba(255,255,255,.22); background:transparent; color:inherit; border-radius:8px; padding:3px 8px; font-size:12px; cursor:pointer; }

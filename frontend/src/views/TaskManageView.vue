@@ -149,6 +149,8 @@
                         <div class="task-table-meta">
                           <span v-if="task.category" class="task-table-category">{{ taskCategoryLabel(task.category) }}</span>
                           <span v-if="task.settlement_mode === 'agent_direct'" class="task-tag task-tag--exchange task-tag--agent_direct_settlement task-tag--sm">{{ t('task.settlementBadge') }}</span>
+                          <span v-if="task.publisher_reputation_score != null && task.publisher_reputation_score > 0" class="task-table-completions mono">{{ t('task.publisherRepShort', { n: task.publisher_reputation_score }) }}</span>
+                          <span v-if="(task.publisher_completed_count ?? 0) > 0" class="task-table-completions mono">{{ t('task.publisherDoneShort', { n: task.publisher_completed_count }) }}</span>
                           <span v-if="(task.category_completions ?? 0) > 0" class="task-table-completions mono">{{ t('task.completionsShort', { n: task.category_completions }) }}</span>
                         </div>
                       </TableCell>
@@ -197,7 +199,7 @@
                     </div>
                     <h3 class="task-row__title">{{ item.data!.title }}</h3>
                     <p class="task-row__desc">{{ (item.data!.description || t('common.noDescription')).slice(0, 120) }}{{ (item.data!.description || '').length > 120 ? '…' : '' }}</p>
-                    <p class="task-row__meta">{{ t('task.publisher') }}：{{ item.data!.publisher_name }}<span v-if="item.data!.creator_agent_name"> · {{ t('task.publishedByAgent') }}：{{ item.data!.creator_agent_name }}</span><span v-if="item.data!.subscription_count != null"> · {{ item.data!.subscription_count }}{{ t('task.subscribers') }}</span><span v-if="(item.data!.category_completions ?? 0) > 0"> · {{ t('task.completionsShort', { n: item.data!.category_completions }) }}</span></p>
+                    <p class="task-row__meta">{{ t('task.publisher') }}：{{ item.data!.publisher_name }}<span v-if="item.data!.creator_agent_name"> · {{ t('task.publishedByAgent') }}：{{ item.data!.creator_agent_name }}</span><span v-if="item.data!.publisher_reputation_score != null && item.data!.publisher_reputation_score > 0"> · {{ t('task.publisherRepShort', { n: item.data!.publisher_reputation_score }) }}</span><span v-if="(item.data!.publisher_completed_count ?? 0) > 0"> · {{ t('task.publisherDoneShort', { n: item.data!.publisher_completed_count }) }}</span><span v-if="item.data!.subscription_count != null"> · {{ item.data!.subscription_count }}{{ t('task.subscribers') }}</span><span v-if="(item.data!.category_completions ?? 0) > 0"> · {{ t('task.completionsShort', { n: item.data!.category_completions }) }}</span></p>
                     <p v-if="item.data!.status === 'open' && (item.data!.category_completions ?? 0) > 0" class="task-row__meta task-row__meta--social">{{ t('task.similarCompletions', { n: item.data!.category_completions }) }}</p>
                     <p v-if="item.data!.related_skill?.skill_token" class="task-row__meta task-row__meta--skill">
                       Skill: {{ item.data!.related_skill?.skill_name || item.data!.related_skill?.skill_token }}
@@ -1077,6 +1079,17 @@
                   </div>
                 </template>
               </div>
+              <div
+                v-if="selectedTaskDetail.status === 'completed' && auth.isLoggedIn && isExecutor(selectedTaskDetail)"
+                class="task-skill-publish-cta card card-content"
+              >
+                <h4 class="task-comments-title">{{ t('task.skillPublishCtaTitle') }}</h4>
+                <p class="hint">{{ t('task.skillPublishCtaBody') }}</p>
+                <div class="task-row__actions">
+                  <Button size="sm" type="button" :as="RouterLink" to="/agents">{{ t('task.skillPublishCtaAgents') }}</Button>
+                  <Button size="sm" type="button" variant="secondary" :as="RouterLink" to="/marketplace">{{ t('task.skillPublishCtaMarket') }}</Button>
+                </div>
+              </div>
               <div v-if="selectedTaskDetail && canA2aTask(selectedTaskDetail)" class="detail-a2a-sync">
                 <h4 class="task-comments-title">{{ t('task.a2aSyncTitle') || 'A2A 任务同步' }}</h4>
                 <p class="hint detail-a2a-sync__hint">{{ t('task.a2aSyncHint') || '与 GET /a2a/tasks/{id} 一致，便于 Agent 与发布方/接取方对齐状态。' }}</p>
@@ -1510,6 +1523,8 @@
               <option value="platform_credits">{{ t('task.settlementModeCredits') }}</option>
             </select>
             <p class="form-hint">{{ t('task.settlementModeHint') }}</p>
+            <p v-if="publishForm.settlement_mode === 'agent_direct'" class="form-hint">{{ t('task.agentDirectNoCreditsHint') }}</p>
+            <p v-else class="form-hint">{{ t('task.platformCreditsLockHint') }}</p>
           </div>
           <div class="form-group form-inline">
             <label class="form-label" for="publish-reward">{{ t('agentGuide.fieldRewardPoints') }}</label>

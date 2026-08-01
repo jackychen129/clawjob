@@ -28,8 +28,19 @@ from app.services import kyc as _kyc
 from app.services import payout as _payout
 from app.services import settlement as _settlement
 from app.security import get_current_user
+from app.routers import admin_overview_routes
 
 router = APIRouter(prefix="", tags=["Admin · 运营"])
+router.include_router(admin_overview_routes.router)
+
+
+def _invalidate_admin_overview_snapshot() -> None:
+    try:
+        from app.services.admin_overview import invalidate_admin_overview_cache
+
+        invalidate_admin_overview_cache()
+    except Exception:
+        pass
 
 
 def get_superuser_dep(get_current_user: Callable, get_db_fn: Callable):
@@ -67,138 +78,6 @@ def admin_dispatch_community_hot(
     res = _community.dispatch_hot_topics(db, top_limit=top_limit)
     db.commit()
     return {"ok": True, **res}
-
-
-@router.get("/overview")
-def get_admin_overview(db: Session = Depends(get_db)):
-    """运营仪表盘聚合：核心指标 + 待处理结算/争议/KYC/提现（减少 Admin UI 往返）。"""
-    from app.services import settlement as _settlement
-
-    now = datetime.utcnow()
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    hour_ago = now - timedelta(hours=1)
-
-    tasks_total = db.query(Task).count()
-    tasks_open = db.query(Task).filter(Task.status == "open").count()
-    tasks_completed = db.query(Task).filter(Task.status == "completed").count()
-    tasks_pending_verification = db.query(Task).filter(Task.status == "pending_verification").count()
-    tasks_disputed = db.query(Task).filter(Task.status == "disputed").count()
-
-    users_total = db.query(User).count()
-    users_new_today = db.query(User).filter(User.created_at >= today_start).count()
-    agents_total = db.query(Agent).count()
-    agents_new_today = db.query(Agent).filter(Agent.created_at >= today_start).count()
-
-    rewards_paid = db.query(func.coalesce(func.sum(Task.reward_points), 0)).filter(
-        Task.status == "completed", Task.reward_points.isnot(None)
-    ).scalar() or 0
-
-    kyc_pending = db.query(KycRecord).filter(KycRecord.status == "pending").count()
-    withdrawals_pending = db.query(WithdrawalRequest).filter(WithdrawalRequest.status == "pending").count()
-    settlement_counts = _settlement.count_unpaid_settlements(db)
-
-    requests_last_hour = db.query(SystemLog).filter(
-        SystemLog.category == "request", SystemLog.created_at >= hour_ago,
-    ).count()
-    errors_last_hour = db.query(SystemLog).filter(
-        SystemLog.level == "error", SystemLog.created_at >= hour_ago,
-    ).count()
-
-    return {
-        "generated_at": now.isoformat() + "Z",
-        "tasks": {
-            "total": tasks_total,
-            "open": tasks_open,
-            "completed": tasks_completed,
-            "pending_verification": tasks_pending_verification,
-            "disputed": tasks_disputed,
-        },
-        "users": {"total": users_total, "new_today": users_new_today},
-        "agents": {"total": agents_total, "new_today": agents_new_today},
-        "rewards_paid": int(rewards_paid),
-        "pending": {
-            "kyc_reviews": kyc_pending,
-            "withdrawals": withdrawals_pending,
-            "disputed_tasks": tasks_disputed,
-            "pending_verification_tasks": tasks_pending_verification,
-            "settlements": settlement_counts,
-        },
-        "observability": {
-            "requests_last_hour": int(requests_last_hour),
-            "errors_last_hour": int(errors_last_hour),
-        },
-    }
-
-
-@router.get("/metrics")
-def get_metrics(
-    db: Session = Depends(get_db),
-):
-    """核心指标：任务数、新注册人数、Agent 数等（含今日新增）。需管理员权限。"""
-    now = datetime.utcnow()
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    hour_ago = now - timedelta(hours=1)
-
-    tasks_total = db.query(Task).count()
-    tasks_open = db.query(Task).filter(Task.status == "open").count()
-    tasks_completed = db.query(Task).filter(Task.status == "completed").count()
-    tasks_today = db.query(Task).filter(Task.created_at >= today_start).count()
-    tasks_pending_verification = db.query(Task).filter(Task.status == "pending_verification").count()
-    tasks_disputed = db.query(Task).filter(Task.status == "disputed").count()
-
-    users_total = db.query(User).count()
-    users_new_today = db.query(User).filter(User.created_at >= today_start).count()
-    users_active_count = db.query(User).filter(User.is_active == True).count()
-
-    agents_total = db.query(Agent).count()
-    agents_today = db.query(Agent).filter(Agent.created_at >= today_start).count()
-    agents_active = db.query(Agent).filter(Agent.is_active == True).count()
-
-    rewards_paid = db.query(func.coalesce(func.sum(Task.reward_points), 0)).filter(
-        Task.status == "completed", Task.reward_points.isnot(None)
-    ).scalar() or 0
-
-    requests_last_hour = db.query(SystemLog).filter(
-        SystemLog.category == "request",
-        SystemLog.created_at >= hour_ago,
-    ).count()
-    errors_last_hour = db.query(SystemLog).filter(
-        SystemLog.level == "error",
-        SystemLog.created_at >= hour_ago,
-    ).count()
-
-    from app.domain.agent_public import count_public_agents
-
-    settlement_counts = _settlement.count_unpaid_settlements(db)
-
-    return {
-        "tasks": {
-            "total": tasks_total,
-            "open": tasks_open,
-            "completed": tasks_completed,
-            "today": tasks_today,
-            "pending_verification": tasks_pending_verification,
-            "disputed": tasks_disputed,
-        },
-        "users": {
-            "total": users_total,
-            "new_today": users_new_today,
-            "active": users_active_count,
-        },
-        "agents": {
-            "total": agents_total,
-            "new_today": agents_today,
-            "active": agents_active,
-            "public": int(count_public_agents(db)),
-        },
-        "rewards_paid": int(rewards_paid),
-        "pending_settlements": settlement_counts,
-        "observability": {
-            "requests_last_hour": int(requests_last_hour),
-            "errors_last_hour": int(errors_last_hour),
-        },
-        "generated_at": now.isoformat(),
-    }
 
 
 @router.get("/settlements/pending")
@@ -250,11 +129,6 @@ def get_logs(
     }
 
 
-@router.get("/me")
-def admin_me():
-    """确认当前用户为管理员（由路由级 dependency 校验），供前端判断是否展示管理入口。"""
-    return {"ok": True, "is_superuser": True}
-
 @router.get("/tasks/disputed")
 def get_disputed_tasks(
     skip: int = 0,
@@ -267,6 +141,14 @@ def get_disputed_tasks(
     items = []
     for t in rows:
         escrow = get_escrow(t) or {}
+        precheck = escrow.get("dispute_ai_precheck")
+        if not precheck:
+            try:
+                from app.services.dispute_precheck import build_dispute_precheck
+
+                precheck = build_dispute_precheck(t, escrow, initiator_role="unknown", use_llm=False)
+            except Exception:
+                precheck = None
         items.append({
             "id": t.id,
             "title": t.title,
@@ -276,6 +158,7 @@ def get_disputed_tasks(
             "updated_at": t.updated_at.isoformat() if t.updated_at else None,
             "dispute_reason": escrow.get("dispute_reason"),
             "dispute_evidence": escrow.get("dispute_evidence"),
+            "dispute_ai_precheck": precheck,
             "current_index": int(escrow.get("current_index", 0) or 0),
             "milestones_total": len(escrow.get("milestones") or []),
         })
@@ -324,6 +207,13 @@ def admin_resolve_escrow_dispute(
             + (f"。备注：{note_snip}" if note_snip else ""),
         )
         db.commit()
+        try:
+            from app.services.reputation_hooks import touch_agent_reputation_for_task
+
+            touch_agent_reputation_for_task(db, task)
+        except Exception:
+            pass
+        _invalidate_admin_overview_snapshot()
         return {
             "ok": True,
             "task_id": task_id,
@@ -348,6 +238,13 @@ def admin_resolve_escrow_dispute(
         + (f"。备注：{note_snip}" if note_snip else ""),
     )
     db.commit()
+    try:
+        from app.services.reputation_hooks import touch_agent_reputation_for_task
+
+        touch_agent_reputation_for_task(db, task)
+    except Exception:
+        pass
+    _invalidate_admin_overview_snapshot()
     finished = current_index >= (len(ms) - 1) if ms else False
     return {
         "ok": True,
@@ -678,6 +575,7 @@ def approve_kyc(
         raise HTTPException(status_code=404, detail="KYC 记录不存在")
     reviewer_id = int(current_user.get("user_id") or 0)
     rec = _kyc.approve(db, rec, reviewer_id=reviewer_id)
+    _invalidate_admin_overview_snapshot()
     return _kyc.serialize(rec)
 
 
@@ -755,6 +653,7 @@ def reject_kyc(
     reviewer_id = int(current_user.get("user_id") or 0)
     reason = (body.reason if body else "") or "未通过审核"
     rec = _kyc.reject(db, rec, reviewer_id=reviewer_id, reason=reason)
+    _invalidate_admin_overview_snapshot()
     return _kyc.serialize(rec)
 
 
@@ -842,6 +741,7 @@ def decide_withdrawal(
         raise HTTPException(status_code=400, detail="action 须为 mark_paid | reject")
     db.commit()
     db.refresh(req)
+    _invalidate_admin_overview_snapshot()
     return {
         "id": req.id,
         "status": req.status,
@@ -861,14 +761,23 @@ def list_all_workspaces(
     limit: int = 50,
     db: Session = Depends(get_db),
 ):
-    q = db.query(Workspace).order_by(desc(Workspace.created_at))
-    total = q.count()
+    seats_subq = (
+        db.query(
+            WorkspaceMember.workspace_id.label("ws_id"),
+            func.count(WorkspaceMember.id).label("seats_used"),
+        )
+        .group_by(WorkspaceMember.workspace_id)
+        .subquery()
+    )
+    q = (
+        db.query(Workspace, func.coalesce(seats_subq.c.seats_used, 0).label("seats_used"))
+        .outerjoin(seats_subq, Workspace.id == seats_subq.c.ws_id)
+        .order_by(desc(Workspace.created_at))
+    )
+    total = db.query(Workspace).count()
     rows = q.offset(skip).limit(min(limit, 200)).all()
     out = []
-    for ws in rows:
-        seats_used = (
-            db.query(WorkspaceMember).filter(WorkspaceMember.workspace_id == ws.id).count()
-        )
+    for ws, seats_used in rows:
         out.append(
             {
                 "id": ws.id,
@@ -876,7 +785,7 @@ def list_all_workspaces(
                 "slug": ws.slug,
                 "plan": ws.plan,
                 "seats": ws.seats,
-                "seats_used": seats_used,
+                "seats_used": int(seats_used or 0),
                 "credits": ws.credits,
                 "owner_user_id": ws.owner_user_id,
                 "created_at": ws.created_at.isoformat() if ws.created_at else None,

@@ -68,7 +68,7 @@ def submit_personal(
 ):
     user = _current_user(db, current_user)
     try:
-        rec = _kyc.submit_personal(db, user, body.dict())
+        rec = _kyc.submit_personal(db, user, body.model_dump())
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return {"kyc": _kyc.serialize(rec), "kyc_status": user.kyc_status}
@@ -103,7 +103,7 @@ def submit_business(
 ):
     user = _current_user(db, current_user)
     try:
-        rec = _kyc.submit_business(db, user, body.dict())
+        rec = _kyc.submit_business(db, user, body.model_dump())
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return {"kyc": _kyc.serialize(rec), "kyc_status": user.kyc_status}

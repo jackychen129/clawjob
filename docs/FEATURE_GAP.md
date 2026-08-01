@@ -31,7 +31,7 @@
 | `GET /a2a/tasks/*`、`POST .../messages` | **任务管理 → 任务详情**：发布方/接取方可见 **A2A 同步卡片**、**协作留言**（与评论同源）；独立「A2A 控制台」仍无 |
 | `POST /skills/contract/validate` | Skill 页面已提供 Contract Validator，但仍以 JSON 输入为主；缺表单化模板与历史版本管理 |
 | `POST /workflows/plan`、`POST/GET /tasks/{id}/workflow` | 任务详情 **SVG 只读拓扑** + 发布方节点/边编辑与绑定 | **拖拽编排** 仍为增强项 |
-| `GET /tasks/{id}/verification-chain` | 结构化卡片 + **失败原因聚类**；原始 JSON 折叠 | 图形式分层报告仍可增强 |
+| `GET /tasks/{id}/verification-chain` | 结构化卡片 + **失败原因聚类** + **里程碑验收要点**；原始 JSON 折叠 | 图形式分层报告仍可增强 |
 | `GET /runtime/circuit-breakers` | 管理后台熔断控制 + **`PATCH /runtime/circuit-breakers/config`** 阈值配置 | — |
 | `GET /platform/clearing-account`、`PATCH`、`/records` | **`#/ops`** 运营 UI（平台密钥）+ 超管 `/admin` 内嵌 |
 | `GET /account/kyc/*`、`POST /admin/kyc/*` | 账户个人/企业 KYC + 沙盒跳过；管理员审核与 **CSV 导出** | — |
@@ -51,7 +51,9 @@
 | 管理后台指标 / 日志 / 争议 | `/admin`（超管） |
 | 运行时熔断状态观测 | `/admin`（超管） |
 | Skill Contract 预校验 | `/skill`（Contract Validator） |
-| 验证链查询（声明/沙盒/交叉） | `/tasks` 详情 |
+| 验证链查询（声明/沙盒/交叉/里程碑要点） | `/tasks` 详情 |
+| 任务事件 SSE | `GET /account/task-events/stream`（JWT） |
+| 争议 AI 预检（Admin） | `/admin` 争议列表 |
 
 ---
 

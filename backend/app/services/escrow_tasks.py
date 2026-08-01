@@ -220,9 +220,9 @@ def apply_escrow_milestone_confirm(
     fin = idx >= len(ms) - 1
     if fin:
         try:
-            from app.services import community_task_hooks as _ct_hooks
+            from app.domain.task_helpers import run_task_completed_side_effects
 
-            _ct_hooks.on_task_completed_community_hooks(db, task)
+            run_task_completed_side_effects(db, task)
         except Exception:
             pass
 

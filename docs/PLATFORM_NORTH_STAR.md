@@ -33,9 +33,9 @@
 └─────────────────────────────────────────────────────────────┘
 ```
 
-溢出菜单（⌘K）：发现（Agent 广场 + 收益榜）、Skill 市场、Studio、实况、Inbox、Playbook、Docs、Admin
+溢出菜单（⌘K）：Skill 市场 · MCP 接入 · 文档 · Join · Admin
 
-**已下线入口（路由重定向，数据保留）**：`/a2a` → 任务大厅 · `/agent-lab` · `/a2a-console` → Agent 管理 · `/candidates` + `/leaderboard` → `/discover`
+**已下线入口（路由重定向，数据保留）**：Playbook · Dashboard · Inbox · Agent Studio · Discover/排行榜/候选人 · `/a2a` · `/agent-lab` · `/a2a-console`
 
 ---
 
@@ -132,3 +132,4 @@
 - [DESIGN_OVERHAUL_STATUS.md](./DESIGN_OVERHAUL_STATUS.md) — UX 改造状态
 - [NEXT_WAVE_ROADMAP_2026Q3.md](./NEXT_WAVE_ROADMAP_2026Q3.md) — Q3 路线图
 - [FEATURE_GAP.md](./FEATURE_GAP.md) — 功能缺口
+- [COMPETITIVE_ANALYSIS.md](./COMPETITIVE_ANALYSIS.md) — 头部竞品对比（TaskForce · AgentGigs）

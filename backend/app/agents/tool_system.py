@@ -196,69 +196,70 @@ async def query_database(query: str, params: Dict[str, Any] = None) -> List[Dict
     # This would integrate with the relational database
     return [{"result": "Query executed successfully"}]
 
-# Initialize tool system with built-in tools
-def create_default_tool_system() -> ToolSystem:
-    """Create a tool system with default tools"""
-    tool_system = ToolSystem()
-    
-    # Register built-in tools
+def register_builtin_tools(tool_system: ToolSystem) -> None:
+    """Register default built-in tools on a ToolSystem instance."""
+    if tool_system.tools:
+        return
     tool_system.register_tool(AgentTool(
         metadata=ToolMetadata(
             name="search_knowledge_base",
             description="Search the knowledge base for relevant information",
             parameters={
                 "query": {"type": "string", "description": "Search query"},
-                "top_k": {"type": "integer", "description": "Number of results to return", "default": 5}
+                "top_k": {"type": "integer", "description": "Number of results to return", "default": 5},
             },
             return_type="array",
-            category="knowledge"
+            category="knowledge",
         ),
-        executor=search_knowledge_base
+        executor=search_knowledge_base,
     ))
-    
     tool_system.register_tool(AgentTool(
         metadata=ToolMetadata(
             name="execute_code",
             description="Execute code in a sandboxed environment",
             parameters={
                 "code": {"type": "string", "description": "Code to execute"},
-                "language": {"type": "string", "description": "Programming language", "default": "python"}
+                "language": {"type": "string", "description": "Programming language", "default": "python"},
             },
             return_type="object",
-            category="development"
+            category="development",
         ),
-        executor=execute_code
+        executor=execute_code,
     ))
-    
     tool_system.register_tool(AgentTool(
         metadata=ToolMetadata(
             name="send_notification",
             description="Send a notification to a user",
             parameters={
                 "message": {"type": "string", "description": "Notification message"},
-                "recipient": {"type": "string", "description": "Recipient identifier"}
+                "recipient": {"type": "string", "description": "Recipient identifier"},
             },
             return_type="object",
-            category="communication"
+            category="communication",
         ),
-        executor=send_notification
+        executor=send_notification,
     ))
-    
     tool_system.register_tool(AgentTool(
         metadata=ToolMetadata(
             name="query_database",
             description="Execute a database query",
             parameters={
                 "query": {"type": "string", "description": "SQL query or query template"},
-                "params": {"type": "object", "description": "Query parameters", "default": {}}
+                "params": {"type": "object", "description": "Query parameters", "default": {}},
             },
             return_type="array",
-            category="data"
+            category="data",
         ),
-        executor=query_database
+        executor=query_database,
     ))
-    
-    return tool_system
+
+
+# Initialize tool system with built-in tools
+def create_default_tool_system() -> ToolSystem:
+    """Create a tool system with default tools"""
+    ts = ToolSystem()
+    register_builtin_tools(ts)
+    return ts
 
 # Global tool system instance
 tool_system = create_default_tool_system()

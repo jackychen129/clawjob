@@ -276,6 +276,8 @@ export interface TaskListItem {
   reward_points?: number
   subscription_count?: number
   category_completions?: number
+  publisher_completed_count?: number
+  publisher_reputation_score?: number | null
   comment_count?: number
   invited_agent_ids?: number[]
   submitted_at?: string

@@ -5518,6 +5518,81 @@ def test_agent_direct_paid_task_without_webhook():
     assert "webhook" in (bad.json().get("detail") or "").lower() or "回调" in (bad.json().get("detail") or "")
 
 
+def test_agent_direct_publish_without_locking_platform_credits():
+    """agent_direct 有奖发布不扣除平台信用点；撤单不虚构退款。"""
+    pub = f"ad_soft_{_unique()}"
+    _register_user(pub, f"{pub}@example.com", "pub")
+    pub_headers = {"Authorization": f"Bearer {client.post('/auth/login', json={'username': pub, 'password': 'pub'}).json()['access_token']}"}
+    bal0 = client.get("/account/balance", headers=pub_headers).json()["credits"]
+    reward = 40
+    tr = client.post(
+        "/tasks",
+        json={
+            "title": "Agent direct soft path no credits lock",
+            "reward_points": reward,
+            "settlement_mode": "agent_direct",
+        },
+        headers=pub_headers,
+    )
+    assert tr.status_code == 200, tr.text
+    bal1 = client.get("/account/balance", headers=pub_headers).json()["credits"]
+    assert bal1 == bal0
+    cancel = client.post(f"/tasks/{tr.json()['id']}/cancel", headers=pub_headers)
+    assert cancel.status_code == 200, cancel.text
+    assert int(cancel.json().get("refunded_points") or 0) == 0
+    bal2 = client.get("/account/balance", headers=pub_headers).json()["credits"]
+    assert bal2 == bal0
+
+
+def test_platform_credits_still_requires_balance():
+    """platform_credits 有奖任务仍需锁定信用点。"""
+    pub = f"pc_lock_{_unique()}"
+    _register_user(pub, f"{pub}@example.com", "pub")
+    pub_headers = {"Authorization": f"Bearer {client.post('/auth/login', json={'username': pub, 'password': 'pub'}).json()['access_token']}"}
+    # Drain signup bonus so balance is insufficient
+    bal = client.get("/account/balance", headers=pub_headers).json()["credits"]
+    if bal and bal > 0:
+        # Spend via a platform_credits publish of remaining-1 then try overshoot
+        spend = max(0, int(bal) - 5)
+        if spend > 0:
+            client.post(
+                "/tasks",
+                json={
+                    "title": "Drain credits",
+                    "reward_points": spend,
+                    "completion_webhook_url": "https://example.com/cb",
+                    "settlement_mode": "platform_credits",
+                },
+                headers=pub_headers,
+            )
+    fail = client.post(
+        "/tasks",
+        json={
+            "title": "Credits lock required",
+            "reward_points": 30,
+            "completion_webhook_url": "https://example.com/cb",
+            "settlement_mode": "platform_credits",
+        },
+        headers=pub_headers,
+    )
+    assert fail.status_code == 400
+    client.post("/account/recharge", json={"amount": 30}, headers=pub_headers)
+    before = client.get("/account/balance", headers=pub_headers).json()["credits"]
+    ok = client.post(
+        "/tasks",
+        json={
+            "title": "Credits lock ok",
+            "reward_points": 30,
+            "completion_webhook_url": "https://example.com/cb",
+            "settlement_mode": "platform_credits",
+        },
+        headers=pub_headers,
+    )
+    assert ok.status_code == 200, ok.text
+    after = client.get("/account/balance", headers=pub_headers).json()["credits"]
+    assert after == before - 30
+
+
 def test_admin_pending_settlements_and_stats_fields():
     """Admin 结算队列与 /stats settlement 计数字段。"""
     pub = f"adm_set_pub_{_unique()}"

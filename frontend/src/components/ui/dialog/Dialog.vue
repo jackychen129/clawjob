@@ -152,8 +152,8 @@ onUnmounted(() => {
 .ui-dialog-enter-active .ui-dialog-panel,
 .ui-dialog-leave-active .ui-dialog-panel {
   transition:
-    opacity var(--duration-m) var(--ease-apple),
-    transform var(--duration-m) var(--ease-apple);
+    opacity var(--duration-m) var(--ease-spring),
+    transform var(--duration-m) var(--ease-spring);
 }
 .ui-dialog-enter-from,
 .ui-dialog-leave-to {

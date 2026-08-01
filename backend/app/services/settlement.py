@@ -5,10 +5,11 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import HTTPException
+from sqlalchemy import cast, or_, String
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
-from app.database.relational_db import Agent, Task
+from app.database.relational_db import Agent, Task, engine
 
 VALID_METHOD_TYPES = frozenset({"alipay", "wechat", "bank", "crypto", "custom"})
 VALID_SETTLEMENT_STATUSES = frozenset({"pending", "paid", "disputed"})
@@ -119,6 +120,18 @@ def _write_settlement(task: Task, settlement: dict) -> None:
     base["settlement"] = settlement
     task.output_data = base
     flag_modified(task, "output_data")
+    _invalidate_settlement_caches()
+
+
+def _invalidate_settlement_caches() -> None:
+    try:
+        from app.services.admin_overview import invalidate_admin_overview_cache
+        from app.services.platform_stats_cache import invalidate_cache_key
+
+        invalidate_cache_key("clawjob:settlement:unpaid_counts")
+        invalidate_admin_overview_cache()
+    except Exception:
+        pass
 
 
 def create_settlement_on_confirm(task: Task, db: Session) -> dict:
@@ -214,7 +227,40 @@ def settlement_phase(settlement: dict) -> str:
     return "awaiting_payer"
 
 
+def _json_text(col):
+    """Extract JSON sub-key as text (PostgreSQL JSON + SQLite)."""
+    return cast(col, String)
+
+
+def _unpaid_settlement_base_query(db: Session):
+    """PostgreSQL JSON filters; SQLite/tests use legacy scan."""
+    if engine.dialect.name != "postgresql":
+        return None
+    settlement = Task.output_data["settlement"]
+    settlement_status = _json_text(settlement["status"])
+    return (
+        db.query(Task)
+        .filter(Task.output_data.isnot(None))
+        .filter(_json_text(Task.input_data["settlement_mode"]) == "agent_direct")
+        .filter(settlement.isnot(None))
+        .filter(
+            or_(
+                settlement_status.is_(None),
+                settlement_status != "paid",
+            )
+        )
+    )
+
+
 def _unpaid_settlement_rows(db: Session) -> List[Tuple[Task, dict]]:
+    q = _unpaid_settlement_base_query(db)
+    if q is not None:
+        rows: List[Tuple[Task, dict]] = []
+        for task in q.order_by(Task.updated_at.desc()).all():
+            settlement = get_settlement(task)
+            if settlement:
+                rows.append((task, settlement))
+        return rows
     rows: List[Tuple[Task, dict]] = []
     for task in db.query(Task).filter(Task.output_data.isnot(None)).order_by(Task.updated_at.desc()):
         if get_settlement_mode(task) != "agent_direct":
@@ -227,24 +273,59 @@ def _unpaid_settlement_rows(db: Session) -> List[Tuple[Task, dict]]:
 
 
 def count_unpaid_settlements(db: Session) -> dict:
-    awaiting_payer = 0
-    awaiting_payee = 0
-    for _, settlement in _unpaid_settlement_rows(db):
-        if settlement.get("payer_confirmed_at"):
-            awaiting_payee += 1
-        else:
-            awaiting_payer += 1
-    return {
-        "pending_total": awaiting_payer + awaiting_payee,
-        "awaiting_payer": awaiting_payer,
-        "awaiting_payee": awaiting_payee,
-    }
+    try:
+        from app.services.platform_stats_cache import _cache_get, _cache_set
+
+        cached = _cache_get("clawjob:settlement:unpaid_counts")
+        if isinstance(cached, dict) and "pending_total" in cached:
+            return cached
+    except Exception:
+        pass
+
+    q = _unpaid_settlement_base_query(db)
+    if q is not None:
+        payer_set = _json_text(Task.output_data["settlement"]["payer_confirmed_at"])
+        awaiting_payee = q.filter(payer_set.isnot(None), payer_set != "").count()
+        pending_total = q.count()
+        awaiting_payer = pending_total - awaiting_payee
+        result = {
+            "pending_total": pending_total,
+            "awaiting_payer": awaiting_payer,
+            "awaiting_payee": awaiting_payee,
+        }
+    else:
+        awaiting_payer = 0
+        awaiting_payee = 0
+        for _, settlement in _unpaid_settlement_rows(db):
+            if settlement.get("payer_confirmed_at"):
+                awaiting_payee += 1
+            else:
+                awaiting_payer += 1
+        result = {
+            "pending_total": awaiting_payer + awaiting_payee,
+            "awaiting_payer": awaiting_payer,
+            "awaiting_payee": awaiting_payee,
+        }
+    try:
+        from app.services.platform_stats_cache import _cache_set
+
+        _cache_set("clawjob:settlement:unpaid_counts", result, ttl=60)
+    except Exception:
+        pass
+    return result
 
 
 def list_unpaid_settlements(db: Session, skip: int = 0, limit: int = 50) -> Tuple[List[dict], int]:
-    all_rows = _unpaid_settlement_rows(db)
-    total = len(all_rows)
-    page = all_rows[skip : skip + min(limit, 200)]
+    q = _unpaid_settlement_base_query(db)
+    if q is not None:
+        total = q.count()
+        page_tasks = q.order_by(Task.updated_at.desc()).offset(skip).limit(min(limit, 200)).all()
+        page = [(t, get_settlement(t)) for t in page_tasks]
+        page = [(t, s) for t, s in page if s]
+    else:
+        all_rows = _unpaid_settlement_rows(db)
+        total = len(all_rows)
+        page = all_rows[skip : skip + min(limit, 200)]
     items = []
     for task, settlement in page:
         items.append(

@@ -1,9 +1,7 @@
 """Agent 信誉卡（Reputation Card）聚合服务。
 
-对外暴露 `compute_agent_reputation(db, agent_id)`，不写库，不引入新表；
-所有指标都基于已有 `Task` / `CreditTransaction` 等模型即时计算。
-
-输出字段定义详见 `compute_agent_reputation` 文档字符串。
+对外暴露 `compute_agent_reputation(db, agent_id)`；指标基于 Task 聚合，
+Redis 缓存 5 分钟，任务状态变更时失效。
 """
 
 from __future__ import annotations
@@ -17,8 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.database.relational_db import Agent, Task, User
 
-
-_DISPUTE_KEY = "disputed"  # Task.input_data["escrow"]["disputed"]
+_DISPUTE_KEY = "disputed"
 
 
 def _safe_int(value: Any, default: int = 0) -> int:
@@ -64,17 +61,6 @@ def _reputation_score(
     avg_completion_hours: Optional[float],
     recent_30d_completed: int,
 ) -> int:
-    """综合评分：0–100。无完成记录时保持 60 中位数，避免新人被压到底。
-
-    公式（设计目标：给验收通过率 + 活跃度 + 争议率权重）：
-    - 基础：60
-    - 首过验收率：+ up to 30（100% → +30）
-    - 近 30 天活跃：+ up to 10（5 单以上 +10，线性缩放）
-    - 争议扣分：- dispute_rate * 25
-    - 拒绝扣分：- rejection_rate * 15
-    - 速度加分：完成均值 < 24h +5，<72h +3
-    最终 clamp 到 [0, 100]。
-    """
     if accepted == 0:
         return 60
     score = 60.0
@@ -95,53 +81,92 @@ def _reputation_score(
     return max(0, min(100, int(round(score))))
 
 
-def compute_agent_reputation(db: Session, agent_id: int) -> Optional[Dict[str, Any]]:
-    """计算 Agent 信誉卡。若 Agent 不存在返回 None。
+def compute_agent_reputation(db: Session, agent_id: int, *, use_cache: bool = True) -> Optional[Dict[str, Any]]:
+    """计算 Agent 信誉卡。若 Agent 不存在返回 None。"""
+    aid = int(agent_id)
+    if use_cache:
+        from app.services.reputation_cache import get_cached_reputation, set_cached_reputation
 
-    返回结构（JSON 友好）：
-    {
-        "agent": {id, name, description, agent_type, category, skill_token, owner: {...}, created_at},
-        "stats": {
-            "accepted_task_count",
-            "completed_task_count",
-            "rejection_count",
-            "dispute_count",
-            "rejection_rate", "dispute_rate", "first_pass_confirm_rate",
-            "reward_points_total",
-            "avg_completion_hours",
-            "recent_30d_completed_count",
-            "recent_90d_completed_count",
-            "last_active_at",
-            "top_skills": [...],
-        },
-        "reputation_score": 0-100,
-    }
-    """
+        cached = get_cached_reputation(aid)
+        if cached is not None:
+            return cached
+    card = _compute_agent_reputation_uncached(db, aid)
+    if card and use_cache:
+        from app.services.reputation_cache import set_cached_reputation
+
+        set_cached_reputation(aid, card)
+    return card
+
+
+def _compute_agent_reputation_uncached(db: Session, agent_id: int) -> Optional[Dict[str, Any]]:
     agent = db.query(Agent).filter(Agent.id == int(agent_id)).first()
     if not agent:
         return None
 
     owner: Optional[User] = db.query(User).filter(User.id == agent.owner_id).first()
 
-    # NOTE: 所有被该 agent 接取的任务（无论状态）
-    accepted_tasks: List[Task] = (
-        db.query(Task).filter(Task.agent_id == agent.id).all()
+    accepted_count = int(
+        db.query(func.count(Task.id)).filter(Task.agent_id == agent.id).scalar() or 0
     )
-    accepted_count = len(accepted_tasks)
+    completed_count = int(
+        db.query(func.count(Task.id))
+        .filter(Task.agent_id == agent.id, Task.status == "completed")
+        .scalar()
+        or 0
+    )
+    reward_points_total = int(
+        db.query(func.coalesce(func.sum(Task.reward_points), 0))
+        .filter(Task.agent_id == agent.id, Task.status == "completed")
+        .scalar()
+        or 0
+    )
 
-    completed_tasks = [t for t in accepted_tasks if t.status == "completed"]
-    completed_count = len(completed_tasks)
+    now = datetime.utcnow()
+    d30 = now - timedelta(days=30)
+    d90 = now - timedelta(days=90)
+    recent_30 = int(
+        db.query(func.count(Task.id))
+        .filter(
+            Task.agent_id == agent.id,
+            Task.status == "completed",
+            Task.completed_at.isnot(None),
+            Task.completed_at >= d30,
+        )
+        .scalar()
+        or 0
+    )
+    recent_90 = int(
+        db.query(func.count(Task.id))
+        .filter(
+            Task.agent_id == agent.id,
+            Task.status == "completed",
+            Task.completed_at.isnot(None),
+            Task.completed_at >= d90,
+        )
+        .scalar()
+        or 0
+    )
 
-    # NOTE: 通过 timeline 事件中的 rejected 关键字累计拒绝次数；
-    # 若没有 timeline 或缺少事件，则保留 0，避免误判。
     rejection_count = 0
     dispute_count = 0
     completion_durations_hours: List[float] = []
     last_active_at: Optional[datetime] = None
-    reward_points_total = 0
+    completed_tasks_for_skills: List[Task] = []
 
-    for t in accepted_tasks:
-        extra = t.input_data if isinstance(t.input_data, dict) else {}
+    task_rows = (
+        db.query(
+            Task.status,
+            Task.input_data,
+            Task.created_at,
+            Task.completed_at,
+            Task.updated_at,
+            Task.category,
+        )
+        .filter(Task.agent_id == agent.id)
+        .yield_per(200)
+    )
+    for status, input_data, created_at, completed_at, updated_at, category in task_rows:
+        extra = input_data if isinstance(input_data, dict) else {}
         if isinstance(extra, dict):
             escrow = extra.get("escrow") if isinstance(extra.get("escrow"), dict) else None
             if escrow and escrow.get(_DISPUTE_KEY):
@@ -153,31 +178,24 @@ def compute_agent_reputation(db: Session, agent_id: int) -> Optional[Dict[str, A
                 kind = str(ev.get("kind") or ev.get("event") or "").lower()
                 if kind in {"rejected", "reject", "verification_rejected"}:
                     rejection_count += 1
-        if t.status == "completed":
-            reward_points_total += _safe_int(getattr(t, "reward_points", 0))
-            created = getattr(t, "created_at", None)
-            completed = getattr(t, "completed_at", None)
-            if isinstance(created, datetime) and isinstance(completed, datetime):
-                delta = completed - created
+        if status == "completed":
+            if isinstance(created_at, datetime) and isinstance(completed_at, datetime):
+                delta = completed_at - created_at
                 if delta.total_seconds() > 0:
                     completion_durations_hours.append(delta.total_seconds() / 3600.0)
-            ts = completed or getattr(t, "updated_at", None) or getattr(t, "created_at", None)
-            if isinstance(ts, datetime) and (last_active_at is None or ts > last_active_at):
-                last_active_at = ts
+            ts = completed_at or updated_at or created_at
+            if len(completed_tasks_for_skills) < 50:
+                completed_tasks_for_skills.append(
+                    Task(status=status, input_data=input_data, category=category, completed_at=completed_at)
+                )
         else:
-            ts = getattr(t, "updated_at", None) or getattr(t, "created_at", None)
-            if isinstance(ts, datetime) and (last_active_at is None or ts > last_active_at):
-                last_active_at = ts
+            ts = updated_at or created_at
+        if isinstance(ts, datetime) and (last_active_at is None or ts > last_active_at):
+            last_active_at = ts
 
     avg_completion_hours: Optional[float] = None
     if completion_durations_hours:
         avg_completion_hours = round(sum(completion_durations_hours) / len(completion_durations_hours), 2)
-
-    now = datetime.utcnow()
-    d30 = now - timedelta(days=30)
-    d90 = now - timedelta(days=90)
-    recent_30 = sum(1 for t in completed_tasks if isinstance(t.completed_at, datetime) and t.completed_at >= d30)
-    recent_90 = sum(1 for t in completed_tasks if isinstance(t.completed_at, datetime) and t.completed_at >= d90)
 
     denom = max(completed_count, 1)
     first_pass_rate: Optional[float] = None
@@ -187,8 +205,7 @@ def compute_agent_reputation(db: Session, agent_id: int) -> Optional[Dict[str, A
     accepted_denom = max(accepted_count, 1)
     rejection_rate = round(rejection_count / accepted_denom, 4) if accepted_count else 0.0
     dispute_rate = round(dispute_count / accepted_denom, 4) if accepted_count else 0.0
-
-    top_skills = _collect_top_skills(completed_tasks or accepted_tasks)
+    top_skills = _collect_top_skills(completed_tasks_for_skills)
 
     score = _reputation_score(
         completed=completed_count,
@@ -236,13 +253,29 @@ def compute_agent_reputation(db: Session, agent_id: int) -> Optional[Dict[str, A
 
 
 def compute_bulk_reputations(db: Session, agent_ids: List[int]) -> Dict[int, Dict[str, Any]]:
-    """为多个 Agent 计算信誉卡，返回 {agent_id: card}。未命中的 agent 自动跳过。"""
+    """为多个 Agent 计算信誉卡；优先读 Redis 缓存。"""
     out: Dict[int, Dict[str, Any]] = {}
+    missing: List[int] = []
+    from app.services.reputation_cache import get_cached_reputation, set_cached_reputation
+
     for aid in agent_ids:
         try:
-            card = compute_agent_reputation(db, int(aid))
+            cached = get_cached_reputation(int(aid))
+        except Exception:
+            cached = None
+        if cached is not None:
+            out[int(aid)] = cached
+        else:
+            missing.append(int(aid))
+    for aid in missing:
+        try:
+            card = _compute_agent_reputation_uncached(db, aid)
         except Exception:
             card = None
         if card is not None:
-            out[int(aid)] = card
+            out[aid] = card
+            try:
+                set_cached_reputation(aid, card)
+            except Exception:
+                pass
     return out

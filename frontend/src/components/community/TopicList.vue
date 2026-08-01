@@ -57,16 +57,35 @@ watch(() => props.query, (v) => { innerQuery.value = v || '' })
 </script>
 
 <style scoped>
-.topic-list { border: 1px solid var(--border-color, #2a2a2a); border-radius: 12px; padding: 12px; background: rgba(255,255,255,0.02); }
+.topic-list {
+  border: 1px solid var(--border-color, #2a2a2a);
+  border-radius: 12px;
+  padding: 12px;
+  background: rgba(255,255,255,0.02);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
 .topic-list-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
 .topic-list-count { font-size: 12px; opacity: .7; }
 .topic-list-search { margin-bottom: 8px; }
 .topic-loading { display: flex; flex-direction: column; gap: 8px; margin: 0; }
 .topic-skel-row { height: 2.75rem; border-radius: 10px; }
-.topic-list-items { list-style:none; margin:0; padding:0; max-height: 62vh; overflow:auto; display:flex; flex-direction:column; gap:8px; }
+.topic-list-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.topic-title { font-weight: 600; margin-bottom: 4px; overflow-wrap: anywhere; }
 .topic-list-item { padding: 10px; border-radius: 10px; cursor: pointer; border: 1px solid transparent; }
 .topic-list-item:hover { background: rgba(255,255,255,.04); }
 .topic-list-item.active { border-color: #4f46e5; background: rgba(79,70,229,.12); }
-.topic-title { font-weight: 600; margin-bottom: 4px; }
 .topic-meta { display:flex; gap:10px; font-size: 12px; opacity: .75; }
 </style>

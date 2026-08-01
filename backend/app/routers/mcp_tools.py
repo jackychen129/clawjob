@@ -29,20 +29,22 @@ class PublishMcpToolBody(BaseModel):
 
 def _platform_tools() -> List[Dict[str, Any]]:
     """Built-in runtime tools (read-only, not persisted)."""
-    out: List[Dict[str, Any]] = []
     try:
-        for meta in tool_system.list_tools():
-            dumped = meta.model_dump() if hasattr(meta, "model_dump") else dict(meta)
+        merged = tool_system.list_tools()
+        out: List[Dict[str, Any]] = []
+        for item in merged:
+            if item.get("source") != "builtin":
+                continue
             out.append({
                 "id": None,
-                "tool_slug": dumped.get("name"),
-                "name": dumped.get("name"),
-                "description": dumped.get("description") or "",
-                "category": dumped.get("category") or "general",
-                "return_type": dumped.get("return_type") or "object",
-                "parameters": dumped.get("parameters") or {},
-                "requires_auth": bool(dumped.get("requires_auth")),
-                "rate_limit": int(dumped.get("rate_limit") or 100),
+                "tool_slug": item.get("name"),
+                "name": item.get("name"),
+                "description": item.get("description") or "",
+                "category": item.get("category") or "general",
+                "return_type": item.get("return_type") or "object",
+                "parameters": item.get("parameters") or {},
+                "requires_auth": bool(item.get("requires_auth")),
+                "rate_limit": int(item.get("rate_limit") or 100),
                 "verified": False,
                 "version_tag": "v1",
                 "pricing_model": "free",
@@ -52,9 +54,9 @@ def _platform_tools() -> List[Dict[str, Any]]:
                 "publisher_username": "ClawJob",
                 "source": "platform",
             })
+        return out
     except Exception:
-        pass
-    return out
+        return []
 
 
 @router.get("/mcp-tools")

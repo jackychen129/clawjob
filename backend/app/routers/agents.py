@@ -14,11 +14,12 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from app.core.systems import runtime_guard, task_system
 from app.database.relational_db import (
-    Agent, CreditTransaction, ExecutionRun, ExecutionStep, PublishedAgentTemplate,
+    Agent, AgentStats, CreditTransaction, ExecutionRun, ExecutionStep, PublishedAgentTemplate,
     PublishedSkill, SystemLog, Task, TaskBid, TaskComment, TaskSubscription, User, get_db,
 )
 from app.domain.agent_helpers import (
     RegisterAgentBody, SendMessageBody, ensure_agents_category_column,
+    ensure_agents_is_public_column,
     get_my_agent, norm_capabilities, published_skill_ids_by_token,
 )
 from app.domain.skill_xp import (
@@ -64,7 +65,16 @@ def register_agent(
     """注册我的 Agent（需登录），用于接取/订阅他人任务。调用方须提供：当前使用的 token（请求头 Authorization: Bearer <token>）与 Agent 名称（Body 的 name）。参数对齐 OpenClaw/Clawl agent。"""
     preflight = enforce_preflight("agent_register")
     ensure_agents_category_column()
+    ensure_agents_is_public_column()
     uid = int(current_user["user_id"])
+    max_per_user = int(os.getenv("CLAWJOB_MAX_AGENTS_PER_USER", "50"))
+    if max_per_user > 0:
+        owned = db.query(Agent).filter(Agent.owner_id == uid).count()
+        if owned >= max_per_user:
+            raise HTTPException(
+                status_code=400,
+                detail=f"每个用户最多注册 {max_per_user} 个 Agent（平台扩容中，联系管理员可提高限额）",
+            )
     primary_type = (body.agent_type or "general").strip() or "general"
     if body.types and len(body.types) > 0:
         primary_type = (body.types[0] or primary_type).strip() or primary_type
@@ -115,6 +125,7 @@ def register_agent(
         # NOTE: translated comment in English.
         if "category" in err_msg or "does not exist" in err_msg or "column" in err_msg:
             ensure_agents_category_column()
+            ensure_agents_is_public_column()
             agent_retry = Agent(
                 name=body.name.strip(),
                 description=(body.description or "").strip(),
@@ -142,6 +153,21 @@ def register_agent(
                 db.rollback()
         else:
             raise
+    try:
+        from app.domain.agent_public import sync_agent_is_public
+
+        owner = db.query(User).filter(User.id == uid).first()
+        sync_agent_is_public(db, agent, owner)
+        db.commit()
+        db.refresh(agent)
+    except Exception:
+        db.rollback()
+    try:
+        from app.services.platform_stats_cache import invalidate_platform_stats_cache
+
+        invalidate_platform_stats_cache()
+    except Exception:
+        pass
     return {
         "id": agent.id,
         "name": agent.name,
@@ -174,6 +200,7 @@ def list_my_agents(
 ):
     """我注册的 Agent 列表（需登录），按积分（完成任务获得）降序。线上容错：查询失败时补列并重试或返回空列表。"""
     ensure_agents_category_column()
+    ensure_agents_is_public_column()
     uid = int(current_user["user_id"])
 
     def _build_agent_item(
@@ -242,6 +269,7 @@ def list_my_agents(
         err_msg = str(e).lower()
         if "column" in err_msg or "does not exist" in err_msg or "category" in err_msg:
             ensure_agents_category_column()
+            ensure_agents_is_public_column()
         try:
             agents = db.query(Agent).filter(Agent.owner_id == uid).order_by(Agent.id.desc()).all()
             aid_list = [a.id for a in agents]
@@ -336,38 +364,35 @@ def agent_send_message(
 @router.get("/candidates")
 def list_candidates(
     skip: int = 0,
-    limit: int = 100,
+    limit: int = 50,
     sort: str = "points",  # points | recent（最近注册优先）
+    include_skills: int = 0,
     db: Session = Depends(get_db),
 ):
     """候选者列表（公开）：已注册的 Agent、所属用户（游客显示「待注册」）、具备的 Skill（capabilities）、发布任务数。"""
-    from app.domain.agent_public import apply_public_agent_filters, filter_public_agent_rows
+    from app.domain.agent_public import apply_public_agent_filters, paginate_public_agent_rows
+    from app.services.platform_stats_cache import AGENTS_GROWTH_GOAL, get_cached_public_agents_count
 
-    points_subq = (
-        db.query(Task.agent_id, func.coalesce(func.sum(Task.reward_points), 0).label("points"))
-        .filter(Task.status == "completed", Task.agent_id.isnot(None))
-        .group_by(Task.agent_id)
-        .subquery()
-    )
-    published_subq = (
-        db.query(Task.creator_agent_id, func.count(Task.id).label("published_count"))
-        .filter(Task.creator_agent_id.isnot(None))
-        .group_by(Task.creator_agent_id)
-        .subquery()
-    )
+    skip = max(0, int(skip or 0))
+    limit = max(1, min(int(limit or 50), 100))
+    want_skills = bool(int(include_skills or 0))
+
     q = (
-        db.query(Agent, User, func.coalesce(points_subq.c.points, 0).label("points"), func.coalesce(published_subq.c.published_count, 0).label("published_count"))
+        db.query(
+            Agent,
+            User,
+            func.coalesce(AgentStats.earned_points, 0).label("points"),
+            func.coalesce(AgentStats.published_count, 0).label("published_count"),
+        )
         .join(User, Agent.owner_id == User.id)
-        .outerjoin(points_subq, Agent.id == points_subq.c.agent_id)
-        .outerjoin(published_subq, Agent.id == published_subq.c.creator_agent_id)
+        .outerjoin(AgentStats, Agent.id == AgentStats.agent_id)
     )
     q = apply_public_agent_filters(q)
     if (sort or "").strip().lower() == "recent":
         q = q.order_by(Agent.id.desc())
     else:
-        q = q.order_by(points_subq.c.points.desc().nullslast(), Agent.id.desc())
-    fetch_n = max(limit * 3, limit + 20)
-    rows = filter_public_agent_rows(q.offset(skip).limit(fetch_n).all())[:limit]
+        q = q.order_by(AgentStats.earned_points.desc().nullslast(), Agent.id.desc())
+    rows, has_more = paginate_public_agent_rows(q, skip=skip, limit=limit)
     skill_tokens = set()
     for row in rows:
         a = row[0]
@@ -384,11 +409,12 @@ def list_candidates(
         a, owner, points, published_count = row
         cfg = a.config or {}
         skill_token = (cfg.get("skill_bound_token") or "").strip()
-        xp_map = agent_skill_xp_map(db, a.id)
         skills = []
-        for name, xp in sorted(xp_map.items(), key=lambda kv: (-kv[1], kv[0]))[:5]:
-            lv = level_from_xp(int(xp))
-            skills.append({"name": name, "xp": int(xp), "level": int(lv.get("level", 1))})
+        if want_skills:
+            xp_map = agent_skill_xp_map(db, a.id)
+            for name, xp in sorted(xp_map.items(), key=lambda kv: (-kv[1], kv[0]))[:5]:
+                lv = level_from_xp(int(xp))
+                skills.append({"name": name, "xp": int(xp), "level": int(lv.get("level", 1))})
         app_base = os.getenv("CLAWJOB_APP_URL", FRONTEND_URL or "https://app.clawjob.com.cn").rstrip("/")
         owner_username = owner.username if owner else None
         out.append({
@@ -413,7 +439,15 @@ def list_candidates(
             "published_skill_id": published_skill_by_token.get(skill_token),
             "skills": skills,
         })
-    return {"candidates": out, "total": len(out)}
+    total_public = get_cached_public_agents_count(db)
+    return {
+        "candidates": out,
+        "total": total_public,
+        "skip": skip,
+        "limit": limit,
+        "has_more": has_more,
+        "agents_goal": AGENTS_GROWTH_GOAL,
+    }
 @router.get("/agents/{agent_id}/tasks")
 def list_agent_tasks(
     agent_id: int,

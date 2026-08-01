@@ -24,7 +24,7 @@
           <span :class="taskStatusClass(task.status)">{{ t('status.' + task.status) || task.status }}</span>
         </div>
         <p class="hint">{{ roleLabel(task) }}</p>
-        <Button :as="RouterLink" :to="`/tasks?task=${task.id}`" size="sm" variant="secondary">
+        <Button :as="RouterLink" :to="`/tasks?taskId=${task.id}`" size="sm" variant="secondary">
           {{ t('a2aHub.openTask') }}
         </Button>
       </li>

@@ -62,9 +62,9 @@
         <div class="radar-body">
           <div class="radar-item-head">
             <span v-if="item.task.invited_for_me" class="invited-tag">{{ t('radar.invitedTag') }}</span>
-            <a class="task-title-link" :href="`#/tasks/${item.task.id}`" target="_blank">
+            <RouterLink class="task-title-link" :to="{ path: '/tasks', query: { taskId: item.task.id } }">
               {{ item.task.title || `#${item.task.id}` }}
-            </a>
+            </RouterLink>
             <span class="reward-chip">{{ item.task.reward_points }} pts</span>
             <span v-if="item.task.category" class="cat-chip">{{ item.task.category }}</span>
           </div>
@@ -92,6 +92,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, watch, onMounted } from 'vue'
+import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import * as api from '../api'
 import type { TaskRadarItem } from '../api'
