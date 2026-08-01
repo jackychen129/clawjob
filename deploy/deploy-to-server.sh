@@ -105,7 +105,10 @@ rsync -avz --delete \
   --exclude 'deploy/.env' \
   --exclude 'tools/growth/.distribution_state.json' \
   --exclude 'tools/growth/.acquisition_paused' \
+  --exclude 'tools/growth/.daily_loop_paused' \
+  --exclude 'tools/growth/.last_daily_deploy_sha' \
   --exclude 'tools/growth/*.log' \
+  --exclude '.src-mirror/' \
   --exclude '.openclaw-cli/' \
   --exclude 'bin/openclaw' \
   --exclude 'bin/node' \
@@ -117,8 +120,9 @@ rsync -avz --delete \
 echo ">>> 在服务器上检查 .env 并启动 Docker..."
 # NOTE: translated comment in English.
 export FORCE_REBUILD_FRONTEND="${FORCE_REBUILD_FRONTEND:-$([ -n "$DOMAIN" ] && echo 1 || echo 0)}"
+export FORCE_REBUILD_BACKEND="${FORCE_REBUILD_BACKEND:-0}"
 # NOTE: translated comment in English.
-$SSH_CMD "${SSH_USER}@${SERVER_IP}" "export FORCE_REBUILD_FRONTEND='${FORCE_REBUILD_FRONTEND}'; export DOMAIN='${DOMAIN}'; export SITE_DOMAIN='${SITE_DOMAIN}'; set -e
+$SSH_CMD "${SSH_USER}@${SERVER_IP}" "export FORCE_REBUILD_FRONTEND='${FORCE_REBUILD_FRONTEND}'; export FORCE_REBUILD_BACKEND='${FORCE_REBUILD_BACKEND}'; export DOMAIN='${DOMAIN}'; export SITE_DOMAIN='${SITE_DOMAIN}'; set -e
   cd ${REMOTE_DIR}/deploy
   if [ ! -f .env ]; then
     cp .env.example .env
@@ -158,11 +162,11 @@ $SSH_CMD "${SSH_USER}@${SERVER_IP}" "export FORCE_REBUILD_FRONTEND='${FORCE_REBU
   docker ps -a --filter name=clawjob-frontend --format '{{.ID}}' | xargs -r docker rm -f
   # Do NOT rm backend unless we are replacing it — tearing both down + up --build
   # previously forced a multi-GB torch rebuild and caused production 502s.
-  if [ \"\${FORCE_REBUILD_BACKEND:-0}\" = \"1\" ]; then
+  if [ \"\$FORCE_REBUILD_BACKEND\" = \"1\" ]; then
     docker ps -a --filter name=clawjob-backend --format '{{.ID}}' | xargs -r docker rm -f
   fi
   # Prefer image reuse. Only rebuild images that changed; never blanket --build.
-  if [ \"\${FORCE_REBUILD_BACKEND:-0}\" = \"1\" ]; then
+  if [ \"\$FORCE_REBUILD_BACKEND\" = \"1\" ]; then
     echo '启动 Docker Compose（含 backend 重建）...'
     docker compose -f docker-compose.prod.yml --env-file .env up -d --build --remove-orphans
   else
