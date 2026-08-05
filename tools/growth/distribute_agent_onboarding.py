@@ -180,19 +180,65 @@ def token_seems_valid(token: str) -> bool:
         return True
 
 
-def resolve_distributor(state: dict) -> tuple[str, int]:
-    """Reuse env or persisted distributor; register at most when missing/expired."""
+def distributor_agent_usable(token: str, agent_id: int) -> bool:
+    """Token may still work after agent was deleted/deactivated — verify ownership."""
+    if not token_seems_valid(token):
+        return False
+    try:
+        data = _req("GET", "/agents/mine", token=token)
+    except urllib.error.HTTPError as e:
+        if e.code in (401, 403):
+            return False
+        # Fall back to trust-card existence check
+        try:
+            card = _req("GET", f"/agents/{int(agent_id)}/trust-card", token=token)
+            return int(card.get("agent_id") or 0) == int(agent_id)
+        except Exception:
+            return False
+    except Exception:
+        return False
+    items = data.get("agents") or data.get("items") or data.get("data") or []
+    if isinstance(data, list):
+        items = data
+    for ag in items:
+        if not isinstance(ag, dict):
+            continue
+        if int(ag.get("id") or ag.get("agent_id") or 0) != int(agent_id):
+            continue
+        if ag.get("is_active") is False:
+            return False
+        return True
+    return False
+
+
+def clear_distributor(state: dict) -> None:
+    state["distributor"] = {}
+
+
+def resolve_distributor(state: dict, *, force_new: bool = False) -> tuple[str, int]:
+    """Reuse env or persisted distributor; register when missing/expired/agent gone."""
     token = os.environ.get("CLAWJOB_ACCESS_TOKEN", "").strip()
     agent_id_env = os.environ.get("CLAWJOB_AGENT_ID", "").strip()
-    if token and agent_id_env:
-        return token, int(agent_id_env)
+    if token and agent_id_env and not force_new:
+        if distributor_agent_usable(token, int(agent_id_env)):
+            return token, int(agent_id_env)
+        print("[warn] CLAWJOB_ACCESS_TOKEN/AGENT_ID unusable — falling back to register")
 
     dist = state.get("distributor") or {}
     saved_token = str(dist.get("access_token") or "").strip()
     saved_id = dist.get("agent_id")
-    if saved_token and saved_id is not None and token_seems_valid(saved_token):
+    if (
+        not force_new
+        and saved_token
+        and saved_id is not None
+        and distributor_agent_usable(saved_token, int(saved_id))
+    ):
         print(f"Reusing distribution agent_id={saved_id}")
         return saved_token, int(saved_id)
+
+    if saved_id is not None:
+        print(f"[info] clearing stale distributor agent_id={saved_id}")
+        clear_distributor(state)
 
     print("Registering distribution agent…")
     token, agent_id = register_agent()
@@ -502,6 +548,23 @@ def main() -> int:
                 results["community"].append({"topic_id": tid, "message_id": mid})
             except urllib.error.HTTPError as e:
                 body = e.read().decode() if e.fp else ""
+                # Stale distributor agent (deleted/deactivated) — re-register once and retry
+                if e.code in (401, 403) and "Agent" in body and token and agent_id is not None:
+                    print(
+                        f"[warn] topic {tid}: distributor agent unusable ({e.code}) — re-register and retry",
+                        file=sys.stderr,
+                    )
+                    try:
+                        token, agent_id = resolve_distributor(state, force_new=True)
+                        res = post_community(token, agent_id, tid, msg)
+                        mid = res.get("message", {}).get("id")
+                        print(f"[OK] community topic {tid} message_id={mid} (retry)")
+                        state.setdefault("topics", {})[str(tid)] = _now_iso()
+                        results["community"].append({"topic_id": tid, "message_id": mid, "retried": True})
+                        continue
+                    except Exception as retry_err:
+                        body = str(retry_err)[:300]
+                        print(f"[FAIL] topic {tid} retry: {body}", file=sys.stderr)
                 print(f"[FAIL] topic {tid}: HTTP {e.code} {body[:300]}", file=sys.stderr)
                 results["errors"].append({"topic_id": tid, "error": body[:300]})
 
