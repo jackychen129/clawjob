@@ -188,22 +188,36 @@
                     @keydown.space.prevent="openTaskDetail(item.data!)"
                   >
                     <div class="task-row__head">
+                      <span v-if="item.data!.reward_points" class="task-row__reward mono">{{ t('task.reward', { n: item.data!.reward_points }) }}</span>
+                      <span v-else class="task-row__reward task-row__reward--zero mono">{{ t('task.rewardZero') }}</span>
+                      <span v-if="item.data!.settlement_mode === 'agent_direct'" class="task-tag task-tag--exchange task-tag--agent_direct_settlement">{{ t('task.settlementBadge') }}</span>
                       <span v-if="item.data!.category" class="task-row__category">{{ taskCategoryLabel(item.data!.category) }}</span>
                       <span v-if="item.data!.collaborative" class="task-tag task-tag--collab">{{ t('task.collaborativeBadge') }}</span>
                       <span v-if="taskHasOpenAuction(item.data!)" class="task-tag task-tag--auction">{{ t('auction.statusOpen') }}</span>
-                      <span v-if="item.data!.settlement_mode === 'agent_direct'" class="task-tag task-tag--exchange task-tag--agent_direct_settlement">{{ t('task.settlementBadge') }}</span>
-                      <span v-for="b in (item.data!.badges || []).filter((x) => x !== 'agent_direct_settlement')" :key="b" class="task-tag" :class="'task-tag--' + b">{{ taskBadgeLabel(b) }}</span>
+                      <span v-for="b in (item.data!.badges || []).filter((x) => x !== 'agent_direct_settlement').slice(0, 2)" :key="b" class="task-tag" :class="'task-tag--' + b">{{ taskBadgeLabel(b) }}</span>
                       <span :class="taskStatusPillClass(item.data!.status)">{{ t('status.' + item.data!.status) || item.data!.status }}</span>
-                      <span v-if="item.data!.reward_points" class="task-row__reward mono">{{ t('task.reward', { n: item.data!.reward_points }) }}</span>
-                      <span v-else class="task-row__reward task-row__reward--zero mono">{{ t('task.rewardZero') }}</span>
                     </div>
                     <h3 class="task-row__title">{{ item.data!.title }}</h3>
                     <p class="task-row__desc">{{ (item.data!.description || t('common.noDescription')).slice(0, 120) }}{{ (item.data!.description || '').length > 120 ? '…' : '' }}</p>
-                    <p class="task-row__meta">{{ t('task.publisher') }}：{{ item.data!.publisher_name }}<span v-if="item.data!.creator_agent_name"> · {{ t('task.publishedByAgent') }}：{{ item.data!.creator_agent_name }}</span><span v-if="item.data!.publisher_reputation_score != null && item.data!.publisher_reputation_score > 0"> · {{ t('task.publisherRepShort', { n: item.data!.publisher_reputation_score }) }}</span><span v-if="(item.data!.publisher_completed_count ?? 0) > 0"> · {{ t('task.publisherDoneShort', { n: item.data!.publisher_completed_count }) }}</span><span v-if="item.data!.subscription_count != null"> · {{ item.data!.subscription_count }}{{ t('task.subscribers') }}</span><span v-if="(item.data!.category_completions ?? 0) > 0"> · {{ t('task.completionsShort', { n: item.data!.category_completions }) }}</span></p>
-                    <p v-if="item.data!.status === 'open' && (item.data!.category_completions ?? 0) > 0" class="task-row__meta task-row__meta--social">{{ t('task.similarCompletions', { n: item.data!.category_completions }) }}</p>
-                    <p v-if="item.data!.related_skill?.skill_token" class="task-row__meta task-row__meta--skill">
-                      Skill: {{ item.data!.related_skill?.skill_name || item.data!.related_skill?.skill_token }}
-                    </p>
+                    <div class="task-row__trust" aria-label="trust">
+                      <span class="task-row__trust-pub">{{ t('task.publisher') }} · {{ item.data!.publisher_name || '—' }}</span>
+                      <span
+                        v-if="item.data!.publisher_reputation_score != null && item.data!.publisher_reputation_score > 0"
+                        class="task-row__trust-chip mono"
+                      >{{ t('task.publisherRepShort', { n: item.data!.publisher_reputation_score }) }}</span>
+                      <span
+                        v-if="(item.data!.publisher_completed_count ?? 0) > 0"
+                        class="task-row__trust-chip mono"
+                      >{{ t('task.publisherDoneShort', { n: item.data!.publisher_completed_count }) }}</span>
+                      <span
+                        v-if="item.data!.subscription_count != null"
+                        class="task-row__trust-chip mono"
+                      >{{ item.data!.subscription_count }}{{ t('task.subscribers') }}</span>
+                      <span
+                        v-if="(item.data!.category_completions ?? 0) > 0"
+                        class="task-row__trust-chip mono"
+                      >{{ t('task.completionsShort', { n: item.data!.category_completions }) }}</span>
+                    </div>
                     <div class="task-row__actions" @click.stop>
                       <Button size="sm" variant="ghost" type="button" class="task-row__btn" @click="openTaskDetail(item.data!)">{{ t('task.viewDetail') }}</Button>
                       <Button v-if="item.data!.status === 'open' && auth.isLoggedIn && myAgents.length && taskHasOpenAuction(item.data!)" size="sm" variant="secondary" type="button" class="task-row__btn task-row__btn--primary" @click="openTaskDetail(item.data!)">{{ t('auction.submitBid') }}</Button>
@@ -216,11 +230,13 @@
               <EmptyState
                 v-if="!filteredTasks.length && !tasksLoading"
                 :title="categoryFilter ? (t('taskManage.noTasksInCategory') || '该分类下暂无任务') : (t('task.emptyTasks') || '暂无任务')"
-                :description="t('taskManage.emptyTaskHint') || '切换分类或前往首页浏览更多任务'"
+                :description="t('taskManage.emptyTaskHint') || '默认仅显示有奖 Agent 直连单。可放宽筛选或去 Join 完成 Quest'"
                 illustration-src="/assets/illustrations/market-empty.svg"
               >
                 <template #actions>
-                  <Button :as="RouterLink" to="/" variant="secondary">{{ t('common.home') }}</Button>
+                  <Button type="button" variant="secondary" @click="relaxAvailableFilters">{{ t('taskManage.relaxFilters') || '放宽筛选' }}</Button>
+                  <Button :as="RouterLink" to="/join">{{ t('joinPage.goFirstQuest') }}</Button>
+                  <Button type="button" variant="ghost" @click="emit('publish-task')">{{ t('nav.publishTask') || t('taskManage.publishTask') || '发布任务' }}</Button>
                 </template>
               </EmptyState>
           </template>
@@ -1837,7 +1853,13 @@ const route = useRoute()
 const router = useRouter()
 const publishAsSelfValue = null as number | null
 
-const emit = defineEmits<{ (e: 'show-auth'): void; (e: 'scroll-agent'): void; (e: 'success', msg: string): void; (e: 'register-hint'): void }>()
+const emit = defineEmits<{
+  (e: 'show-auth'): void
+  (e: 'scroll-agent'): void
+  (e: 'success', msg: string): void
+  (e: 'register-hint'): void
+  (e: 'publish-task'): void
+}>()
 const _i18n = useI18n()
 const t = typeof _i18n.t === 'function' ? _i18n.t : safeT
 const auth = useAuthStore()
@@ -3820,6 +3842,15 @@ function clearOnboardingFilter() {
   router.replace({ path: '/tasks', query: q })
 }
 
+function relaxAvailableFilters() {
+  categoryFilter.value = ''
+  settlementFilter.value = ''
+  paidOnlyFilter.value = false
+  if (onboardingFilterActive.value) clearOnboardingFilter()
+  if (relatedSkillFilter.value) clearRelatedSkillFilter()
+  else if (tab.value === 'available') loadTasks()
+}
+
 watch(
   () => String(route.query.sort ?? ''),
   (v) => {
@@ -4309,11 +4340,52 @@ watch(tab, (newTab) => {
 }
 .task-row__type { font-size: 0.6875rem; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.03em; }
 .task-row__reward {
-  margin-left: auto;
-  font-size: 1rem;
-  font-weight: 700;
+  margin-left: 0;
+  order: -1;
+  font-size: 1.05rem;
+  font-weight: 750;
   color: var(--primary-color);
   letter-spacing: -0.02em;
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--radius-md);
+  background: rgba(var(--primary-rgb), 0.1);
+  border: 1px solid rgba(var(--primary-rgb), 0.22);
+}
+.task-row__trust {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.55rem;
+  margin: 0 0 var(--space-3);
+}
+.task-row__trust-pub {
+  font-size: var(--font-caption);
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+.task-row__trust-chip {
+  font-size: 0.6875rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+  letter-spacing: -0.01em;
+}
+.task-row--available:hover .task-row__trust-chip {
+  border-color: rgba(var(--primary-rgb), 0.28);
+  color: var(--text-primary);
+}
+.task-row--available {
+  transition: border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+}
+.task-row--available:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+@media (prefers-reduced-motion: reduce) {
+  .task-row--available,
+  .task-row--available:hover { transition: none; transform: none; }
 }
 .task-row__title {
   font-size: var(--font-body-strong);

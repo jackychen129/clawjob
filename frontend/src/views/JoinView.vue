@@ -31,10 +31,12 @@
         </ol>
         <p class="join-quest-cta">{{ t('joinPage.firstQuestCta') }}</p>
         <div class="join-cta-row">
-          <Button :as="RouterLink" to="/tasks?onboarding=1" size="sm">{{ t('joinPage.goFirstQuest') }}</Button>
-          <Button :as="RouterLink" to="/tasks?sort=reward&settlement=agent_direct" size="sm" variant="secondary">{{ t('joinPage.goPaidTasks') }}</Button>
+          <Button :as="RouterLink" to="/tasks?onboarding=1" size="default" class="join-cta-primary">{{ t('joinPage.goFirstQuest') }}</Button>
         </div>
-        <p class="join-one-path-hint">{{ t('joinPage.onePathHint') }}</p>
+        <p class="join-one-path-hint">
+          {{ t('joinPage.onePathHint') }}
+          <router-link class="join-secondary-link" to="/tasks?sort=reward&settlement=agent_direct">{{ t('joinPage.goPaidTasks') }}</router-link>
+        </p>
         <div v-if="statsLoading" class="join-stats-skeleton">
           <div v-for="i in 4" :key="i" class="tw-skeleton join-stat-skel" />
         </div>
@@ -90,9 +92,6 @@
           <router-link to="/skill">{{ t('joinPage.moreDetail') }}</router-link>
           <router-link to="/docs/openclaw-quickstart">{{ t('docsPage.openClawQuickstart') || 'OpenClaw 上手指南' }}</router-link>
           <router-link to="/community?topic_id=21">{{ t('joinPage.openClawFaq') }}</router-link>
-          <router-link to="/tasks?onboarding=1">{{ t('joinPage.goFirstQuest') }}</router-link>
-          <router-link to="/tasks?sort=reward&settlement=agent_direct">{{ t('joinPage.goPaidTasks') }}</router-link>
-          <router-link to="/community">{{ t('nav.community') }}</router-link>
         </div>
       </div>
     </section>
@@ -234,7 +233,16 @@ function copyCurl() {
 .join-step__arrow { color: var(--text-secondary); font-size: 1.1rem; }
 .join-quest-cta { margin: 0 0 var(--space-3); font-size: var(--font-body); color: var(--text-secondary); line-height: 1.5; }
 .join-cta-row { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-bottom: var(--space-2); }
-.join-one-path-hint { margin: 0 0 var(--space-5); font-size: var(--font-caption); color: var(--text-secondary); }
+.join-cta-primary { min-width: 12rem; font-weight: 650; }
+.join-one-path-hint { margin: 0 0 var(--space-5); font-size: var(--font-caption); color: var(--text-secondary); line-height: 1.55; }
+.join-secondary-link {
+  margin-left: 0.35rem;
+  color: var(--text-secondary);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+  text-decoration-color: rgba(255, 255, 255, 0.22);
+}
+.join-secondary-link:hover { color: var(--primary-color); text-decoration-color: rgba(var(--primary-rgb), 0.5); }
 .join-stats-ticker { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: var(--space-3); padding: var(--space-3); border-radius: var(--radius-md); background: rgba(0,0,0,0.2); border: var(--border-hairline); }
 .join-stat { text-align: center; }
 .join-stat__value { display: block; font-size: 1.35rem; font-weight: 700; color: var(--primary-color); transition: color 0.3s ease; }

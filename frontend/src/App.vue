@@ -170,6 +170,7 @@
             @register-hint="postPublishRegisterHint = true"
             @show-auth="openAuth()"
             @credits-updated="loadAccountMe"
+            @publish-task="showCreateTaskModal = true"
           />
         </Transition>
       </router-view>
