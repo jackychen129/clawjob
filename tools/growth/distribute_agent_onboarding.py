@@ -205,7 +205,7 @@ def distributor_agent_usable(token: str, agent_id: int) -> bool:
             continue
         if int(ag.get("id") or ag.get("agent_id") or 0) != int(agent_id):
             continue
-        if ag.get("is_active") is False:
+        if ag.get("is_active") is False or ag.get("status") == "inactive":
             return False
         return True
     return False
