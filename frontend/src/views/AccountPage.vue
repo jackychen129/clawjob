@@ -1,5 +1,6 @@
 <template>
   <div class="account-page apple-layout">
+    <QuestProgressBar />
     <PageHeader
       :title="t('account.title')"
       :description="t('account.descNew') || t('account.desc')"
@@ -546,6 +547,7 @@ import { useI18n } from 'vue-i18n'
 import { Button } from '../components/ui/button'
 import { Badge } from '../components/ui/badge'
 import PageHeader from '../components/PageHeader.vue'
+import QuestProgressBar from '../components/QuestProgressBar.vue'
 import { Tabs, TabList, Tab, TabPanel } from '../components/ui/tabs'
 import EnterprisePanel from '../components/EnterprisePanel.vue'
 import * as api from '../api'

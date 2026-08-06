@@ -52,6 +52,7 @@ export function usePublishTaskForm(options: PublishTaskFormOptions) {
     escrow_enabled: false,
     escrow_rows: defaultEscrowRowsHome(),
     collaborative: false,
+    settlement_mode: 'agent_direct' as 'agent_direct' | 'platform_credits',
   })
 
   const escrowWeightSumHome = computed(() =>
@@ -65,7 +66,7 @@ export function usePublishTaskForm(options: PublishTaskFormOptions) {
   function refreshPublishFeeEstimate() {
     const rp = Math.max(0, Number(publishForm.reward_points) || 0)
     if (publishFeeTimer) clearTimeout(publishFeeTimer)
-    if (!auth.isLoggedIn) {
+    if (!auth.isLoggedIn || publishForm.settlement_mode === 'agent_direct') {
       publishFeeEstimate.value = null
       return
     }
@@ -143,6 +144,7 @@ export function usePublishTaskForm(options: PublishTaskFormOptions) {
     publishForm.escrow_rows = defaultEscrowRowsHome()
     publishForm.verification_hours = 6
     publishForm.collaborative = false
+    publishForm.settlement_mode = 'agent_direct'
   }
 
   function applyDraft(d: Record<string, unknown>) {
@@ -171,6 +173,11 @@ export function usePublishTaskForm(options: PublishTaskFormOptions) {
     if (typeof (d as { collaborative?: boolean }).collaborative === 'boolean') {
       publishForm.collaborative = (d as { collaborative: boolean }).collaborative
     }
+    if ((d as { settlement_mode?: string }).settlement_mode === 'platform_credits') {
+      publishForm.settlement_mode = 'platform_credits'
+    } else if ((d as { settlement_mode?: string }).settlement_mode === 'agent_direct') {
+      publishForm.settlement_mode = 'agent_direct'
+    }
   }
 
   function saveDraft() {
@@ -196,6 +203,7 @@ export function usePublishTaskForm(options: PublishTaskFormOptions) {
       escrow_rows: publishForm.escrow_rows.map((r) => ({ ...r })),
       verification_hours: publishForm.verification_hours,
       collaborative: publishForm.collaborative,
+      settlement_mode: publishForm.settlement_mode,
       updated_at: Date.now(),
     }
     try {
@@ -253,8 +261,9 @@ export function usePublishTaskForm(options: PublishTaskFormOptions) {
     publishError.value = ''
     publishLoading.value = true
     const reward = Math.max(0, publishForm.reward_points || 0)
+    const isAgentDirect = publishForm.settlement_mode === 'agent_direct'
     const webhook = reward > 0 ? (publishForm.completion_webhook_url || '').trim() : ''
-    if (reward > 0 && (!webhook || !webhook.startsWith('http'))) {
+    if (reward > 0 && !isAgentDirect && (!webhook || !webhook.startsWith('http'))) {
       publishError.value = t('task.webhookErrorRequired')
       publishLoading.value = false
       return
@@ -302,6 +311,7 @@ export function usePublishTaskForm(options: PublishTaskFormOptions) {
       escrow_milestones,
       verification_hours: vh,
       collaborative: publishForm.collaborative || undefined,
+      settlement_mode: publishForm.settlement_mode,
     }).then(() => {
       clearDraft()
       resetPublishForm()
@@ -322,6 +332,7 @@ export function usePublishTaskForm(options: PublishTaskFormOptions) {
   }
 
   watch(() => publishForm.reward_points, () => refreshPublishFeeEstimate())
+  watch(() => publishForm.settlement_mode, () => refreshPublishFeeEstimate())
   watch(() => publishForm.reward_points, (v) => {
     if (Math.max(0, Number(v) || 0) <= 0) publishForm.escrow_enabled = false
   })

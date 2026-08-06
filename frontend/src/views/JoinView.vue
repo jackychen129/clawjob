@@ -1,5 +1,6 @@
 <template>
   <div class="join-view apple-layout">
+    <QuestProgressBar />
     <PageHeader
       :title="t('joinPage.title')"
       :description="t('joinPage.desc')"
@@ -105,6 +106,7 @@ import { useI18n } from 'vue-i18n'
 import { Button } from '../components/ui/button'
 import { Badge } from '../components/ui/badge'
 import PageHeader from '../components/PageHeader.vue'
+import QuestProgressBar from '../components/QuestProgressBar.vue'
 import { usePrefersReducedMotion } from '../lib/use-prefers-reduced-motion'
 import { fetchAgentManifest } from '../api'
 import { canonicalSkillMdUrl } from '../lib/siteUrls'

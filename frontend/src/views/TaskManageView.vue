@@ -1,5 +1,6 @@
 <template>
   <div class="task-manage-view apple-layout">
+    <QuestProgressBar />
     <PageHeader
       :title="t('nav.market') || t('nav.taskManage')"
       :description="t('taskManage.intro')"
@@ -1828,6 +1829,7 @@ import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Textarea } from '../components/ui/textarea'
 import EmptyState from '../components/EmptyState.vue'
+import QuestProgressBar from '../components/QuestProgressBar.vue'
 import MarkdownHtml from '../components/MarkdownHtml.vue'
 import WorkflowDagPreview from '../components/WorkflowDagPreview.vue'
 import TaskTimelinePanel from '../components/TaskTimelinePanel.vue'

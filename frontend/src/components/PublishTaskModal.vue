@@ -156,12 +156,25 @@ defineExpose({ draftExists, openWithDraft: () => { loadDraft(); open.value = tru
           </div>
         </div>
         <div v-show="createStep === 2" class="step-panel">
+          <div class="form-group">
+            <label class="form-label" for="modal-settlement">{{ t('task.settlementModeLabel') }}</label>
+            <select id="modal-settlement" v-model="publishForm.settlement_mode" class="input select-input">
+              <option value="agent_direct">{{ t('task.settlementModeDirect') }}</option>
+              <option value="platform_credits">{{ t('task.settlementModeCredits') }}</option>
+            </select>
+            <p class="form-hint">{{ t('task.settlementModeHint') }}</p>
+            <p v-if="publishForm.settlement_mode === 'agent_direct'" class="form-hint">{{ t('task.agentDirectNoCreditsHint') }}</p>
+            <p v-else class="form-hint">{{ t('task.platformCreditsLockHint') }}</p>
+          </div>
           <div class="form-group form-inline">
             <label class="form-label">{{ t('agentGuide.fieldRewardPoints') }}</label>
             <input v-model.number="publishForm.reward_points" type="number" min="0" class="input input-num" />
+            <Button type="button" size="sm" variant="secondary" @click="publishForm.reward_points = Math.max(publishForm.reward_points, 20)">
+              {{ t('task.quickReward20') }}
+            </Button>
           </div>
           <div
-            v-if="publishForm.reward_points > 0 && publishFeeEstimate"
+            v-if="publishForm.settlement_mode === 'platform_credits' && publishForm.reward_points > 0 && publishFeeEstimate"
             class="publish-fee-card mono text-sm"
             :class="{ 'publish-fee-card--insufficient': !publishFeeEstimate.sufficient }"
             role="status"
@@ -182,12 +195,21 @@ defineExpose({ draftExists, openWithDraft: () => { loadDraft(); open.value = tru
               {{ t('task.feeEstimateInsufficient', { n: publishForm.reward_points - publishFeeEstimate.publisher_credits }) }}
             </div>
           </div>
-          <template v-if="publishForm.reward_points > 0">
+          <template v-if="publishForm.reward_points > 0 && publishForm.settlement_mode === 'platform_credits'">
             <p class="hint">{{ t('task.webhookHint') }}</p>
             <div class="form-group">
-              <label class="form-label">{{ t('agentGuide.fieldWebhook') }}</label>
+              <label class="form-label">{{ t('agentGuide.fieldWebhook') }} <span class="required">*</span></label>
               <Input v-model="publishForm.completion_webhook_url" class="w-full" type="url" :placeholder="t('task.webhookPlaceholder')" />
             </div>
+          </template>
+          <template v-else-if="publishForm.reward_points > 0">
+            <p class="hint">{{ t('task.webhookHintDirect') || t('task.agentDirectNoCreditsHint') }}</p>
+            <div class="form-group">
+              <label class="form-label">{{ t('agentGuide.fieldWebhook') }} <span class="form-optional">{{ t('task.webhookOptional') }}</span></label>
+              <Input v-model="publishForm.completion_webhook_url" class="w-full" type="url" :placeholder="t('task.webhookPlaceholder')" />
+            </div>
+          </template>
+          <template v-if="publishForm.reward_points > 0">
             <div class="form-group">
               <label class="form-label" for="publish-vhours">{{ t('task.verificationHoursLabel') }}</label>
               <select id="publish-vhours" v-model.number="publishForm.verification_hours" class="input select-input">

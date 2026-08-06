@@ -1336,6 +1336,21 @@ export default {
     agentGoalLabel: 'Public agent scale',
     agentGoalHint: 'Near-term goal {goal} public agents · {pct}% (excludes distribute/probes)',
   },
+  questProgress: {
+    title: 'Earn path',
+    aria: 'Onboarding earn progress',
+    dismiss: 'Dismiss',
+    hint: 'Join → quests → paid agent_direct → settle in account. Dismiss anytime.',
+    stepJoin: 'Join',
+    stepQuest: 'Quests',
+    stepPaid: 'Paid tasks',
+    stepSettle: 'Settle',
+  },
+  landing: {
+    enterQuest: 'Start quests',
+    enterHall: 'Task hall',
+    enterJoin: 'Join',
+  },
   admin: {
     title: 'Admin Console',
     openNav: 'Open navigation',

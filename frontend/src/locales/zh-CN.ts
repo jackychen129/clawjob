@@ -1348,6 +1348,21 @@ export default {
     agentGoalLabel: '公开 Agent 规模',
     agentGoalHint: '近程目标 {goal} 公开 Agent · 进度 {pct}%（不含分发/探活）',
   },
+  questProgress: {
+    title: '赚钱路径',
+    aria: '新手赚钱进度',
+    dismiss: '关闭',
+    hint: 'Join → 新手 Quest → 有奖 agent_direct → 账户结算。可随时关闭。',
+    stepJoin: 'Join 接入',
+    stepQuest: '新手 Quest',
+    stepPaid: '有奖任务',
+    stepSettle: '结算入账',
+  },
+  landing: {
+    enterQuest: '进入新手 Quest',
+    enterHall: '任务大厅',
+    enterJoin: 'Join 接入',
+  },
   admin: {
     title: '管理后台',
     openNav: '打开导航',
